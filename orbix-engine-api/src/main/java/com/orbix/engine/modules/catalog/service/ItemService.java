@@ -2,57 +2,13 @@ package com.orbix.engine.modules.catalog.service;
 
 import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.ItemResponseDto;
-import com.orbix.engine.modules.catalog.domain.entity.Item;
-import com.orbix.engine.modules.catalog.repository.ItemRepository;
-import com.orbix.engine.modules.common.service.Auditable;
-import com.orbix.engine.modules.common.service.EventPublisher;
-import com.orbix.engine.modules.common.service.RequestContext;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Map;
 
 /**
- * Application service for the Item aggregate — orchestrates domain
- * + repository + cross-cutting (audit, events). No HTTP, no JPA-specifics.
+ * Application service for the {@code Item} aggregate. Orchestrates the
+ * domain + repository + cross-cutting concerns (audit, events). No HTTP,
+ * no JPA specifics in the contract.
  */
-@Service
-public class ItemService {
+public interface ItemService {
 
-    private final ItemRepository repo;
-    private final EventPublisher events;
-    private final RequestContext context;
-
-    public ItemService(ItemRepository repo, EventPublisher events, RequestContext context) {
-        this.repo = repo;
-        this.events = events;
-        this.context = context;
-    }
-
-    @Transactional
-    @Auditable(action = "CREATE", entityType = "Item")
-    public ItemResponseDto create(CreateItemRequestDto request) {
-        Long companyId = context.companyId();
-        repo.findByCompanyAndCode(companyId, request.code()).ifPresent(existing -> {
-            throw new IllegalArgumentException("Item code already exists: " + request.code());
-        });
-        Item item = new Item(
-            companyId,
-            request.code(),
-            request.name(),
-            request.type(),
-            request.itemGroupId(),
-            request.uomId(),
-            request.vatGroupId(),
-            context.userId()
-        );
-        Item saved = repo.save(item);
-        events.publish(
-            "ItemCreated.v1",
-            "Item",
-            String.valueOf(saved.getId()),
-            Map.of("itemId", saved.getId(), "code", saved.getCode(), "companyId", companyId)
-        );
-        return ItemResponseDto.from(saved);
-    }
+    ItemResponseDto create(CreateItemRequestDto request);
 }
