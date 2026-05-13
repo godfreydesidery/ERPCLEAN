@@ -6,7 +6,7 @@ import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 
 import java.math.BigDecimal;
 
-public record ItemResponse(
+public record ItemResponseDto(
     Long id,
     String code,
     String name,
@@ -15,8 +15,8 @@ public record ItemResponse(
     BigDecimal avgCost,
     BigDecimal lastCost
 ) {
-    public static ItemResponse from(Item item) {
-        return new ItemResponse(
+    public static ItemResponseDto from(Item item) {
+        return new ItemResponseDto(
             item.getId(),
             item.getCode(),
             item.getName(),

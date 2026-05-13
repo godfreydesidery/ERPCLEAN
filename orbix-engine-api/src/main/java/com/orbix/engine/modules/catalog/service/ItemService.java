@@ -1,7 +1,7 @@
 package com.orbix.engine.modules.catalog.service;
 
-import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequest;
-import com.orbix.engine.modules.catalog.domain.dto.ItemResponse;
+import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequestDto;
+import com.orbix.engine.modules.catalog.domain.dto.ItemResponseDto;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -31,7 +31,7 @@ public class ItemService {
 
     @Transactional
     @Auditable(action = "CREATE", entityType = "Item")
-    public ItemResponse create(CreateItemRequest request) {
+    public ItemResponseDto create(CreateItemRequestDto request) {
         Long companyId = context.companyId();
         repo.findByCompanyAndCode(companyId, request.code()).ifPresent(existing -> {
             throw new IllegalArgumentException("Item code already exists: " + request.code());
@@ -53,6 +53,6 @@ public class ItemService {
             String.valueOf(saved.getId()),
             Map.of("itemId", saved.getId(), "code", saved.getCode(), "companyId", companyId)
         );
-        return ItemResponse.from(saved);
+        return ItemResponseDto.from(saved);
     }
 }

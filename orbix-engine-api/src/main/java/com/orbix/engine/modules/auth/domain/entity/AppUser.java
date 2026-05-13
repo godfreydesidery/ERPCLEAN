@@ -3,8 +3,8 @@ package com.orbix.engine.modules.auth.domain.entity;
 import com.orbix.engine.modules.auth.domain.enums.AppUserStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
@@ -18,10 +18,10 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "app_user", uniqueConstraints = @UniqueConstraint(name = "uk_app_user_username", columnNames = "username"))
-@Getter
+@Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
-@ToString(of = { "id", "username", "displayName", "status" })
+@ToString(exclude = { "passwordHash" })
 public class AppUser {
 
     @Id

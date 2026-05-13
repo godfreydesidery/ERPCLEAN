@@ -1,12 +1,12 @@
 package com.orbix.engine.modules.auth.domain.dto;
 
-public record LoginResponse(
+public record LoginResponseDto(
     String accessToken,
     String tokenType,
     long expiresInSeconds,
-    UserSummary user
+    UserSummaryDto user
 ) {
-    public record UserSummary(
+    public record UserSummaryDto(
         Long id,
         String username,
         String displayName,

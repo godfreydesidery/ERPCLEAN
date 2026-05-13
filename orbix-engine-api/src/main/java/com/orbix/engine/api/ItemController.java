@@ -1,7 +1,7 @@
 package com.orbix.engine.api;
 
-import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequest;
-import com.orbix.engine.modules.catalog.domain.dto.ItemResponse;
+import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequestDto;
+import com.orbix.engine.modules.catalog.domain.dto.ItemResponseDto;
 import com.orbix.engine.modules.catalog.service.ItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -22,8 +22,8 @@ public class ItemController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('ITEM.CREATE')")
-    public ResponseEntity<ItemResponse> create(@Valid @RequestBody CreateItemRequest request) {
-        ItemResponse response = service.create(request);
+    public ResponseEntity<ItemResponseDto> create(@Valid @RequestBody CreateItemRequestDto request) {
+        ItemResponseDto response = service.create(request);
         return ResponseEntity.created(URI.create("/api/v1/items/" + response.id())).body(response);
     }
 }

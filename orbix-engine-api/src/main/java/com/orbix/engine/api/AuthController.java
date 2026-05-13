@@ -1,7 +1,7 @@
 package com.orbix.engine.api;
 
-import com.orbix.engine.modules.auth.domain.dto.LoginRequest;
-import com.orbix.engine.modules.auth.domain.dto.LoginResponse;
+import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
+import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.auth.service.AuthService;
 import com.orbix.engine.modules.auth.service.AuthService.InvalidCredentialsException;
 import jakarta.validation.Valid;
@@ -18,7 +18,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginRequestDto request) {
         return ResponseEntity.ok(authService.login(request));
     }
 

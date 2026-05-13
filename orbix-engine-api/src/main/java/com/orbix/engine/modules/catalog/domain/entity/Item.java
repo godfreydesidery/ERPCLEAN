@@ -3,6 +3,10 @@ package com.orbix.engine.modules.catalog.domain.entity;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,6 +20,9 @@ import java.time.Instant;
     name = "item",
     uniqueConstraints = @UniqueConstraint(name = "uk_item_company_code", columnNames = {"company_id", "code"})
 )
+@Data
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EqualsAndHashCode(of = "id")
 public class Item {
 
     @Id
@@ -79,8 +86,7 @@ public class Item {
     @Column(name = "updated_by", nullable = false)
     private Long updatedBy;
 
-    protected Item() {}
-
+    @SuppressWarnings("java:S107")  // 7 required init fields + actorId for audit; grouping into a VO costs more than it saves
     public Item(Long companyId, String code, String name, ItemType type,
                 Long itemGroupId, Long uomId, Long vatGroupId, Long actorId) {
         this.companyId = companyId;
@@ -97,21 +103,14 @@ public class Item {
         this.updatedBy = actorId;
     }
 
-    public Long getId() { return id; }
-    public Long getCompanyId() { return companyId; }
-    public String getCode() { return code; }
-    public String getName() { return name; }
-    public ItemType getType() { return type; }
-    public ItemStatus getStatus() { return status; }
-    public BigDecimal getAvgCost() { return avgCost; }
-    public BigDecimal getLastCost() { return lastCost; }
-
+    /** Audited rename — prefer this over {@code setName} so updatedAt / updatedBy stay in sync. */
     public void rename(String newName, Long actorId) {
         this.name = newName;
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;
     }
 
+    /** Audited archive — prefer this over {@code setStatus(ARCHIVED)}. */
     public void archive(Long actorId) {
         this.status = ItemStatus.ARCHIVED;
         this.updatedAt = Instant.now();

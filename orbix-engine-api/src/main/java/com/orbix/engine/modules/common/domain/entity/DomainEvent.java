@@ -1,6 +1,11 @@
 package com.orbix.engine.modules.common.domain.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.Instant;
 
@@ -11,6 +16,10 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "domain_event")
+@Data
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = { "payloadJson", "lastError" })
 public class DomainEvent {
 
     @Id
@@ -62,8 +71,6 @@ public class DomainEvent {
 
     public enum Status { PENDING, DISPATCHED, FAILED, DEAD_LETTERED }
 
-    protected DomainEvent() {}
-
     public DomainEvent(String type, String aggregateType, String aggregateId,
                        String payloadJson, Long companyId, Long branchId, Long actorId) {
         this.type = type;
@@ -75,18 +82,6 @@ public class DomainEvent {
         this.branchId = branchId;
         this.actorId = actorId;
     }
-
-    public Long getId() { return id; }
-    public String getType() { return type; }
-    public String getAggregateType() { return aggregateType; }
-    public String getAggregateId() { return aggregateId; }
-    public String getPayloadJson() { return payloadJson; }
-    public Instant getOccurredAt() { return occurredAt; }
-    public Long getCompanyId() { return companyId; }
-    public Long getBranchId() { return branchId; }
-    public Long getActorId() { return actorId; }
-    public Status getStatus() { return status; }
-    public int getAttemptCount() { return attemptCount; }
 
     public void markDispatched() {
         this.status = Status.DISPATCHED;

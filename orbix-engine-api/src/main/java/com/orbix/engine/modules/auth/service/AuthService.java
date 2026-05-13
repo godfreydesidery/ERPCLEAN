@@ -1,7 +1,7 @@
 package com.orbix.engine.modules.auth.service;
 
-import com.orbix.engine.modules.auth.domain.dto.LoginRequest;
-import com.orbix.engine.modules.auth.domain.dto.LoginResponse;
+import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
+import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.auth.domain.entity.AppUser;
 import com.orbix.engine.modules.auth.repository.AppUserRepository;
 import com.orbix.engine.modules.auth.service.JwtService;
@@ -36,7 +36,7 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponseDto login(LoginRequestDto request) {
         AppUser user = users.findByUsername(request.username())
             .orElseThrow(() -> new InvalidCredentialsException());
 
@@ -61,11 +61,11 @@ public class AuthService {
             List.of()  // TODO: resolve from user_role / role_privilege once RBAC is wired
         );
 
-        return new LoginResponse(
+        return new LoginResponseDto(
             token,
             "Bearer",
             accessTtl.toSeconds(),
-            new LoginResponse.UserSummary(
+            new LoginResponseDto.UserSummaryDto(
                 user.getId(),
                 user.getUsername(),
                 user.getDisplayName(),
