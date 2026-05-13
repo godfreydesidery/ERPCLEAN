@@ -38,6 +38,7 @@ public class ModuleBoundaryTest {
         .resideInAnyPackage(
             "com.orbix.engine.modules.common..",        // cross-cutting infrastructure
             "com.orbix.engine.modules.auth..",          // auth infrastructure (JWT, filter, security config)
+            "com.orbix.engine.modules.iam..",           // identity + access management (users, roles, privileges)
             "com.orbix.engine.modules..domain.dto..",   // any module's published DTOs
             "com.orbix.engine.modules..domain.enums..", // and enums
             "java..", "jakarta..", "javax..",

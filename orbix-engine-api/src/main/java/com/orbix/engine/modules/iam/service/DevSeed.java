@@ -1,7 +1,7 @@
-package com.orbix.engine.modules.auth.service;
+package com.orbix.engine.modules.iam.service;
 
-import com.orbix.engine.modules.auth.domain.entity.AppUser;
-import com.orbix.engine.modules.auth.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.domain.entity.AppUser;
+import com.orbix.engine.modules.iam.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;

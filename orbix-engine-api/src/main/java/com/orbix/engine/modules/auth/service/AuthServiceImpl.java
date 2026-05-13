@@ -2,9 +2,9 @@ package com.orbix.engine.modules.auth.service;
 
 import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
-import com.orbix.engine.modules.auth.domain.entity.AppUser;
+import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.auth.domain.entity.RefreshToken;
-import com.orbix.engine.modules.auth.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.repository.AppUserRepository;
 import com.orbix.engine.modules.auth.repository.RefreshTokenRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

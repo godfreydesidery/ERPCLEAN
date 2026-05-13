@@ -1,6 +1,6 @@
-package com.orbix.engine.modules.auth.domain.entity;
+package com.orbix.engine.modules.iam.domain.entity;
 
-import com.orbix.engine.modules.auth.domain.enums.AppUserStatus;
+import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
