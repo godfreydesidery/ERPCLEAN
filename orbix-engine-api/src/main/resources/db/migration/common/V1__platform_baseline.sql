@@ -103,20 +103,20 @@ CREATE TABLE role (
     CONSTRAINT uk_role_code UNIQUE (code)
 );
 
-CREATE TABLE privilege (
+CREATE TABLE permission (
     id          BIGINT       NOT NULL PRIMARY KEY,
     code        VARCHAR(80)  NOT NULL,
     description TEXT         NOT NULL,
     module      VARCHAR(40)  NOT NULL,
-    CONSTRAINT uk_privilege_code UNIQUE (code)
+    CONSTRAINT uk_permission_code UNIQUE (code)
 );
 
-CREATE TABLE role_privilege (
+CREATE TABLE role_permission (
     role_id      BIGINT NOT NULL,
-    privilege_id BIGINT NOT NULL,
-    PRIMARY KEY (role_id, privilege_id),
+    permission_id BIGINT NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
     CONSTRAINT fk_rp_role      FOREIGN KEY (role_id)      REFERENCES role (id),
-    CONSTRAINT fk_rp_privilege FOREIGN KEY (privilege_id) REFERENCES privilege (id)
+    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permission (id)
 );
 
 CREATE TABLE user_role (

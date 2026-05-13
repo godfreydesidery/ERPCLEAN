@@ -14,8 +14,12 @@ import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.admin.repository.OrganisationRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
-import com.orbix.engine.modules.auth.domain.entity.AppUser;
-import com.orbix.engine.modules.auth.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.domain.entity.AppUser;
+import com.orbix.engine.modules.iam.domain.entity.Role;
+import com.orbix.engine.modules.iam.domain.entity.UserRole;
+import com.orbix.engine.modules.iam.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.repository.RoleRepository;
+import com.orbix.engine.modules.iam.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,6 +40,8 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
     private final SectionRepository sections;
     private final CurrencyRepository currencies;
     private final AppUserRepository users;
+    private final RoleRepository roles;
+    private final UserRoleRepository userRoles;
     private final PasswordEncoder passwords;
 
     @Override
@@ -113,6 +119,10 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
             SYSTEM_ACTOR
         );
         admin = users.save(admin);
+
+        Role adminRole = roles.findByCode("ADMIN").orElseThrow(() ->
+            new IllegalStateException("Seed ADMIN role missing — V4 migration did not run"));
+        userRoles.save(new UserRole(admin.getId(), adminRole.getId(), company.getId(), null, admin.getId()));
 
         log.info("First-run bootstrap completed — org={} company={} branch={} admin={}",
             organisation.getId(), company.getId(), branch.getId(), admin.getUsername());

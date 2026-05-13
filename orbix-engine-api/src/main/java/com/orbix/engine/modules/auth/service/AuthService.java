@@ -6,18 +6,35 @@ import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 public interface AuthService {
 
     /**
-     * Verify credentials and issue an access token. On wrong password the
-     * implementation increments the failed-login counter and may lock the
-     * account; on success it clears the counter and stamps last_login_at.
+     * Verify credentials and issue a new access + refresh token pair.
      *
      * @throws InvalidCredentialsException if username unknown, password
      *         wrong, account inactive, or account currently locked.
      */
     LoginResponseDto login(LoginRequestDto request);
 
+    /**
+     * Rotate a refresh token: validate, revoke the supplied one, and issue a
+     * fresh access + refresh pair. Reuse of an already-revoked token is
+     * treated as theft and revokes every refresh token owned by that user.
+     */
+    LoginResponseDto refresh(String refreshToken);
+
+    /** Revoke a single refresh token (sign-out from this device). */
+    void logout(String refreshToken);
+
+    /** Revoke every refresh token owned by the given user (sign-out everywhere). */
+    void logoutEverywhere(Long userId);
+
     class InvalidCredentialsException extends RuntimeException {
         public InvalidCredentialsException() {
             super("Invalid username or password");
+        }
+    }
+
+    class InvalidRefreshTokenException extends RuntimeException {
+        public InvalidRefreshTokenException() {
+            super("Refresh token is invalid or expired");
         }
     }
 }

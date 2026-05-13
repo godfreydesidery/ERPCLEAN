@@ -1,7 +1,11 @@
-package com.orbix.engine.modules.auth.service;
+package com.orbix.engine.modules.iam.service;
 
-import com.orbix.engine.modules.auth.domain.entity.AppUser;
-import com.orbix.engine.modules.auth.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.domain.entity.AppUser;
+import com.orbix.engine.modules.iam.domain.entity.Role;
+import com.orbix.engine.modules.iam.domain.entity.UserRole;
+import com.orbix.engine.modules.iam.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.repository.RoleRepository;
+import com.orbix.engine.modules.iam.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -30,6 +34,8 @@ public class DevSeed implements CommandLineRunner {
 
     private final JdbcTemplate jdbc;
     private final AppUserRepository users;
+    private final RoleRepository roles;
+    private final UserRoleRepository userRoles;
     private final PasswordEncoder passwords;
 
     @Override
@@ -81,7 +87,11 @@ public class DevSeed implements CommandLineRunner {
             branchId,
             systemActor
         );
-        users.save(admin);
+        admin = users.save(admin);
+
+        Role adminRole = roles.findByCode("ADMIN").orElseThrow(() ->
+            new IllegalStateException("Seed ADMIN role missing — V4 migration did not run"));
+        userRoles.save(new UserRole(admin.getId(), adminRole.getId(), companyId, null, admin.getId()));
 
         log.warn("============================================================");
         log.warn(" DevSeed created admin login — for LOCAL profile only");

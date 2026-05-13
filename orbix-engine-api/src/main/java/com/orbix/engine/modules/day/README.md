@@ -45,7 +45,7 @@ Status transitions: `OPEN → CLOSING → CLOSED`. `CLOSING` is the brief window
 3. Emit `BusinessDayClosingStarted.v1` — `pos` builds Z-summary PDF, `cash` finalises cash entries, `reporting` snapshots dashboards. Day waits for ack events or a timeout.
 4. On all-ack: persist `eod_report_object_key`, set `status = CLOSED`, `closed_at`, `closed_by`, emit `BusinessDayClosed.v1`, auto-create next day's `OPEN` row.
 
-**Override (US-DAY-003).** Supervisor with privilege `BUSINESS_DAY.OVERRIDE` requests permission to post into a closed `(branch_id, target_business_date)`. Requires supervisor PIN (verified via `platform.security`) and a written reason. Day issues a time-bounded grant (default 24h, configurable per company); each posting made under the grant writes a `business_day_override` row tagged with the affected `entity_type` / `entity_id`. Expired grants auto-revoke (`BusinessDayOverrideExpired.v1`).
+**Override (US-DAY-003).** Supervisor with permission `BUSINESS_DAY.OVERRIDE` requests permission to post into a closed `(branch_id, target_business_date)`. Requires supervisor PIN (verified via `platform.security`) and a written reason. Day issues a time-bounded grant (default 24h, configurable per company); each posting made under the grant writes a `business_day_override` row tagged with the affected `entity_type` / `entity_id`. Expired grants auto-revoke (`BusinessDayOverrideExpired.v1`).
 
 **Auto-warn before expiry (US-DAY-005).** Scheduled job checks `OPEN` business days whose `opened_at` exceeds the configured threshold (e.g. 30h) and notifies the branch manager. Pure read-side; no state change.
 
@@ -54,7 +54,7 @@ Status transitions: `OPEN → CLOSING → CLOSED`. `CLOSING` is the brief window
 ## 5. Module interactions
 
 **Depends on:**
-- `platform.security` — supervisor PIN check, privilege `BUSINESS_DAY.OVERRIDE`.
+- `platform.security` — supervisor PIN check, permission `BUSINESS_DAY.OVERRIDE`.
 - `platform.audit` — every open / close / override is auditable.
 - `platform.company` — `branch.timezone` drives date resolution.
 - `platform.events` — transactional outbox.

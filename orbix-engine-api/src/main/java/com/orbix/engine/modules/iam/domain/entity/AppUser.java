@@ -1,6 +1,6 @@
-package com.orbix.engine.modules.auth.domain.entity;
+package com.orbix.engine.modules.iam.domain.entity;
 
-import com.orbix.engine.modules.auth.domain.enums.AppUserStatus;
+import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -13,8 +13,8 @@ import java.time.Instant;
 
 /**
  * Authenticated principal. Maps to {@code app_user} (DATA-MODEL.md §1.4).
- * Roles and privileges are resolved separately via {@code user_role} +
- * {@code role_privilege}.
+ * Roles and permissions are resolved separately via {@code user_role} +
+ * {@code role_permission}.
  */
 @Entity
 @Table(name = "app_user", uniqueConstraints = @UniqueConstraint(name = "uk_app_user_username", columnNames = "username"))

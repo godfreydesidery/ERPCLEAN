@@ -31,7 +31,7 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
-    public String issueAccessToken(long userId, long companyId, Long branchId, List<String> privileges) {
+    public String issueAccessToken(long userId, long companyId, Long branchId, List<String> permissions) {
         Instant now = Instant.now();
         return Jwts.builder()
             .issuer(issuer)
@@ -42,7 +42,7 @@ public class JwtServiceImpl implements JwtService {
                 "uid", userId,
                 "cid", companyId,
                 "bid", branchId == null ? -1L : branchId,
-                "privs", privileges
+                "perms", permissions
             ))
             .signWith(signingKey)
             .compact();
@@ -62,7 +62,7 @@ public class JwtServiceImpl implements JwtService {
             c.get("uid", Long.class),
             c.get("cid", Long.class),
             bid == null || bid < 0 ? null : bid,
-            (List<String>) c.get("privs", List.class)
+            (List<String>) c.get("perms", List.class)
         );
     }
 }

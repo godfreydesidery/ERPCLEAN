@@ -38,7 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             try {
                 JwtService.Claims claims = jwtService.parse(token);
-                List<SimpleGrantedAuthority> authorities = claims.privileges().stream()
+                List<SimpleGrantedAuthority> authorities = claims.permissions().stream()
                     .map(SimpleGrantedAuthority::new)
                     .toList();
                 UsernamePasswordAuthenticationToken auth =

@@ -160,7 +160,7 @@ For test format and conventions see [README.md](README.md).
 
 **Negative variants:**
 - Refund of a sale from a previous business day → 422 with `BUSINESS_DAY_CLOSED_FOR_TILL_REFUND` (must use back-office customer return).
-- Refund total > threshold without `POS.REFUND_OVERRIDE_THRESHOLD` privilege → 403.
+- Refund total > threshold without `POS.REFUND_OVERRIDE_THRESHOLD` permission → 403.
 - Refund without scanning receipt → require manager PIN; without it → 403.
 
 ---
@@ -533,13 +533,13 @@ For test format and conventions see [README.md](README.md).
 - After step 1: `app_user.failed_login_count = 5`, `locked_until = now + 15m`. Any login attempt (right or wrong) within the window returns 401 `invalid_credentials` (without revealing the lockout).
 - After 15m: `failed_login_count` cleared on successful login; `last_login_at` updated.
 
-### TC-E2E-023 — JWT carries branch + privileges; revoked on deactivate [P1]
+### TC-E2E-023 — JWT carries branch + permissions; revoked on deactivate [P1]
 **Modules:** auth → party
 **Stories:** US-IAM-007
 
 **Steps:**
 1. User `staff1` logs in; receives JWT.
-2. Use JWT for a privileged call → succeeds.
+2. Use JWT for a permissiond call → succeeds.
 3. Admin deactivates `staff1`.
 4. Reuse the JWT (still inside its 15-min TTL).
 

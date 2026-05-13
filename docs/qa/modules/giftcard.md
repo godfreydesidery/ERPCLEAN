@@ -138,8 +138,8 @@ Issue, redeem, refund, freeze, expire. Bearer instrument. Liability ledger separ
 **Steps:** Inspect audit row.
 **Expected:** No full code; last 4 digits + sha256(code) for forensic lookup.
 
-### TC-GC-029 — Privilege checks [P1]
-**Steps:** Issue / Redeem / Freeze without respective privilege.
+### TC-GC-029 — Permission checks [P1]
+**Steps:** Issue / Redeem / Freeze without respective permission.
 **Expected:** 403.
 
 ## Reports

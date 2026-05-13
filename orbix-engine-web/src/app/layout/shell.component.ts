@@ -42,7 +42,8 @@ export class ShellComponent {
   readonly user = this.auth.currentUser;
 
   logout(): void {
-    this.auth.logout();
-    void this.router.navigate(['/login']);
+    this.auth.logout().subscribe({
+      complete: () => void this.router.navigate(['/login'])
+    });
   }
 }

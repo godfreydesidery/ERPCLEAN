@@ -123,4 +123,4 @@ Module-level tests for the shared party base + customer / supplier / employee / 
 
 ### TC-PARTY-024 — Search by phone (partial match) [P2]
 **Steps:** GET /api/v1/parties?q=07000.
-**Expected:** Meilisearch returns matches. PII redacted in response if requesting user lacks privilege.
+**Expected:** Meilisearch returns matches. PII redacted in response if requesting user lacks permission.

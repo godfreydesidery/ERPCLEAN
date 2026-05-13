@@ -72,7 +72,7 @@ Cash ledger, supplier payments, multi-currency cash_book, refund cash side, day-
 **Expected:** Single entry; audit captured.
 
 ### TC-CASH-014 — Adjustment without supervisor [P1]
-**Steps:** Without privilege `CASH.ADJUST`.
+**Steps:** Without permission `CASH.ADJUST`.
 **Expected:** 403.
 
 ## cash_book projection

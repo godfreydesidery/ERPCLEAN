@@ -10,7 +10,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * Package structure under this package:
  *   api.*         REST controllers (one folder for the whole HTTP surface)
  *   modules.*     all logic, grouped by concern:
- *                   auth          identity, login, JWT, security filter
+ *                   auth          authentication + authorization: login,
+ *                                 refresh, JWT, security filter chain
+ *                   iam           identity + access management: users,
+ *                                 roles, permissions, dev seed
  *                   common        cross-cutting infrastructure (audit
  *                                 aspect, transactional outbox, RequestContext)
  *                   admin         org, branch, section, currency, fx_rate masters

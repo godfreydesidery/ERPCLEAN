@@ -9,9 +9,9 @@ import java.util.List;
  */
 public interface JwtService {
 
-    String issueAccessToken(long userId, long companyId, Long branchId, List<String> privileges);
+    String issueAccessToken(long userId, long companyId, Long branchId, List<String> permissions);
 
     Claims parse(String token);
 
-    record Claims(Long userId, Long companyId, Long branchId, List<String> privileges) {}
+    record Claims(Long userId, Long companyId, Long branchId, List<String> permissions) {}
 }
