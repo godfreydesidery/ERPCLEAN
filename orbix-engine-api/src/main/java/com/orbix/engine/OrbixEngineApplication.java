@@ -7,9 +7,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Application entry point.
- * Module structure under this package mirrors ARCHITECTURE.md §2.1:
- *   platform.*, party.*, catalog.*, stock.*, procurement.*, sales.*,
- *   pos.*, wms.*, production.*, debt.*, cash.*, day.*, hr.*, reporting.*, integration.*
+ * Module structure under this package:
+ *   platform.*    cross-cutting (security, audit, events, health)
+ *   api.*         cross-cutting API surface
+ *   modules.*     business modules — minimum set to run a supermarket:
+ *                 party, catalog, stock, procurement, sales, pos, cash, day
  * Module boundaries are enforced by ArchUnit tests
  * (see test package com.orbix.engine.architecture).
  */

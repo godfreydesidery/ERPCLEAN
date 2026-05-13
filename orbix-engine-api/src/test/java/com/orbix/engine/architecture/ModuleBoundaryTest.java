@@ -26,26 +26,11 @@ public class ModuleBoundaryTest {
 
     @ArchTest
     static final ArchRule modules_only_depend_on_published_api_or_platform = classes()
-        .that().resideInAnyPackage(
-            "com.orbix.engine.catalog..",
-            "com.orbix.engine.sales..",
-            "com.orbix.engine.procurement..",
-            "com.orbix.engine.stock..",
-            "com.orbix.engine.pos..",
-            "com.orbix.engine.wms..",
-            "com.orbix.engine.production..",
-            "com.orbix.engine.debt..",
-            "com.orbix.engine.cash..",
-            "com.orbix.engine.day..",
-            "com.orbix.engine.hr..",
-            "com.orbix.engine.reporting..",
-            "com.orbix.engine.integration..",
-            "com.orbix.engine.party.."
-        )
+        .that().resideInAPackage("com.orbix.engine.modules..")
         .should().onlyDependOnClassesThat()
         .resideInAnyPackage(
-            "com.orbix.engine..api..",      // any module's published DTOs
-            "com.orbix.engine.platform..",  // cross-cutting platform
+            "com.orbix.engine.modules..api..",  // any module's published DTOs
+            "com.orbix.engine.platform..",      // cross-cutting platform
             "java..", "jakarta..", "javax..",
             "org.springframework..", "org.hibernate..", "org.slf4j..",
             "com.fasterxml..", "lombok..",
