@@ -10,9 +10,16 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 /**
- * Module boundary and layering rules per ARCHITECTURE.md §2.1 and §2.2.
- * These tests fail the build if any module reaches into another module's
- * domain/infra packages, or if controllers touch repositories directly.
+ * Module boundary and layering rules.
+ *
+ * Layout: each business module lives under com.orbix.engine.modules.&lt;m&gt;
+ * with sub-packages domain.{entity,dto,enums,event}, service, repository.
+ * REST controllers live in com.orbix.engine.api (one folder for every module).
+ *
+ * Rules enforced here:
+ *   - controllers may not reach into any module's repository directly;
+ *   - modules may not reach into another module's repository or entity;
+ *   - layer order is controller -&gt; service -&gt; repository -&gt; domain.
  */
 @AnalyzeClasses(packages = "com.orbix.engine",
     importOptions = ImportOption.DoNotIncludeTests.class)
@@ -20,32 +27,33 @@ public class ModuleBoundaryTest {
 
     @ArchTest
     static final ArchRule controllers_do_not_use_repositories = noClasses()
-        .that().resideInAPackage("..api..")
-        .should().dependOnClassesThat().resideInAPackage("..infra..")
-        .because("controllers must go through application services, not repositories directly");
+        .that().resideInAPackage("com.orbix.engine.api..")
+        .should().dependOnClassesThat().resideInAPackage("..repository..")
+        .because("controllers must go through services, not repositories directly");
 
     @ArchTest
-    static final ArchRule modules_only_depend_on_published_api_or_platform = classes()
+    static final ArchRule modules_only_depend_on_published_dtos_or_platform = classes()
         .that().resideInAPackage("com.orbix.engine.modules..")
         .should().onlyDependOnClassesThat()
         .resideInAnyPackage(
-            "com.orbix.engine.modules..api..",  // any module's published DTOs
-            "com.orbix.engine.platform..",      // cross-cutting platform
+            "com.orbix.engine.modules..domain.dto..",   // any module's published DTOs
+            "com.orbix.engine.modules..domain.enums..", // and enums
+            "com.orbix.engine.platform..",              // cross-cutting platform
             "java..", "jakarta..", "javax..",
             "org.springframework..", "org.hibernate..", "org.slf4j..",
             "com.fasterxml..", "lombok..",
-            "..app..", "..domain..", "..infra.."
+            "..domain..", "..service..", "..repository.."
         )
-        .because("modules talk to each other only via published APIs or domain events");
+        .because("modules talk to each other only via published DTOs/enums or domain events");
 
     @ArchTest
-    static final ArchRule hexagonal_layering = layeredArchitecture()
+    static final ArchRule layered_architecture = layeredArchitecture()
         .consideringOnlyDependenciesInLayers()
-        .layer("api").definedBy("..api..")
-        .layer("app").definedBy("..app..")
-        .layer("domain").definedBy("..domain..")
-        .layer("infra").definedBy("..infra..")
-        .whereLayer("api").mayOnlyBeAccessedByLayers("app")
-        .whereLayer("app").mayOnlyBeAccessedByLayers("api")
-        .whereLayer("infra").mayOnlyBeAccessedByLayers("app");
+        .layer("controller").definedBy("com.orbix.engine.api..")
+        .layer("service").definedBy("..modules..service..")
+        .layer("repository").definedBy("..modules..repository..")
+        .layer("domain").definedBy("..modules..domain..")
+        .whereLayer("controller").mayNotBeAccessedByAnyLayer()
+        .whereLayer("service").mayOnlyBeAccessedByLayers("controller")
+        .whereLayer("repository").mayOnlyBeAccessedByLayers("service");
 }
