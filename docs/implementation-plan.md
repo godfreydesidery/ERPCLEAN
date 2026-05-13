@@ -2,6 +2,27 @@
 
 End-to-end vertical slices, ordered by dependency. Each feature spans backend + web (+ POS / WMS where applicable) so that contract issues surface at integration time, not after.
 
+## 👉 Resume here
+
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `b4b013a` — F0.4 backend + permission rename sweep.
+
+**Done in Phase 0:**
+- F0.1 — first-run setup wizard (backend + web)
+- F0.2 — login + JWT (backend + web)
+- F0.3 — logout + refresh tokens with theft detection (backend + web)
+- F0.4 backend — RBAC wired; ADMIN role + 10 permissions seeded; JWT now carries real `perms[]`
+
+**Next slice (start here tomorrow):** **F0.4b web** — `RoleAdminComponent` for managing roles/permissions/user-role grants + `HasPermissionDirective` to hide UI per permission. Then **F0.5** — active-branch context switching in the shell.
+
+**Pending across all of Phase 0 (tests + docs):**
+- Unit + integration tests for F0.1 / F0.2 / F0.3 / F0.4 — none authored yet; the per-module + e2e test catalogue in [docs/qa/](qa/) describes what needs to land.
+- POS (Flutter) login wiring — deferred until F5.1 (till session work).
+- "Logout everywhere" button — backend endpoint exists; UI button still missing.
+
+**How to validate before continuing:** `cd orbix-engine-api && mvn -q clean compile` + `cd ../orbix-engine-web && npx ng build --configuration development`. Both should be silent (zero output = success in `-q` mode).
+
+
+
 ## How to use this plan
 
 - Pick the next un-blocked feature. Don't jump ahead — dependencies are real.
@@ -55,23 +76,23 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.1 — First-run setup wizard
 
-**Story:** US-COMP-001 · **Size:** M · **Status:** `[~]` (DevSeed already creates org+company+branch+admin in local profile)
+**Story:** US-COMP-001 · **Size:** M · **Status:** `[x]` (commit `a96a206` backend, `a2fdc13` web)
 **Dependencies:** none.
 
 **Backend:**
 - [x] `AppUser`, `AppUserRepository`, `AuthService` + Impl (already in place).
 - [x] `DevSeed` CommandLineRunner for `@Profile("local")`.
-- [ ] `organisation`, `company`, `branch`, `section` JPA entities under `modules/admin/domain/entity/`.
-- [ ] `OrganisationRepository`, `CompanyRepository`, `BranchRepository`, `SectionRepository`.
-- [ ] `FirstRunSetupService` + Impl + DTOs (`FirstRunRequestDto`, `FirstRunResponseDto`).
-- [ ] `SetupController` exposing `POST /api/v1/setup/first-run`. Public endpoint (no auth required when DB has zero organisations).
-- [ ] Flyway `V7__admin_section_currency_fx.sql` adds `section`, `currency`, `fx_rate`, `till_currency`.
-- [ ] Outbox events: `OrganisationCreated.v1`, `CompanyCreated.v1`, `BranchCreated.v1`, `SectionCreated.v1`.
+- [x] `organisation`, `company`, `branch`, `section` JPA entities under `modules/admin/domain/entity/`.
+- [x] `OrganisationRepository`, `CompanyRepository`, `BranchRepository`, `SectionRepository`.
+- [x] `FirstRunSetupService` + Impl + DTOs (`FirstRunRequestDto`, `FirstRunResponseDto`).
+- [x] `SetupController` exposing `POST /api/v1/setup/first-run` + `GET /status`. Public endpoint.
+- [x] Flyway `V3__admin_section_currency_fx.sql` adds `section`, `currency`, `fx_rate` (`till_currency` deferred to F5.1).
+- [ ] Outbox events: `OrganisationCreated.v1`, `CompanyCreated.v1`, `BranchCreated.v1`, `SectionCreated.v1` — pending until `EventPublisher` is wired in the bootstrap path.
 
 **Web:**
-- [ ] `/setup` route with a 4-step wizard component (org → company → first branch → admin password).
-- [ ] `SetupService` calls `POST /api/v1/setup/first-run`.
-- [ ] Auto-redirect to `/login` on success, with username pre-filled.
+- [x] `/setup` route with a 4-step wizard component (org → company → first branch → admin).
+- [x] `SetupService` calls `POST /api/v1/setup/first-run` + `GET /status`.
+- [x] Auto-redirect to `/login` on success, with username pre-filled via router state.
 
 **Tests:**
 - **Unit (backend):** `FirstRunSetupServiceTest` — happy path; rejects when org already exists; idempotent on company code.
@@ -84,19 +105,19 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.2 — Login + JWT (cookie / Bearer)
 
-**Story:** US-IAM-001 · **Size:** S · **Status:** `[x]` (backend done — see commit `e0145f5`)
+**Story:** US-IAM-001 · **Size:** S · **Status:** `[x]` (commit `bd1617f` web wiring + ApiResponse envelope)
 **Dependencies:** F0.1.
 
 **Backend:**
 - [x] `AuthServiceImpl.login` with BCrypt verify, 5-strike / 15-min lockout.
 - [x] `AuthController` POST `/api/v1/auth/login`.
-- [x] JWT carries `uid` / `cid` / `bid` / `perms[]` (perms empty until F0.4).
+- [x] JWT carries `uid` / `cid` / `bid` / `perms[]` (real perms wired in F0.4).
 
 **Web:**
-- [ ] `LoginComponent` posting username + password.
-- [ ] `AuthInterceptor` attaches `Authorization: Bearer <jwt>` to all subsequent calls.
-- [ ] `AuthGuard` redirects unauthenticated users to `/login`.
-- [ ] Token stored in memory + `sessionStorage` (NOT `localStorage` — short-lived only).
+- [x] `LoginComponent` posting username + password.
+- [x] `AuthInterceptor` attaches `Authorization: Bearer <jwt>` to all subsequent calls.
+- [x] `AuthGuard` redirects unauthenticated users to `/login`.
+- [x] Token stored in `sessionStorage`.
 
 **POS (Flutter):**
 - [ ] `LoginScreen` (existing stub) wires to backend.
@@ -115,19 +136,19 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.3 — Logout + refresh tokens
 
-**Story:** US-IAM-002, US-IAM-003 · **Size:** M · **Status:** `[ ]`
+**Story:** US-IAM-002, US-IAM-003 · **Size:** M · **Status:** `[x]` (commit `9fcc325`)
 **Dependencies:** F0.2.
 
 **Backend:**
-- [ ] `RefreshToken` entity + repository (table already in V1 baseline).
-- [ ] `AuthServiceImpl.refresh()` — single-use rotation, theft detection (re-use of an already-rotated token revokes all of that user's tokens).
-- [ ] `AuthServiceImpl.logout()` — revokes current refresh token.
-- [ ] `AuthController` POST `/refresh`, POST `/logout`, POST `/logout-everywhere`.
+- [x] `RefreshToken` entity + repository (SHA-256 hashed at rest; `@ToString` excludes the hash).
+- [x] `AuthServiceImpl.refresh()` — single-use rotation, theft detection revokes all user tokens.
+- [x] `AuthServiceImpl.logout()` — revokes current refresh token.
+- [x] `AuthController` POST `/refresh`, POST `/logout`, POST `/logout-everywhere`.
 
 **Web:**
-- [ ] `AuthInterceptor` catches 401, hits `/refresh`, retries the original request.
-- [ ] `AuthService.logout()` clears storage + redirects to `/login`.
-- [ ] "Logout everywhere" button.
+- [x] `AuthInterceptor` catches 401, hits `/refresh`, retries the original request (with in-flight latch).
+- [x] `AuthService.logout()` calls backend then clears storage + redirects to `/login`.
+- [ ] "Logout everywhere" button — backend endpoint exists, UI control missing.
 
 **Tests:**
 - **Unit:** `AuthServiceImplTest` covers rotation + theft detection.
@@ -140,19 +161,19 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.4 — RBAC wiring (permissions in JWT)
 
-**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[ ]`
+**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[~]` (backend done — commit `b4b013a`; web admin UI pending)
 **Dependencies:** F0.2.
 
 **Backend:**
-- [ ] `Role`, `Permission`, `RolePermission`, `UserRole` entities + repos.
-- [ ] `RoleAdminService` + Impl + `RoleAdminController` for CRUD.
-- [ ] `AuthServiceImpl.login()` loads permissions via JOIN through `user_role` → `role_permission` → `permission`, scoped to the user's default company / branch.
-- [ ] Replace the `List.of()` placeholder in JWT with the resolved permission codes.
-- [ ] `@PreAuthorize` removed from `ItemController` (already there) — once permissions populate, admin will succeed.
+- [x] `Role`, `Permission`, `UserRole` entities + repos (role_permission via `@ManyToMany` join table).
+- [ ] `RoleAdminService` + Impl + `RoleAdminController` for CRUD — **NEXT** (admin endpoints for managing roles + grants).
+- [x] `AuthServiceImpl.login()` + `refresh()` load permissions via `PermissionResolverService.resolve(userId, companyId, branchId)`.
+- [x] JWT `perms[]` populated from resolver instead of `List.of()`.
+- [x] Flyway `V4` seeds 10 permissions + ADMIN role + grants all-to-ADMIN. Bootstrap (FirstRunSetupService + DevSeed) assigns ADMIN role to the admin user.
 
 **Web:**
-- [ ] `RoleAdminComponent` for admins to create roles, assign permissions, grant to users.
-- [ ] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission.
+- [ ] `RoleAdminComponent` for admins to create roles, assign permissions, grant to users — **NEXT**.
+- [ ] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission — **NEXT**.
 
 **Tests:**
 - **Unit:** `RoleAdminServiceImplTest`, `AuthServiceImplTest` extended to load permissions.
