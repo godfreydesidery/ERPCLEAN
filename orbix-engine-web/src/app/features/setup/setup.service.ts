@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { ApiResponse, unwrap } from '../../core/api/api-response';
 
 export interface OrganisationInfo {
   name: string;
@@ -55,10 +56,13 @@ export class SetupService {
   private readonly http = inject(HttpClient);
 
   status(): Observable<SetupStatus> {
-    return this.http.get<SetupStatus>(`${environment.apiUrl}/setup/status`);
+    return unwrap(this.http.get<ApiResponse<SetupStatus>>(`${environment.apiUrl}/setup/status`));
   }
 
   firstRun(payload: FirstRunRequest): Observable<FirstRunResponse> {
-    return this.http.post<FirstRunResponse>(`${environment.apiUrl}/setup/first-run`, payload);
+    return unwrap(this.http.post<ApiResponse<FirstRunResponse>>(
+      `${environment.apiUrl}/setup/first-run`,
+      payload
+    ));
   }
 }

@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SetupService } from './setup.service';
+import { ApiResponse } from '../../core/api/api-response';
 
 type StepKey = 'organisation' | 'company' | 'branch' | 'admin';
 
@@ -224,13 +225,17 @@ export class SetupWizardComponent implements OnInit {
       },
       error: (err: HttpErrorResponse) => {
         this.loading.set(false);
+        const envelope = err.error as ApiResponse<unknown> | null;
         if (err.status === 409) {
-          this.errorMessage.set('System is already initialised. Redirecting to login…');
+          this.errorMessage.set(envelope?.message ?? 'System is already initialised. Redirecting to login…');
           setTimeout(() => this.router.navigate(['/login']), 1500);
         } else if (err.status === 400 || err.status === 422) {
-          this.errorMessage.set('Please check the form fields — some inputs were rejected.');
+          const fields = envelope?.errors?.length
+            ? envelope.errors.map(e => e.field ? `${e.field}: ${e.message}` : e.message).join('; ')
+            : 'Please check the form fields — some inputs were rejected.';
+          this.errorMessage.set(fields);
         } else {
-          this.errorMessage.set('Setup failed: ' + (err.error?.message ?? err.message ?? 'unknown error'));
+          this.errorMessage.set('Setup failed: ' + (envelope?.message ?? err.message ?? 'unknown error'));
         }
       }
     });

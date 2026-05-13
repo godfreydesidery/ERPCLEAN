@@ -4,6 +4,8 @@ import com.orbix.engine.modules.admin.domain.dto.FirstRunRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.FirstRunResponseDto;
 import com.orbix.engine.modules.admin.service.FirstRunSetupService;
 import com.orbix.engine.modules.admin.service.FirstRunSetupService.AlreadyBootstrappedException;
+import com.orbix.engine.modules.common.domain.dto.ApiResponseDto;
+import com.orbix.engine.modules.common.domain.enums.ResponseCode;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,8 +27,8 @@ public class SetupController {
     private final FirstRunSetupService firstRunSetupService;
 
     @GetMapping("/status")
-    public ResponseEntity<Map<String, Boolean>> status() {
-        return ResponseEntity.ok(Map.of("bootstrapped", firstRunSetupService.isBootstrapped()));
+    public Map<String, Boolean> status() {
+        return Map.of("bootstrapped", firstRunSetupService.isBootstrapped());
     }
 
     @PostMapping("/first-run")
@@ -36,8 +38,9 @@ public class SetupController {
     }
 
     @ExceptionHandler(AlreadyBootstrappedException.class)
-    public ResponseEntity<Object> onAlreadyBootstrapped(AlreadyBootstrappedException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-            .body(Map.of("error", "already_bootstrapped", "message", ex.getMessage()));
+    public ResponseEntity<ApiResponseDto<Object>> onAlreadyBootstrapped(AlreadyBootstrappedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+            ApiResponseDto.error(409, ResponseCode.SETUP_ALREADY_BOOTSTRAPPED, ex.getMessage())
+        );
     }
 }
