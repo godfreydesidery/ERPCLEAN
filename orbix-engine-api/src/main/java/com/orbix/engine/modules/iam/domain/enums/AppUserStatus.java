@@ -1,3 +1,3 @@
-package com.orbix.engine.modules.auth.domain.enums;
+package com.orbix.engine.modules.iam.domain.enums;
 
 public enum AppUserStatus { ACTIVE, INACTIVE, LOCKED, SUSPENDED }

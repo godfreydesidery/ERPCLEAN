@@ -7,6 +7,10 @@ import { authGuard } from './core/auth/auth.guard';
  */
 export const routes: Routes = [
   {
+    path: 'setup',
+    loadComponent: () => import('./features/setup/setup-wizard.component').then(m => m.SetupWizardComponent)
+  },
+  {
     path: 'login',
     loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent)
   },

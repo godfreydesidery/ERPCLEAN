@@ -13,7 +13,7 @@ The `stock` module owns the truth about *what we hold, where, and what it cost*.
 - Stock counts (full / cycle / spot) including variance posting as `ADJUSTMENT` moves on close.
 - Inter-branch transfers (issue → in-transit → receive) including variance flagging.
 - Stock adjustments with reason, supervisor threshold, and audit trail.
-- Negative-stock policy enforcement (`STOCK.OVERSELL` privilege gate).
+- Negative-stock policy enforcement (`STOCK.OVERSELL` permission gate).
 - Low-stock / negative-stock alert rule (the *rule*, evaluated on every balance update).
 
 **Out of scope**
@@ -47,7 +47,7 @@ See `DATA-MODEL.md §4` for full attribute tables.
 
 **4.4 Inter-branch transfer.** Issuing branch posts `TRANSFER_OUT` immediately on issue, decrementing source `qty_on_hand` and incrementing destination `qty_in_transit`. Status moves to `IN_TRANSIT`. Receiving branch confirms (US-STOCK-008): posts `TRANSFER_IN` at destination, clears `qty_in_transit`, increments destination `qty_on_hand`. If `received_qty ≠ issued_qty`, a reason is required and a variance event is emitted for investigation.
 
-**4.5 Adjustment with reason (US-STOCK-003).** Requires `STOCK.ADJUST` privilege. Adjustments above a configurable threshold require supervisor authorisation (short-lived token per `ARCHITECTURE.md §2.5`). Posts a single `ADJUSTMENT` move; reason stored on `stock_move.notes` and in the audit event.
+**4.5 Adjustment with reason (US-STOCK-003).** Requires `STOCK.ADJUST` permission. Adjustments above a configurable threshold require supervisor authorisation (short-lived token per `ARCHITECTURE.md §2.5`). Posts a single `ADJUSTMENT` move; reason stored on `stock_move.notes` and in the audit event.
 
 **4.6 Negative-stock block + supervisor override (US-STOCK-010).** Enforced at the line level inside the stock service, called by POS and Web invoice posting. Failure offers a supervisor-PIN authorisation flow; an authorised oversell records the supervisor identity on the resulting move and emits an audit event.
 
@@ -175,7 +175,7 @@ See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHA
 
 **Internal-consumption rules:**
 - Every `INTERNAL_CONSUMPTION` move requires `authorised_by_user_id` + `consumption_category` + non-empty `reason` (stored in existing `stock_move.notes`).
-- Privilege `STOCK.INTERNAL_CONSUMPTION_AUTHORISE`.
+- Permission `STOCK.INTERNAL_CONSUMPTION_AUTHORISE`.
 
 **New events:**
 - `BatchCreated.v1`, `BatchExpired.v1`, `BatchRecalled.v1`, `BatchExhausted.v1`

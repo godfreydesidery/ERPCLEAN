@@ -1,6 +1,6 @@
-package com.orbix.engine.modules.auth.repository;
+package com.orbix.engine.modules.iam.repository;
 
-import com.orbix.engine.modules.auth.domain.entity.AppUser;
+import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

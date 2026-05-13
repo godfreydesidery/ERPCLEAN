@@ -17,7 +17,7 @@ In scope:
 - Active-branch context switching for the current session (US-COMP-005).
 
 Out of scope (referenced but owned elsewhere):
-- `app_user`, `role`, `privilege`, `user_role` — owned by `auth`.
+- `app_user`, `role`, `permission`, `user_role` — owned by `auth`.
 - `vat_group`, `uom`, `price_list` — owned by `catalog`.
 - `number_sequence` administration — owned by `common` (its row management) but configured via admin screens.
 - Customer / supplier / employee parties — owned by `party`.

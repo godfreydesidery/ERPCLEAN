@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AuthService } from '../core/auth/auth.service';
 
 @Component({
   selector: 'orbix-shell',
@@ -7,19 +8,26 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
   imports: [RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <div class="d-flex" style="min-height: 100vh">
-      <aside class="bg-light border-end p-3" style="width: 240px">
+      <aside class="bg-light border-end p-3 d-flex flex-column" style="width: 240px">
         <h1 class="h5 mb-4">Orbix Engine</h1>
-        <nav class="nav flex-column">
+        <nav class="nav flex-column flex-grow-1">
           <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-          <a class="nav-link" routerLink="/catalog" routerLinkActive="active">Catalog</a>
-          <a class="nav-link" routerLink="/sales" routerLinkActive="active">Sales</a>
+          <a class="nav-link" routerLink="/catalog"     routerLinkActive="active">Catalog</a>
+          <a class="nav-link" routerLink="/sales"       routerLinkActive="active">Sales</a>
           <a class="nav-link" routerLink="/procurement" routerLinkActive="active">Procurement</a>
-          <a class="nav-link" routerLink="/stock" routerLinkActive="active">Stock</a>
-          <a class="nav-link" routerLink="/production" routerLinkActive="active">Production</a>
-          <a class="nav-link" routerLink="/debt" routerLinkActive="active">Debt</a>
-          <a class="nav-link" routerLink="/reports" routerLinkActive="active">Reports</a>
-          <a class="nav-link" routerLink="/admin" routerLinkActive="active">Admin</a>
+          <a class="nav-link" routerLink="/stock"       routerLinkActive="active">Stock</a>
+          <a class="nav-link" routerLink="/production"  routerLinkActive="active">Production</a>
+          <a class="nav-link" routerLink="/debt"        routerLinkActive="active">Debt</a>
+          <a class="nav-link" routerLink="/reports"     routerLinkActive="active">Reports</a>
+          <a class="nav-link" routerLink="/admin"       routerLinkActive="active">Admin</a>
         </nav>
+        @if (user()) {
+          <div class="border-top pt-3 mt-3 small">
+            <div class="fw-semibold">{{ user()!.displayName }}</div>
+            <div class="text-muted">{{ '@' + user()!.username }}</div>
+            <button class="btn btn-sm btn-outline-secondary w-100 mt-2" (click)="logout()">Sign out</button>
+          </div>
+        }
       </aside>
       <section class="flex-grow-1 p-4">
         <router-outlet></router-outlet>
@@ -27,4 +35,15 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     </div>
   `
 })
-export class ShellComponent {}
+export class ShellComponent {
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  readonly user = this.auth.currentUser;
+
+  logout(): void {
+    this.auth.logout().subscribe({
+      complete: () => void this.router.navigate(['/login'])
+    });
+  }
+}

@@ -123,7 +123,7 @@ PRD §13 and DATA-MODEL.md §16 POS-affecting items pending domain-owner confirm
 - **Fiscal-printer integration scope** — which regions are in MVP, which deployment-config flag drives driver selection, and whether a fiscal-driver failure blocks the sale or only flags it (US-POS-011 AC is region-dependent).
 - **In-app card processing** — default is tokenised via certified terminals (PCI-reduced scope per PRD §11). If a deployment opts in to in-app card capture, what additional schema and controls are required on `pos_payment`.
 - **Walk-in customer modelling** — confirmed approach is one synthetic `customer` per branch (`WALK-IN-BR-*`); pos depends on `party` providing it.
-- **Negative-stock policy at till** — application-level via `STOCK.OVERSELL` privilege; pos must surface the block or override consistently.
+- **Negative-stock policy at till** — application-level via `STOCK.OVERSELL` permission; pos must surface the block or override consistently.
 
 ## 10. Implementation notes
 
@@ -164,7 +164,7 @@ See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHA
 - `pos_sale.refunded_from_sale_id` — self-FK on refund-kind rows.
 - A refund row has negative-qty `pos_sale_line` rows and negative-amount `pos_payment` rows.
 - Policy (locked): same-day + receipt → cashier up to threshold (company-config, default UGX 50,000); above → manager PIN. Same-day no receipt → manager PIN always. Past business day → refuse; route to back-office `customer_return`.
-- Privileges: `POS.REFUND` (cashier), `POS.REFUND_OVERRIDE_THRESHOLD` (manager).
+- Permissions: `POS.REFUND` (cashier), `POS.REFUND_OVERRIDE_THRESHOLD` (manager).
 - Cash refund posts a `cash_entry` OUT on TILL via the `cash` module consumer.
 
 ### Foreign currency at till
@@ -174,7 +174,7 @@ See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHA
 - A till declares accepted foreign currencies via `till_currency` (admin module).
 - POS validates: payment currency ∈ functional ∪ `till_currency` set; FX rate fetched from `fx_rate` (most recent ≤ `sale_at`).
 - Close-till variance computed **per currency**.
-- Privilege: `POS.FX_TENDER`.
+- Permission: `POS.FX_TENDER`.
 
 ### Gift card tender
 

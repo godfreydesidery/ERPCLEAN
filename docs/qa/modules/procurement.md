@@ -63,12 +63,12 @@ Module tests for the inbound goods lifecycle: quotation → LPO → GRN → supp
 
 ### TC-PROC-013 — Direct GRN (no LPO) [P1]
 **Stories:** US-PROC-005
-**Steps:** Post GRN with `lpo_order_id = null` using `GRN.DIRECT` privilege.
-**Expected:** 201; without privilege → 403.
+**Steps:** Post GRN with `lpo_order_id = null` using `GRN.DIRECT` permission.
+**Expected:** 201; without permission → 403.
 
 ### TC-PROC-014 — Cancel posted GRN (compensating) [P1]
 **Stories:** US-PROC-012
-**Steps:** POST /cancel with reason. Privilege `GRN.CANCEL` required.
+**Steps:** POST /cancel with reason. Permission `GRN.CANCEL` required.
 **Expected:** Compensating events emitted (stock + debt reverse); original GRN row immutable.
 
 ### TC-PROC-015 — GRN with batch_no + expiry_at (Phase 1.1) [P1]

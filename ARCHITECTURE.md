@@ -342,8 +342,8 @@ This section names the high-priority entities. **Full attribute lists, datatypes
 - `branch(id, company_id, code, name, address, time_zone, ...)`.
 - `app_user(id, username, password_hash, status, default_branch_id, ...)`.
 - `role(id, name, scope)`.
-- `privilege(id, code, description)`.
-- `role_privilege(role_id, privilege_id)`.
+- `permission(id, code, description)`.
+- `role_permission(role_id, permission_id)`.
 - `user_role(user_id, role_id, company_id)` — roles scoped per company.
 - `audit_log(id, actor_id, action, entity_type, entity_id, before, after, branch_id, at)` — append-only.
 - `number_sequence(branch_id, doc_type, current)`.

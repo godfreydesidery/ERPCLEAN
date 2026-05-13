@@ -15,7 +15,7 @@ Procurement is the **command side** of the inbound flow. It does not own stock b
 In scope:
 - Purchase quotation (RFQ) issuing, multi-supplier comparison, and conversion to LPO.
 - LPO lifecycle: draft, approval (threshold-driven), partial/full receipt, cancellation.
-- GRN posting against an LPO or — under privilege — directly.
+- GRN posting against an LPO or — under permission — directly.
 - Three-way match: LPO ↔ GRN ↔ `supplier_invoice` via the `supplier_invoice_grn` junction.
 - Vendor returns and the credit notes they trigger; allocation of credit notes against open `supplier_invoice` rows.
 - Approval state machine and immutability of posted documents.
@@ -54,7 +54,7 @@ These are the canonical happy-paths the module must support. PRD §6.2 (LPO → 
 
 ### 4.2 LPO approval
 1. LPO submitted from `DRAFT` → `PENDING_APPROVAL`.
-2. Auto-approval if `total_amount` ≤ configured branch threshold; otherwise requires `LPO.APPROVE` privilege.
+2. Auto-approval if `total_amount` ≤ configured branch threshold; otherwise requires `LPO.APPROVE` permission.
 3. On approval: `status` → `APPROVED`, `approved_by` + `approved_at` set, document becomes immutable except for cancellation.
 4. Rejection requires a reason; LPO returns to `DRAFT` for edit or is `CANCELLED`.
 
@@ -68,7 +68,7 @@ These are the canonical happy-paths the module must support. PRD §6.2 (LPO → 
    - `GrnPosted.v1` also opens a GRN-bounded supplier `debt_entry` (consumed by debt module).
 
 ### 4.4 Direct GRN (no LPO)
-- Allowed only with `GRN.DIRECT` privilege (supervisor-level). `grn.lpo_order_id` is NULL.
+- Allowed only with `GRN.DIRECT` permission (supervisor-level). `grn.lpo_order_id` is NULL.
 - Same stock and payable consequences; rejected if business day is closed (see day module).
 
 ### 4.5 Supplier invoice match (three-way)
@@ -109,7 +109,7 @@ These are the canonical happy-paths the module must support. PRD §6.2 (LPO → 
 
 ## 6. API surface
 
-REST endpoints (all under `/api`, JWT-secured, privilege-checked):
+REST endpoints (all under `/api`, JWT-secured, permission-checked):
 
 | Resource | Endpoints |
 |---|---|
@@ -120,7 +120,7 @@ REST endpoints (all under `/api`, JWT-secured, privilege-checked):
 | Vendor returns | `GET/POST /api/vendor-returns`, `POST /api/vendor-returns/{id}/post`, `POST /api/vendor-returns/{id}/cancel` |
 | Vendor credit notes | `GET/POST /api/vendor-credit-notes`, `POST /api/vendor-credit-notes/{id}/allocate` |
 
-Approval-related endpoints (`/submit`, `/approve`, `/reject`) delegate to the platform approval state machine; they do not contain procurement-specific logic beyond mapping privileges.
+Approval-related endpoints (`/submit`, `/approve`, `/reject`) delegate to the platform approval state machine; they do not contain procurement-specific logic beyond mapping permissions.
 
 ## 7. Persistence
 
@@ -156,7 +156,7 @@ From PRD §13 and DATA-MODEL.md §16, the items that affect procurement design:
 - **Cost on GRN post** (DM §16.2) — per-branch `avg_cost` is kept; confirm we never re-cost retroactively when a later GRN lands at a different unit_cost (we don't — only forward-looking moving average).
 - **LPO auto-approval threshold** (PRD §13) — single global, per-company, or per-branch? MVP assumes per-company; confirm.
 - **Three-way match tolerance** (US-PROC-006) — percentage, absolute, or both? Configuration location?
-- **Direct GRN policy** — should this be allowed on closed business days under a higher privilege, or never?
+- **Direct GRN policy** — should this be allowed on closed business days under a higher permission, or never?
 - **Number sequence gaps** (DM §16.5) — accepted for procurement documents; document this for auditors.
 
 ## 10. Implementation notes
@@ -174,7 +174,7 @@ From PRD §13 and DATA-MODEL.md §16, the items that affect procurement design:
 **Multi-tenant scoping.** Every row carries `company_id` and `branch_id`. Repositories filter by the request's `company_id` via the platform `TenantContext`. Suppliers are company-scoped; cross-company supplier reuse is out of scope for MVP.
 
 **Approval state machine** (LPO and supplier invoice):
-`DRAFT` → `SUBMITTED` (a.k.a. `PENDING_APPROVAL` for LPO) → `APPROVED` | `REJECTED` → `CANCELLED`. Transitions go through the platform approval service so privilege checks, audit, and reason capture are uniform.
+`DRAFT` → `SUBMITTED` (a.k.a. `PENDING_APPROVAL` for LPO) → `APPROVED` | `REJECTED` → `CANCELLED`. Transitions go through the platform approval service so permission checks, audit, and reason capture are uniform.
 
 **Idempotency.** All `POST` and state-transition endpoints accept an `Idempotency-Key` header; duplicates within the configured window return the original response.
 

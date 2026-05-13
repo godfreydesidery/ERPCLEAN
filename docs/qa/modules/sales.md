@@ -48,7 +48,7 @@ Back-office sales: quotation → invoice → receipt → allocation, customer re
 
 ### TC-SALES-010 — Discount below min_sell_price [P1]
 **Steps:** Discount pushes unit_price below `item.min_sell_price`.
-**Expected:** 422 unless `MIN_PRICE_OVERRIDE` privilege.
+**Expected:** 422 unless `MIN_PRICE_OVERRIDE` permission.
 
 ### TC-SALES-011 — Post invoice emits event [P1]
 **Steps:** POST /post.

@@ -19,7 +19,7 @@ Within the modular monolith (ARCHITECTURE.md §2.1), `party` sits alongside `cat
 - Emission of party lifecycle events to the outbox.
 
 **Out of scope.**
-- `app_user`, roles, privileges, supervisor PIN, JWT issuance — owned by `platform/security`.
+- `app_user`, roles, permissions, supervisor PIN, JWT issuance — owned by `platform/security`.
 - `company`, `branch`, `organisation` — owned by `platform/company`. Party references these by ID; it does not manage them.
 - Shifts, payroll, leave — owned by `hr` (`shift` table). `hr` reads `employee` from this module.
 - Credit-limit *enforcement* and debt ageing — owned by `debt`. Party owns the `customer.credit_limit_amount` field only.

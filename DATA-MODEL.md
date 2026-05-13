@@ -65,7 +65,7 @@ A `status` column appears on most aggregates with values drawn from:
 
 ### Naming
 
-- Table names: `snake_case`, singular (`item`, `sales_invoice`). Junction tables named after both sides (`role_privilege`).
+- Table names: `snake_case`, singular (`item`, `sales_invoice`). Junction tables named after both sides (`role_permission`).
 - Column names: `snake_case`. Foreign keys: `<other_table>_id`.
 - Booleans named for the true case: `is_active`, `is_default`, `has_been_synced`.
 - Money column names end in `_amount`; quantity columns end in `_qty`.
@@ -196,7 +196,7 @@ Cross-cutting tables — identity, hierarchy, audit, infrastructure plumbing.
 
 ## 1.5 `role`
 
-**Rationale.** A named collection of privileges. Roles are reusable across users and companies (`Cashier`, `Storekeeper`, `Branch Manager`).
+**Rationale.** A named collection of permissions. Roles are reusable across users and companies (`Cashier`, `Storekeeper`, `Branch Manager`).
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
@@ -209,27 +209,27 @@ Cross-cutting tables — identity, hierarchy, audit, infrastructure plumbing.
 
 **Example.** `{ "id": 3, "code": "CASHIER", "name": "Till Cashier", "is_system": true, "status": "ACTIVE" }`
 
-## 1.6 `privilege`
+## 1.6 `permission`
 
-**Rationale.** The atomic permission unit. Coarser than per-endpoint, finer than per-module. Backend `@PreAuthorize` checks reference privilege codes, not roles.
+**Rationale.** The atomic permission unit. Coarser than per-endpoint, finer than per-module. Backend `@PreAuthorize` checks reference permission codes, not roles.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | `id` | `BIGINT` | NO | |
 | `code` | `VARCHAR(80)` | NO | UNIQUE, dot-separated: `SALES_INVOICE.POST`, `STOCK.ADJUST`. |
-| `description` | `TEXT` | NO | What the privilege grants. |
+| `description` | `TEXT` | NO | What the permission grants. |
 | `module` | `VARCHAR(40)` | NO | For UI grouping: `sales`, `stock`, `procurement`. |
 
 **Example.** `{ "id": 102, "code": "SALES_INVOICE.POST", "module": "sales", "description": "Post a sales invoice, decrementing stock and creating debt." }`
 
-## 1.7 `role_privilege`
+## 1.7 `role_permission`
 
-**Rationale.** Junction. A role grants many privileges; a privilege belongs to many roles.
+**Rationale.** Junction. A role grants many permissions; a permission belongs to many roles.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | `role_id` | `BIGINT` | NO | FK; part of composite PK. |
-| `privilege_id` | `BIGINT` | NO | FK; part of composite PK. |
+| `permission_id` | `BIGINT` | NO | FK; part of composite PK. |
 
 ## 1.8 `user_role`
 
@@ -967,7 +967,7 @@ Purchase quotation → LPO → GRN → Supplier Invoice → Payment, with vendor
 | `company_id` | `BIGINT` | NO | |
 | `branch_id` | `BIGINT` | NO | |
 | `supplier_id` | `BIGINT` | NO | |
-| `lpo_order_id` | `BIGINT` | YES | NULL = direct GRN (rare, requires privilege). |
+| `lpo_order_id` | `BIGINT` | YES | NULL = direct GRN (rare, requires permission). |
 | `received_date` | `DATE` | NO | |
 | `supplier_delivery_note` | `VARCHAR(80)` | YES | |
 | `subtotal_amount` | `DECIMAL(18,4)` | NO | |
@@ -1878,7 +1878,7 @@ These are choices that should be confirmed by domain owners before MVP cut. They
 1. **Should `customer` and `supplier` allow the same `party_id`?** Architecturally yes; operationally rare but real (a supplier who is also a small customer). Confirm.
 2. **Cost method per item vs per branch.** Current model keeps both: a global `item.avg_cost` for aggregate reporting and a per-branch `item_branch_balance.avg_cost` for accurate margin per branch. Confirm both are wanted.
 3. **Walk-in customer at POS.** Recommend one synthetic `customer` per branch (`WALK-IN-BR-DSM-01`) so all sales link to a real party. Cleaner than NULL FKs.
-4. **Negative stock policy.** Schema allows negative balances; rule is application-level via privilege `STOCK.OVERSELL`. Confirm.
+4. **Negative stock policy.** Schema allows negative balances; rule is application-level via permission `STOCK.OVERSELL`. Confirm.
 5. **Number sequence gaps on rollback.** A transaction that allocates a number then rolls back leaves a gap. Acceptable for retail; confirm.
 6. **Per-branch cash accounts.** Recommend one `TILL` account per till session, one `CASH_BOX` per branch, one `BANK` per branch. Confirm whether multi-bank is in scope.
 7. **Production co-products.** Schema allows multiple outputs per batch. Confirm any current batch genuinely has more than one output, otherwise simplify.
