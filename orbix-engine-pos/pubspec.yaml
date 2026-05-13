@@ -1,0 +1,58 @@
+name: orbix_engine_pos
+description: Orbix Engine — Point of Sale (Flutter Desktop, offline-first)
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # State and routing
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.0
+
+  # HTTP + JSON
+  dio: ^5.4.0
+  json_annotation: ^4.9.0
+  freezed_annotation: ^2.4.4
+
+  # Local DB (Drift on SQLite) — offline-first per ARCHITECTURE.md §3.1
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.20
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Hardware integration (Windows)
+  esc_pos_utils_plus: ^2.0.3
+  win32: ^5.5.0
+  ffi: ^2.1.2
+
+  # Auth
+  jwt_decoder: ^2.0.1
+
+  # Money / dates
+  intl: ^0.19.0
+  decimal: ^3.0.0
+
+  # Logging
+  logger: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.10
+  drift_dev: ^2.18.0
+  freezed: ^2.5.0
+  json_serializable: ^6.8.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

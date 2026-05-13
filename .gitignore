@@ -1,0 +1,59 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+*.suo
+.vs/
+.metadata/
+.project
+.classpath
+.settings/
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build artefacts
+**/target/
+**/build/
+**/dist/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.gradle/
+**/gradle-app.setting
+**/*.lock
+!**/Cargo.lock
+**/package-lock.json
+**/node_modules/
+**/coverage/
+**/.nyc_output/
+
+# Java / Maven
+*.class
+hs_err_pid*
+replay_pid*
+.mvn/wrapper/maven-wrapper.jar
+
+# Logs and runtime
+*.log
+logs/
+tmp/
+.cache/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local Docker volumes
+infra/local-data/
+
+# Claude Code per-developer settings
+.claude/settings.local.json

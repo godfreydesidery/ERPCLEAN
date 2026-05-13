@@ -1,0 +1,14 @@
+/* Orbix Engine — global styles. */
+:root {
+  --orbix-primary: #1a4fb5;
+  --orbix-secondary: #6c757d;
+  --orbix-surface: #f5f7fb;
+  --orbix-on-surface: #1f2933;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  background: var(--orbix-surface);
+  color: var(--orbix-on-surface);
+}

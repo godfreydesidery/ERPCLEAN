@@ -1,0 +1,13 @@
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+logging:
+  level:
+    com.orbix.engine: DEBUG
+    org.springframework.security: DEBUG
+orbix:
+  jwt:
+    signing-mode: dev-in-memory

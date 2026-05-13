@@ -1,0 +1,27 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+.packages
+
+# Generated code
+**/*.g.dart
+**/*.freezed.dart
+**/*.mocks.dart
+
+# Platform
+windows/flutter/ephemeral/
+windows/runner/Debug/
+windows/runner/Release/
+android/.gradle/
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+
+# IDE
+.idea/
+.vscode/
+*.iml

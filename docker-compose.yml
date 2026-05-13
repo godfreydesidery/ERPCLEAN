@@ -1,0 +1,84 @@
+# Local development infrastructure.
+# Brings up the dependencies the backend needs.
+# Usage:
+#   docker compose up -d
+#   docker compose down
+# Data persists under ./infra/local-data/ (gitignored).
+
+name: orbix-erp
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: orbix-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootlocal}
+      MYSQL_DATABASE: orbix_erp
+      MYSQL_USER: orbix
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./infra/local-data/mysql:/var/lib/mysql
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:15
+    container_name: orbix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orbix_erp
+      POSTGRES_USER: orbix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbixlocal}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/local-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbix -d orbix_erp"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: orbix-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra/local-data/redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: orbix-search
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-meili-local-key}
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./infra/local-data/meilisearch:/meili_data
+
+  minio:
+    image: minio/minio:latest
+    container_name: orbix-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: orbix
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-orbixlocal}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./infra/local-data/minio:/data
+    command: server /data --console-address ":9001"
