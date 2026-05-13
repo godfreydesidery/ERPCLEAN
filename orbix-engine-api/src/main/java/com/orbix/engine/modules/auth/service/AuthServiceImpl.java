@@ -5,6 +5,7 @@ import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.auth.domain.entity.RefreshToken;
 import com.orbix.engine.modules.iam.repository.AppUserRepository;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.auth.repository.RefreshTokenRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +34,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwords;
     private final JwtService jwt;
+    private final PermissionResolverService permissions;
     private final Duration accessTtl;
     private final Duration refreshTtl;
 
@@ -40,12 +42,14 @@ public class AuthServiceImpl implements AuthService {
                            RefreshTokenRepository refreshTokens,
                            PasswordEncoder passwords,
                            JwtService jwt,
+                           PermissionResolverService permissions,
                            @Value("${orbix.jwt.access-ttl}") Duration accessTtl,
                            @Value("${orbix.jwt.refresh-ttl}") Duration refreshTtl) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.passwords = passwords;
         this.jwt = jwt;
+        this.permissions = permissions;
         this.accessTtl = accessTtl;
         this.refreshTtl = refreshTtl;
     }
@@ -118,12 +122,10 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private LoginResponseDto issueTokens(AppUser user) {
-        String accessToken = jwt.issueAccessToken(
-            user.getId(),
-            user.getDefaultCompanyId() == null ? 0L : user.getDefaultCompanyId(),
-            user.getDefaultBranchId(),
-            List.of()  // TODO: resolve from user_role / role_privilege once RBAC is wired
-        );
+        Long companyId = user.getDefaultCompanyId() == null ? 0L : user.getDefaultCompanyId();
+        Long branchId = user.getDefaultBranchId();
+        List<String> perms = List.copyOf(permissions.resolve(user.getId(), companyId, branchId));
+        String accessToken = jwt.issueAccessToken(user.getId(), companyId, branchId, perms);
 
         String rawRefresh = generateOpaqueToken();
         Instant now = Instant.now();

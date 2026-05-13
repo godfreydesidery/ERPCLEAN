@@ -253,7 +253,7 @@ Module count: **14** (auth, common, admin, party, catalog, stock, procurement, s
 - All require `authorised_by_user_id`, `consumption_category`, and a non-empty reason on the move.
 - `STAFF_PURCHASE` is a normal sale at staff price list (recorded via `pos_sale`, identified by `employee.staff_price_list_id`); the `stock_move` is just a regular `SALE` move tagged with `is_staff_purchase` (or via the cash side).
 
-## New privileges
+## New permissions
 
 - `POS.REFUND` — cashier-level same-day refund within threshold
 - `POS.REFUND_OVERRIDE_THRESHOLD` — manager override

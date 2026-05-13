@@ -90,7 +90,7 @@ Update the plan as you go; commit the change alongside the feature.
 **Backend:**
 - [x] `AuthServiceImpl.login` with BCrypt verify, 5-strike / 15-min lockout.
 - [x] `AuthController` POST `/api/v1/auth/login`.
-- [x] JWT carries `uid` / `cid` / `bid` / `privs[]` (privs empty until F0.4).
+- [x] JWT carries `uid` / `cid` / `bid` / `perms[]` (perms empty until F0.4).
 
 **Web:**
 - [ ] `LoginComponent` posting username + password.
@@ -138,28 +138,28 @@ Update the plan as you go; commit the change alongside the feature.
 
 ---
 
-## F0.4 — RBAC wiring (privileges in JWT)
+## F0.4 — RBAC wiring (permissions in JWT)
 
 **Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[ ]`
 **Dependencies:** F0.2.
 
 **Backend:**
-- [ ] `Role`, `Privilege`, `RolePrivilege`, `UserRole` entities + repos.
+- [ ] `Role`, `Permission`, `RolePermission`, `UserRole` entities + repos.
 - [ ] `RoleAdminService` + Impl + `RoleAdminController` for CRUD.
-- [ ] `AuthServiceImpl.login()` loads privileges via JOIN through `user_role` → `role_privilege` → `privilege`, scoped to the user's default company / branch.
-- [ ] Replace the `List.of()` placeholder in JWT with the resolved privilege codes.
-- [ ] `@PreAuthorize` removed from `ItemController` (already there) — once privileges populate, admin will succeed.
+- [ ] `AuthServiceImpl.login()` loads permissions via JOIN through `user_role` → `role_permission` → `permission`, scoped to the user's default company / branch.
+- [ ] Replace the `List.of()` placeholder in JWT with the resolved permission codes.
+- [ ] `@PreAuthorize` removed from `ItemController` (already there) — once permissions populate, admin will succeed.
 
 **Web:**
-- [ ] `RoleAdminComponent` for admins to create roles, assign privileges, grant to users.
-- [ ] `HasPrivilegeDirective` (`*orbixHasPrivilege="'ITEM.CREATE'"`) hides UI per privilege.
+- [ ] `RoleAdminComponent` for admins to create roles, assign permissions, grant to users.
+- [ ] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission.
 
 **Tests:**
-- **Unit:** `RoleAdminServiceImplTest`, `AuthServiceImplTest` extended to load privileges.
-- **Integration:** `RbacIntegrationTest` — assign role, login, verify JWT carries privileges, blocked user gets 403.
+- **Unit:** `RoleAdminServiceImplTest`, `AuthServiceImplTest` extended to load permissions.
+- **Integration:** `RbacIntegrationTest` — assign role, login, verify JWT carries permissions, blocked user gets 403.
 - **System:** `TC-AUTH-014`, `TC-AUTH-015`, `TC-NFR-SEC-007`.
 
-**DoD:** A user without `ITEM.CREATE` cannot POST items; an admin with the privilege can. UI elements hide accordingly.
+**DoD:** A user without `ITEM.CREATE` cannot POST items; an admin with the permission can. UI elements hide accordingly.
 
 ---
 
@@ -398,7 +398,7 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 - [ ] `StockMove`, `ItemBranchBalance` entities + repos.
 - [ ] `StockMoveService` + Impl. Append-only — DB CHECK constraint rejects UPDATE.
 - [ ] Moving-average cost on inbound; outbound consumes at current `avg_cost`.
-- [ ] Negative-stock guard with supervisor override (`STOCK.OVERSELL` privilege).
+- [ ] Negative-stock guard with supervisor override (`STOCK.OVERSELL` permission).
 - [ ] Events: `StockMoved.v1`, `BalanceUpdated.v1`, `LowStockTriggered.v1`, `NegativeStockBlocked.v1`.
 - [ ] `GET /api/v1/stock-moves` (paged, filtered), `GET /api/v1/balances`.
 
@@ -513,7 +513,7 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 **Backend:**
 - [ ] `Grn`, `GrnLine` entities (line carries `batch_no`, `expiry_at` for batch-tracked items).
 - [ ] `GrnService` + Impl. Validates against LPO line quantities; over-receipt rejected.
-- [ ] Direct GRN under `GRN.DIRECT` privilege.
+- [ ] Direct GRN under `GRN.DIRECT` permission.
 - [ ] `GrnPosted.v1` → stock module writes `stock_move` rows (and `stock_batch` rows for batch-tracked items).
 
 **Web:**

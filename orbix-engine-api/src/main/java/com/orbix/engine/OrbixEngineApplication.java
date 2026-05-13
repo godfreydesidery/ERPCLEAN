@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *                   auth          authentication + authorization: login,
  *                                 refresh, JWT, security filter chain
  *                   iam           identity + access management: users,
- *                                 roles, privileges, dev seed
+ *                                 roles, permissions, dev seed
  *                   common        cross-cutting infrastructure (audit
  *                                 aspect, transactional outbox, RequestContext)
  *                   admin         org, branch, section, currency, fx_rate masters

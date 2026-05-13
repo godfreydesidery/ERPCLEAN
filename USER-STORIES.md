@@ -134,13 +134,13 @@ Establishes who can do what. Without this epic, nothing else is safe.
 - The user row is preserved; their historical actions remain in audit and references.
 - Reactivation is allowed.
 
-### US-IAM-008 — Define a role with privileges
-**As** Admin **I want** to define a role as a set of privileges **so that** I can assign permissions in bulk.
-**P:** P1 · **Size:** M · **Surface:** Web · **Entities:** `role`, `privilege`, `role_privilege`
+### US-IAM-008 — Define a role with permissions
+**As** Admin **I want** to define a role as a set of permissions **so that** I can assign permissions in bulk.
+**P:** P1 · **Size:** M · **Surface:** Web · **Entities:** `role`, `permission`, `role_permission`
 **AC:**
-- I can create a role with a unique code (e.g. `BRANCH_MANAGER`), display name, and selection of privileges.
-- System roles cannot be deleted or have their core privileges removed.
-- Changes to role-privilege mappings are audited.
+- I can create a role with a unique code (e.g. `BRANCH_MANAGER`), display name, and selection of permissions.
+- System roles cannot be deleted or have their core permissions removed.
+- Changes to role-permission mappings are audited.
 
 ### US-IAM-009 — Assign a role to a user, scoped per company / branch
 **As** Admin **I want** to assign a role to a user, scoped to a company and optionally a branch **so that** I can match permission to context.
@@ -150,11 +150,11 @@ Establishes who can do what. Without this epic, nothing else is safe.
 - An assignment can be branch-restricted (NULL `branch_id` = all branches in that company).
 - Assignments record `granted_by` and `granted_at`; revocations set `revoked_at` (no row deletion).
 
-### US-IAM-010 — Authorise a privileged action with a supervisor PIN
+### US-IAM-010 — Authorise a permissiond action with a supervisor PIN
 **As** Cashier **I want** to request supervisor authorisation in-line **so that** I can complete restricted actions (void, over-discount, oversell) without leaving my till.
 **P:** P1 · **Size:** M · **Surface:** POS, Web
 **AC:**
-- The protected action triggers a PIN modal; a user with the required privilege types their username + PIN/password.
+- The protected action triggers a PIN modal; a user with the required permission types their username + PIN/password.
 - On success, a short-lived (60-second) authorisation token scoped to that single action is issued; the original action retries with the token attached.
 - The supervisor's identity is recorded on the affected entity (`supervisor_id`) and in audit.
 - A failed authorisation does not increment the cashier's `failed_login_count` — only the supervisor's.
@@ -182,7 +182,7 @@ Establishes who can do what. Without this epic, nothing else is safe.
 - Filters: actor, entity type, entity id, action, date range, branch.
 - Default sort: newest first.
 - The list paginates; full row detail (before/after JSON) appears in a side panel.
-- Export of the filtered set to CSV requires `AUDIT.EXPORT` privilege.
+- Export of the filtered set to CSV requires `AUDIT.EXPORT` permission.
 
 ### US-IAM-014 — Verify audit-log integrity
 **As** Admin **I want** to verify the audit log has not been tampered with **so that** I can trust it during compliance review.
@@ -371,7 +371,7 @@ The truth about what we own, where, and what it cost. All balances derive from t
 **As** Storekeeper **I want** to record a stock adjustment **so that** physical reality is reflected.
 **P:** P1 · **Size:** M · **Surface:** Web
 **AC:**
-- Requires reason; requires `STOCK.ADJUST` privilege; large adjustments (configurable threshold) require supervisor authorisation.
+- Requires reason; requires `STOCK.ADJUST` permission; large adjustments (configurable threshold) require supervisor authorisation.
 - Posts an `ADJUSTMENT` move.
 
 ### US-STOCK-004 — Start a stock count
@@ -420,7 +420,7 @@ The truth about what we own, where, and what it cost. All balances derive from t
 **As** the system **I want** to block sales of items with insufficient stock unless `STOCK.OVERSELL` is granted **so that** stock integrity is preserved.
 **P:** P1 · **Size:** M · **Surface:** All
 **AC:**
-- POS and Web invoice posting check stock at the line; failure shows a clear message and offers supervisor authorisation if the privilege exists.
+- POS and Web invoice posting check stock at the line; failure shows a clear message and offers supervisor authorisation if the permission exists.
 - Authorised oversells are recorded with supervisor identity.
 
 ---

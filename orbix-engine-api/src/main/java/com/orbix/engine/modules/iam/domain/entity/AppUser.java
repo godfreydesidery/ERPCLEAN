@@ -13,8 +13,8 @@ import java.time.Instant;
 
 /**
  * Authenticated principal. Maps to {@code app_user} (DATA-MODEL.md §1.4).
- * Roles and privileges are resolved separately via {@code user_role} +
- * {@code role_privilege}.
+ * Roles and permissions are resolved separately via {@code user_role} +
+ * {@code role_permission}.
  */
 @Entity
 @Table(name = "app_user", uniqueConstraints = @UniqueConstraint(name = "uk_app_user_username", columnNames = "username"))

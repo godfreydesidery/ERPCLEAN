@@ -4,6 +4,6 @@ INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('company_seq', 
 INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('branch_seq', 1);
 INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('app_user_seq', 1);
 INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('role_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('privilege_seq', 1);
+INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('permission_seq', 1);
 INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('user_role_seq', 1);
 INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('refresh_token_seq', 1);

@@ -16,7 +16,7 @@ Module-level tests for login, lockout, JWT issuance, refresh, RBAC, dev seed. Se
 - 200; response has `accessToken`, `tokenType: "Bearer"`, `expiresInSeconds`, `user`.
 - `app_user.last_login_at` set to now.
 - `app_user.failed_login_count = 0`.
-- JWT decodes to: `iss = orbix-engine`, `uid = admin.id`, `cid = admin.defaultCompanyId`, `bid = admin.defaultBranchId`, `privs = []` (until RBAC wired).
+- JWT decodes to: `iss = orbix-engine`, `uid = admin.id`, `cid = admin.defaultCompanyId`, `bid = admin.defaultBranchId`, `perms = []` (until RBAC wired).
 
 ### TC-AUTH-002 — DevSeed creates admin on empty DB [P1]
 **Type:** Functional · **Stories:** —
@@ -79,11 +79,11 @@ Module-level tests for login, lockout, JWT issuance, refresh, RBAC, dev seed. Se
 
 ### TC-AUTH-011 — JWT signature validated on every request [P1]
 **Type:** Security
-**Steps:** Tamper with a token's payload, then call any privileged endpoint.
+**Steps:** Tamper with a token's payload, then call any permissiond endpoint.
 **Expected:** 401. Audit log records the failed attempt.
 
 ### TC-AUTH-012 — Missing Authorization header [P1]
-**Steps:** Call a privileged endpoint without `Authorization`.
+**Steps:** Call a permissiond endpoint without `Authorization`.
 **Expected:** 401 or 403 depending on Spring's filter chain (current config: 401).
 
 ### TC-AUTH-013 — Malformed Bearer token [P1]
@@ -92,13 +92,13 @@ Module-level tests for login, lockout, JWT issuance, refresh, RBAC, dev seed. Se
 
 ## RBAC (when wired)
 
-### TC-AUTH-014 — Privileges loaded from user_role / role_privilege at login [P1]
+### TC-AUTH-014 — Permissions loaded from user_role / role_permission at login [P1]
 **Stories:** US-IAM-008, US-IAM-009
 **Preconditions:** User has roles granting `ITEM.CREATE` and `STOCK.OVERSELL`.
 **Steps:** Login; decode JWT.
-**Expected:** `privs` contains both privilege codes; nothing extra.
+**Expected:** `perms` contains both permission codes; nothing extra.
 
-### TC-AUTH-015 — @PreAuthorize blocks unprivileged calls [P1]
+### TC-AUTH-015 — @PreAuthorize blocks unpermissiond calls [P1]
 **Steps:** As a user without `ITEM.CREATE`, POST /api/v1/items.
 **Expected:** 403.
 

@@ -50,7 +50,7 @@ Security, performance, accessibility, compliance, observability. These are ortho
 
 **Expected:** 403 (or no `Access-Control-Allow-Origin` returned). Localhost + configured production origin only.
 
-### TC-NFR-SEC-007 — Method-level @PreAuthorize blocks unprivileged access [P1]
+### TC-NFR-SEC-007 — Method-level @PreAuthorize blocks unpermissiond access [P1]
 **Steps:**
 1. Login as a user without `ITEM.CREATE`.
 2. POST /api/v1/items.
