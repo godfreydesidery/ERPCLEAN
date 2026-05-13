@@ -1,5 +1,7 @@
-package com.orbix.engine.platform.events;
+package com.orbix.engine.modules.common.service;
 
+import com.orbix.engine.modules.common.domain.entity.DomainEvent;
+import com.orbix.engine.modules.common.repository.DomainEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

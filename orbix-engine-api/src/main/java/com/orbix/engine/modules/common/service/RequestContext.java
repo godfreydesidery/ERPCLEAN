@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.common.service;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;

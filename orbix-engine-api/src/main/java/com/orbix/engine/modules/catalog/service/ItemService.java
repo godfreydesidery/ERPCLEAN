@@ -4,9 +4,9 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequest;
 import com.orbix.engine.modules.catalog.domain.dto.ItemResponse;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
-import com.orbix.engine.platform.audit.Auditable;
-import com.orbix.engine.platform.events.EventPublisher;
-import com.orbix.engine.platform.security.RequestContext;
+import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.EventPublisher;
+import com.orbix.engine.modules.common.service.RequestContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

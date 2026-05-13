@@ -1,6 +1,6 @@
-package com.orbix.engine.platform.audit;
+package com.orbix.engine.modules.common.service;
 
-import com.orbix.engine.platform.security.RequestContext;
+import com.orbix.engine.modules.common.service.RequestContext;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -24,7 +24,7 @@ public class AuditAspect {
         this.context = context;
     }
 
-    @Around("@annotation(com.orbix.engine.platform.audit.Auditable)")
+    @Around("@annotation(com.orbix.engine.modules.common.service.Auditable)")
     public Object record(ProceedingJoinPoint pjp) throws Throwable {
         MethodSignature sig = (MethodSignature) pjp.getSignature();
         Auditable ann = sig.getMethod().getAnnotation(Auditable.class);

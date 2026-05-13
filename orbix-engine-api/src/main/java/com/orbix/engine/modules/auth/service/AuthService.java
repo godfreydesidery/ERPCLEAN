@@ -4,7 +4,7 @@ import com.orbix.engine.modules.auth.domain.dto.LoginRequest;
 import com.orbix.engine.modules.auth.domain.dto.LoginResponse;
 import com.orbix.engine.modules.auth.domain.entity.AppUser;
 import com.orbix.engine.modules.auth.repository.AppUserRepository;
-import com.orbix.engine.platform.security.JwtService;
+import com.orbix.engine.modules.auth.service.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;

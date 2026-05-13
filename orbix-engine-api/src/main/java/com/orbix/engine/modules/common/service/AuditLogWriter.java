@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.audit;
+package com.orbix.engine.modules.common.service;
 
 import org.springframework.stereotype.Component;
 

@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.auth.service;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

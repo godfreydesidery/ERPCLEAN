@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.events;
+package com.orbix.engine.modules.common.domain.entity;
 
 import jakarta.persistence.*;
 

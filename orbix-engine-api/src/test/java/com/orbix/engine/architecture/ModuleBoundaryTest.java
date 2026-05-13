@@ -32,16 +32,17 @@ public class ModuleBoundaryTest {
         .because("controllers must go through services, not repositories directly");
 
     @ArchTest
-    static final ArchRule modules_only_depend_on_published_dtos_or_platform = classes()
+    static final ArchRule modules_only_depend_on_published_dtos_or_infrastructure = classes()
         .that().resideInAPackage("com.orbix.engine.modules..")
         .should().onlyDependOnClassesThat()
         .resideInAnyPackage(
+            "com.orbix.engine.modules.common..",        // cross-cutting infrastructure
+            "com.orbix.engine.modules.auth..",          // auth infrastructure (JWT, filter, security config)
             "com.orbix.engine.modules..domain.dto..",   // any module's published DTOs
             "com.orbix.engine.modules..domain.enums..", // and enums
-            "com.orbix.engine.platform..",              // cross-cutting platform
             "java..", "jakarta..", "javax..",
             "org.springframework..", "org.hibernate..", "org.slf4j..",
-            "com.fasterxml..", "lombok..",
+            "com.fasterxml..", "lombok..", "io.jsonwebtoken..",
             "..domain..", "..service..", "..repository.."
         )
         .because("modules talk to each other only via published DTOs/enums or domain events");

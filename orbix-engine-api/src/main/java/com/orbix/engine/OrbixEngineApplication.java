@@ -8,11 +8,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * Application entry point.
  * Package structure under this package:
- *   platform.*    cross-cutting (security, audit, events, health, company)
- *   api.*         REST controllers for every module + cross-cutting endpoints
- *   modules.*     business modules — minimum set to run a supermarket:
- *                 party, catalog, stock, procurement, sales, pos, cash, day
- *                 each with sub-packages:
+ *   api.*         REST controllers (one folder for the whole HTTP surface)
+ *   modules.*     all logic, grouped by concern:
+ *                   auth          identity, login, JWT, security filter
+ *                   common        cross-cutting infrastructure (audit
+ *                                 aspect, transactional outbox, RequestContext)
+ *                   business modules — minimum supermarket set:
+ *                     party, catalog, stock, procurement, sales,
+ *                     pos, cash, day
+ *                 every module follows the same shape:
  *                   domain.entity   JPA entities
  *                   domain.dto      request/response payloads
  *                   domain.enums    enumeration types
