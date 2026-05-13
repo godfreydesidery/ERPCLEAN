@@ -672,4 +672,57 @@ ERPCLEAN/
 
 ---
 
+# Phase 1.1 — Architectural notes
+
+The Phase 1.1 scope additions ([PRD §14](PRD.md), [DATA-MODEL §17](DATA-MODEL.md), [docs/design/PHASE-1.1-ADDITIONS.md](docs/design/PHASE-1.1-ADDITIONS.md)) introduce four new modules and several architectural patterns worth calling out.
+
+## Section as a transactional dimension
+
+A new `section` entity sits between `branch` and the transactional aggregates. **Required** on `pos_sale`, `pos_sale_line`, `till`, `bom`, and `production_batch`. **Optional** on `stock_move` (stamped only when the move crosses sections — bakery output to retail floor, or section-to-section transfer). **Not on** `sales_invoice` or `supplier_invoice` — back-office docs are HQ-level.
+
+Section P&L is a primary report dimension. Reports group by `(company_id, branch_id, section_id)`.
+
+## Multi-currency tender, single functional currency
+
+Each company has one functional currency (its books). Foreign currency is accepted only at the POS tender step:
+
+- `pos_payment` carries both the tender currency + amount AND the back-converted functional amount, plus the `fx_rate_snapshot` used.
+- `cash_entry` and `cash_book` are scoped per currency: composite PK `(branch_id, account, currency_code, business_date)`.
+- A till declares its accepted currencies via `till_currency`.
+- Close-till variance is computed **per currency** — the till may be short USD but long UGX.
+
+The functional currency is implicit; no `till_currency` row needed for it. Most-recent `fx_rate` with `effective_at ≤ sale time` wins at tender time.
+
+## Batch tracking with FEFO
+
+Per-item opt-in via `item.tracks_batches`. Each receipt (GRN line) or production output creates a `stock_batch` row carrying `manufactured_at`, `expiry_at`, `qty_on_hand`, and `cost`. Consumption follows **first-expired-first-out**:
+
+1. POS / sales / production-consume picks the batch with the earliest non-null `expiry_at` (FIFO among same-expiry).
+2. Cost flows from the consumed batch, not the moving average.
+3. A scheduled job flags `ACTIVE` batches with `expiry_at < now` for write-off; the actual write-off remains a manual `stock_move` of type `EXPIRY_WRITE_OFF` (so accountants approve it).
+
+Items without `tracks_batches = true` continue to use the moving-average cost model on `item_branch_balance`.
+
+## Liability ledgers (gift cards) sit beside the cash ledger
+
+`gift_card` + `gift_card_txn` are a self-contained ledger. They are **not** in `cash_book` because the balance is a liability, not cash. The POS treats gift cards as a tender method (`pos_payment.method = GIFT_CARD`), but redemptions do not create a `cash_entry`; they create a `gift_card_txn` of kind `REDEEM`.
+
+The same pattern is reserved for future loyalty-points and store-credit ledgers — each gets its own balance and ledger; cash never absorbs liabilities.
+
+## Reservation as a stock direction
+
+Layby and pre-order reservations write a `stock_move` with `direction = RESERVED` (a new direction alongside IN / OUT). Reserved stock is **on hand** but **not available** — `item_branch_balance` carries both `qty_on_hand` and `qty_reserved`; oversell checks use `qty_on_hand − qty_reserved`. When an order is collected, the RESERVED move is reversed and a SALE move is posted in the same transaction.
+
+## Production lifecycle as discrete event states
+
+A `production_batch` transitions through eight states: `PLANNED` → `IN_PROGRESS` → `OUTPUT_HOT_DISPLAY` → `OUTPUT_COLD_DISPLAY` → `OUTPUT_DISCOUNTED` → `OUTPUT_DONATED` / `OUTPUT_WRITE_OFF` → `CLOSED`. Each transition emits `ProductionLifecycleAdvanced.v1`. The terminal donated / write-off transitions emit compensating `stock_move` rows; reporting picks up the wastage breakdown.
+
+## Module count grows: 10 → 14
+
+Adds: `admin`, `production` (re-introduced), `orders`, `giftcard`.
+
+The cross-cutting modules `common` and `auth` remain the only "infrastructure" peers other modules may depend on directly (per `ModuleBoundaryTest`). The 12 business + admin modules talk to each other only via published DTOs/enums or domain events.
+
+---
+
 *End of Architecture. See [PRD.md](PRD.md) for the product requirements.*

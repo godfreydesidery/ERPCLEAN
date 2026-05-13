@@ -366,4 +366,58 @@ Everything tagged **MVP** above. In one sentence: a cashier can sell, a back-off
 
 ---
 
+## 14. Phase 1.1 — Supermarket scope additions
+
+Domain owner confirmed (date: 2026-05-13) that the target deployment is a multi-branch supermarket with in-house production (bakery, fresh juice, butchery, deli). This brings the following into MVP scope. Full design in [docs/design/PHASE-1.1-ADDITIONS.md](docs/design/PHASE-1.1-ADDITIONS.md).
+
+### 14.1 Sections within branch
+A branch is divided into **sections** — physical / operational departments such as Retail Floor, Bakery, Butchery, Deli, Fresh, Dairy, Dry Goods, Household, Electronics. Every till belongs to a section. Every BOM and production batch belongs to a section. Every POS sale is stamped with its till's section. Section-level P&L becomes a primary report dimension.
+
+### 14.2 Weighed items + scale integration
+Items can be sold by weight (KG / G / L / ML). Scales print EAN-13 embedded-data barcodes (leading `2`, PLU bytes 2..7, weight bytes 8..12). POS clients decode and post a line with qty in the weighing unit.
+
+### 14.3 Production extension
+The MVP production module is re-introduced with: **sub-recipes** (a BOM consuming another BOM — bread dough → many breads), **wastage tracking** with category (burnt / expired / dropped / sampled / donated / other), **pack-by-weight** outputs, **batch lifecycle** moving output through HOT_DISPLAY → COLD_DISPLAY → DISCOUNTED → DONATED / WRITE_OFF, and per-section BOM ownership.
+
+### 14.4 Expiry / batch tracking
+Items with `tracks_batches = true` carry a `stock_batch` row per receipt or production output, with manufactured / expiry dates. Consumption uses FEFO (first-expired-first-out). Expired stock is flagged for write-off.
+
+### 14.5 Layby + pre-orders
+Customers can reserve goods with a deposit and collect later. Two flavours under one aggregate: **layby** (instalments for in-stock items) and **pre-order** (production-tied, e.g. custom cake). Lives in a new `orders` module; not part of the `sales_invoice` flow.
+
+### 14.6 Gift cards
+Bearer stored-value vouchers, issued at POS for a load value, redeemed as a tender method, tracked in an append-only ledger separate from `cash_book` (gift card balance is a liability, not cash).
+
+### 14.7 Internal consumption + staff purchase + employee discount
+New stock move types: `INTERNAL_CONSUMPTION` (canteen, displays, samples, donations, maintenance), `STAFF_PURCHASE` (employee buys at staff price tier), `EMPLOYEE_GIFT`. Employees can be assigned `staff_price_list_id`; POS auto-applies staff prices when an employee badge is scanned.
+
+### 14.8 Refund at till
+Same-day refunds with receipt: cashier up to threshold, manager PIN above. Same-day without receipt: manager PIN always. Past business day: back-office customer-return flow only. Cash refund posts a `cash_entry` OUT on the till.
+
+### 14.9 Foreign currency at till
+Functional currency stays single per company. Foreign tender allowed at `pos_payment` step only. Backend stores both tender amount and back-converted functional amount, plus an FX rate snapshot. Each till declares accepted currencies; close-till variance is computed per currency.
+
+### 14.10 New modules introduced
+
+| Module | Owns |
+|---|---|
+| `admin` | branch, section, currency, fx_rate, till_currency, first-run wizard |
+| `production` | BOM, sub-recipes, batch lifecycle, wastage, conversion (re-added from Phase 1 deferral) |
+| `orders` | customer_order (layby + pre-order), order lines, order payments |
+| `giftcard` | gift_card, gift_card_txn |
+
+Module count: 10 → 14.
+
+### 14.11 New privileges
+
+`POS.REFUND`, `POS.REFUND_OVERRIDE_THRESHOLD`, `POS.FX_TENDER`, `GIFTCARD.ISSUE`, `GIFTCARD.REDEEM`, `GIFTCARD.FREEZE`, `ORDER.CREATE_LAYBY`, `ORDER.RESERVE_STOCK`, `ORDER.CANCEL_RESERVED`, `STOCK.INTERNAL_CONSUMPTION_AUTHORISE`, `PRODUCTION.RECORD_WASTAGE`, `PRODUCTION.MARK_LIFECYCLE_STATE`, `ADMIN.MANAGE_BRANCHES`, `ADMIN.MANAGE_SECTIONS`, `ADMIN.MANAGE_CURRENCIES`, `ADMIN.MANAGE_FX`.
+
+### 14.12 Resolved open questions from §13
+
+- §13.7 Returns at POS — yes, with the policy in §14.8.
+- §13.9 In-app card — no for MVP; tokenised via certified terminals stays the default.
+- §13.6 Pricing tiers — three (retail / wholesale / agent) confirmed; plus an optional `staff` tier for §14.7.
+
+---
+
 *End of PRD. See [ARCHITECTURE.md](ARCHITECTURE.md) for the technical design.*

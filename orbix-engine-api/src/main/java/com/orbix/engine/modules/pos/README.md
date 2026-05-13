@@ -145,3 +145,70 @@ PRD §13 and DATA-MODEL.md §16 POS-affecting items pending domain-owner confirm
 **Outbox events in same transaction.** Per ARCHITECTURE.md §2.10, `events.publish()` inserts into `domain_event` in the same DB transaction as the business write. Consumers — `stock` for on-hand decrement, `cash` for drawer-to-cash-book transfer on close, `debt` for store-credit and voucher tender allocation — are idempotent and key off the source aggregate (`pos_sale_id`, `cash_pickup_id`, `petty_cash_id`, `till_session_id`).
 
 **Sync protocol.** The server accepts batched ops with monotonic client timestamps. Within a single `till_session`, ops must arrive in `sale_at` order; an out-of-order op on a session is rejected with a conflict response and the client is expected to re-order and replay. Across sessions, ops are independent. The push endpoint returns the list of acknowledged `clientOpId`s and any conflicts; server-authoritative state for the till (current session, item-price snapshot) flows back on the next pull. Conflict policy per ARCHITECTURE.md §2.9: sales never conflict (client-namespaced numbers), stock is server-authoritative, master-data edits resolve last-write-wins per field with audit.
+
+---
+
+## 11. Phase 1.1 additions
+
+See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md).
+
+### Section dimension (REQUIRED)
+
+- `till.section_id`, `pos_sale.section_id`, `pos_sale_line.section_id` all REQUIRED.
+- A till is assigned to one section. Every sale from that till is stamped with the till's section.
+- Sections must exist before tills can be created — `admin` module owns the master.
+
+### Refund at till
+
+- `pos_sale.kind` ∈ `SALE` / `REFUND` / `NO_SALE`.
+- `pos_sale.refunded_from_sale_id` — self-FK on refund-kind rows.
+- A refund row has negative-qty `pos_sale_line` rows and negative-amount `pos_payment` rows.
+- Policy (locked): same-day + receipt → cashier up to threshold (company-config, default UGX 50,000); above → manager PIN. Same-day no receipt → manager PIN always. Past business day → refuse; route to back-office `customer_return`.
+- Privileges: `POS.REFUND` (cashier), `POS.REFUND_OVERRIDE_THRESHOLD` (manager).
+- Cash refund posts a `cash_entry` OUT on TILL via the `cash` module consumer.
+
+### Foreign currency at till
+
+- `pos_payment` gains `tender_currency` (REQUIRED), `tender_amount` (DECIMAL — in tender currency), `fx_rate_snapshot` (DECIMAL(20,8)).
+- Existing `amount` column is re-interpreted as the **functional-currency-converted amount**.
+- A till declares accepted foreign currencies via `till_currency` (admin module).
+- POS validates: payment currency ∈ functional ∪ `till_currency` set; FX rate fetched from `fx_rate` (most recent ≤ `sale_at`).
+- Close-till variance computed **per currency**.
+- Privilege: `POS.FX_TENDER`.
+
+### Gift card tender
+
+- New `pos_payment.method` value: `GIFT_CARD`.
+- POS calls `giftcard` redeem endpoint with `gift_card.code`, the requested amount, and the `pos_sale.id`.
+- Redeem creates a `gift_card_txn` of kind `REDEEM`. No `cash_entry` is posted (gift card is liability, not cash).
+- Voiding a gift-card-tendered sale → `giftcard.GiftCardRefunded.v1` event credits the card back.
+
+### Weighed items / embedded barcodes
+
+- POS client decodes EAN-13 embedded-weight barcodes locally: leading digit `2`, PLU bytes 2..7, weight bytes 8..12, check byte 13.
+- Decoded line carries `qty` in the item's `weighing_unit` (KG / G / L / ML). Backend trusts client.
+- `pos_sale_line.qty` accepts DECIMAL(18,4); pricing is `unit_price × qty`.
+
+### FEFO batch consumption
+
+- For items with `tracks_batches = true`, POS must resolve a `stock_batch.id` per line at scan time.
+- Offline client picks the earliest-expiry ACTIVE batch from its local snapshot; backend validates on sync and may correct (issues a compensating move + flag) if a more recent batch landed at HQ.
+- `pos_sale_line.batch_id` populated for batch-tracked lines.
+
+### Staff price tier on employee badge
+
+- Cashier scans employee badge → POS resolves `employee.staff_price_list_id` and applies that price list to all items in the cart.
+- `pos_sale.is_staff_purchase = true` (or via a flag on the cashier_id metadata).
+- The resulting `stock_move` carries `move_type = STAFF_PURCHASE` for reporting.
+
+### Layby / pre-order collection
+
+- `orders` module emits `OrderCollected.v1` → POS consumes and creates a `pos_sale` from the collected order's lines; stock module flips the RESERVED move to a SALE move.
+- POS receipt references the order number (`ORD-BR1-...`).
+
+### New events emitted
+
+- `PosSaleRefunded.v1`, `PosRefundOverrideApplied.v1`
+- `PosFxTenderUsed.v1`
+- `PosGiftCardRedeemed.v1` (relay of `giftcard.GiftCardRedeemed.v1`)
+- `PosStaffPurchasePosted.v1`

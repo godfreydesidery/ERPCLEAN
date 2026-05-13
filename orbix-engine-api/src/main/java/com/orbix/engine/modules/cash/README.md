@@ -138,3 +138,49 @@ All amounts are `DECIMAL(18,4)` per DATA-MODEL §10. `cash_book` is rebuildable:
 - **Transactional outbox.** `CashEntryPosted.v1`, `SupplierPaymentRecorded.v1`, `SupplierPaymentAllocated.v1`, `CashBookBalanceUpdated.v1` are all written to the platform outbox in the **same transaction** as the entry / projection update.
 - **GL classification.** Each `cash_entry` carries a `gl_category` enum: `CASH`, `BANK`, `PETTY`, `VARIANCE`, `SUPPLIER_SETTLEMENT`, `RECEIPT`, `TILL_FLOAT`. The accounting-export integration consumes this; the rest of the system ignores it.
 - **`cash_book` maintenance strategy.** Updated synchronously in the same transaction as the underlying `cash_entry` (write-through). A nightly rebuild job verifies projection consistency against the ledger and emits a metric on drift.
+
+---
+
+## 11. Phase 1.1 additions
+
+See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md).
+
+### Multi-currency cash book
+
+- `cash_entry` gains `currency_code VARCHAR(3) FK → currency` and `fx_rate_snapshot DECIMAL(20,8)`.
+- `cash_book` composite PK changes from `(branch_id, account, business_date)` to **`(branch_id, account, currency_code, business_date)`** — one row per currency per location per day.
+- Functional-currency entries carry `fx_rate_snapshot = 1`.
+- Foreign-currency entries store `tender_amount` from the POS / payment source PLUS the back-converted functional amount in the existing `amount` column (so functional-currency reports keep working unchanged).
+- Close-till variance is computed per currency (`pos` aggregates declared vs system per currency; cash records each variance entry separately).
+
+### Refund-at-till cash side
+
+- POS `pos_sale` with `kind = REFUND` paid in cash → cash module consumes the event and writes a `cash_entry` OUT on TILL with negative net (i.e. `direction = OUT`, `amount > 0`).
+- `ref_type = PosRefund` (new value). `gl_category = CASH_REFUND` (new value).
+- Card / mobile-money / gift-card refunds don't hit cash module (gift card → giftcard module; card / MM → external processor, our books just net out).
+
+### Gift card liability is NOT in cash_book
+
+- `gift_card_txn` is the gift-card ledger, owned by `modules/giftcard/`. It does not flow into `cash_book` or `cash_entry`.
+- The cash side of gift card ISSUANCE (customer pays UGX 50,000 to load a card) IS a `cash_entry` IN on TILL — recorded normally — and the gift-card LOAD event posts to the gift-card ledger separately.
+- Document this clearly so accountants don't double-count.
+
+### Layby / pre-order payments
+
+- `orders` module emits `OrderInstallmentPaid.v1` / `OrderDepositPaid.v1` with `cash_entry_id` (already booked) attached.
+- No new logic in `cash` — payment is just a regular `cash_entry` with `ref_type = CustomerOrder` (new value).
+- On order cancel + refund, `cash` consumes `OrderCancelled.v1` with the refund instruction and posts an OUT on TILL or BANK depending on configured refund channel.
+
+### New ref_type values on cash_entry
+
+- `PosRefund`, `CustomerOrder`, `GiftCardIssue` (cash IN paired with gift-card LOAD).
+
+### New gl_category values
+
+- `CASH_REFUND`, `GIFT_CARD_ISSUE_PROCEEDS`, `FX_VARIANCE`, `ORDER_DEPOSIT`.
+
+### New events consumed
+
+- `pos.PosSaleRefunded.v1` (with `method = CASH`) → write OUT entry.
+- `orders.OrderDepositPaid.v1` / `OrderInstallmentPaid.v1` → already booked; idempotency only.
+- `orders.OrderCancelled.v1` (with refund) → write refund OUT entry.

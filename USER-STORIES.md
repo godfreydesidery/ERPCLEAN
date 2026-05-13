@@ -1136,4 +1136,134 @@ All AI features are advisory; humans confirm. See [ARCHITECTURE.md §12](ARCHITE
 
 ---
 
+# Phase 1.1 — Supermarket scope additions
+
+These stories accompany the Phase 1.1 scope additions (see [PRD.md §14](PRD.md), [docs/design/PHASE-1.1-ADDITIONS.md](docs/design/PHASE-1.1-ADDITIONS.md)).
+
+## Epic 17: Admin (branch / section / currency / FX) (`ADMIN`)
+
+### US-ADMIN-001 — Create a section within a branch
+**As an** HQ admin, **I want to** add a section (Bakery, Butchery, Deli, etc.) to a branch, **so that** tills and BOMs can be assigned to it and section-level P&L is captured. **P1.**
+
+### US-ADMIN-002 — Assign a section manager
+**As an** HQ admin, **I want to** name a manager for each section, **so that** approval flows route to them. **P1.**
+
+### US-ADMIN-003 — Enable a currency for the company
+**As an** HQ admin, **I want to** enable additional ISO currencies (USD, EUR alongside UGX), **so that** tills can accept foreign tender. **P1.**
+
+### US-ADMIN-004 — Quote an FX rate
+**As a** treasurer, **I want to** post today's UGX→USD rate, **so that** POS converts tender amounts correctly. **P1.**
+
+### US-ADMIN-005 — Deactivate a section
+**As an** HQ admin, **I want to** deactivate a section once no open tills / BOMs reference it, **so that** the org tree stays clean. **P2.**
+
+### US-ADMIN-006 — Configure accepted currencies per till
+**As a** branch manager, **I want to** declare which foreign currencies a till accepts, **so that** cashiers can't tender an unsupported currency. **P2.**
+
+### US-ADMIN-007 — Bulk-import sections from CSV
+**As a** chain admin, **I want to** roll out sections to many new branches at once. **P3.**
+
+## Epic 18: Orders — Layby & Pre-Order (`ORD`)
+
+### US-ORD-001 — Create a layby
+**As a** cashier or back-office user, **I want to** create a layby for a customer with a deposit and reservation period, **so that** the customer can pay in instalments. **P1.**
+
+### US-ORD-002 — Pay an instalment toward a layby
+**As a** cashier, **I want to** record additional payments against an open layby, **so that** the balance reduces. **P1.**
+
+### US-ORD-003 — Collect a fully-paid layby
+**As a** cashier, **I want to** scan a paid-up layby at the till and hand over the goods, **so that** ownership transfers and the reservation flips to a sale. **P1.**
+
+### US-ORD-004 — Create a pre-order (production-tied)
+**As a** cashier, **I want to** take a pre-order for a custom cake or platter, **so that** the bakery / juice section is scheduled to produce it. **P1.**
+
+### US-ORD-005 — Cancel an order with deposit-refund policy applied
+**As a** cashier with manager approval, **I want to** cancel an order and release the reservation, refunding per policy. **P1.**
+
+### US-ORD-006 — Auto-expire abandoned orders
+**As a** system job, **I want to** find orders past their `reserved_until` and mark them `EXPIRED`. **P1.**
+
+### US-ORD-007 — List a customer's open orders
+**As a** cashier, **I want to** see all open layby / pre-orders for a customer at scan time. **P2.**
+
+### US-ORD-008 — Notify customer before expiry
+**As an** orders job, **I want to** SMS the customer before an order expires. **P2.**
+
+### US-ORD-009 — Print / share an order receipt
+**As a** cashier, **I want to** give the customer a printable / emailed / SMS confirmation. **P2.**
+
+## Epic 19: Gift Cards (`GC`)
+
+### US-GC-001 — Issue a gift card at POS
+**As a** cashier, **I want to** issue a new gift card for a stated value, **so that** the customer pays for it and walks away with a redeemable card. **P1.**
+
+### US-GC-002 — Look up gift card balance
+**As a** cashier, **I want to** scan a card and see the balance without redeeming. **P1.**
+
+### US-GC-003 — Redeem a gift card as POS tender
+**As a** cashier, **I want to** apply a gift card as a tender method during checkout. **P1.**
+
+### US-GC-004 — Refund a gift-card-tendered sale
+**As a** cashier, **I want to** credit the gift card back when a sale paid (partly) by gift card is refunded. **P2.**
+
+### US-GC-005 — Freeze a lost / stolen gift card
+**As a** branch manager, **I want to** freeze a card so it cannot be redeemed. **P1.**
+
+### US-GC-006 — Unfreeze a gift card
+**As a** branch manager, **I want to** unfreeze a previously frozen card. **P2.**
+
+### US-GC-007 — Auto-expire gift cards
+**As a** scheduled job, **I want to** mark cards past `expires_at` as `EXPIRED` and post the breakage ledger entry. **P2.**
+
+### US-GC-008 — Gift card redemption rate report
+**As a** finance user, **I want to** see issued vs redeemed values to forecast liability. **P2.**
+
+## Stories appended to existing epics
+
+### Epic 4 (STOCK) — batch / expiry / internal-consumption
+
+- **US-STOCK-011** Capture batch number + expiry on a GRN line (P1)
+- **US-STOCK-012** FEFO consumption at POS / back-office for batch-tracked items (P1)
+- **US-STOCK-013** Expiring-soon report (P1)
+- **US-STOCK-014** Mark an entire batch as recalled (manager + reason) (P2)
+- **US-STOCK-015** Record internal consumption (canteen / display / samples / donation / maintenance) with authoriser + category + reason (P1)
+- **US-STOCK-016** Section-tagged stock transfer (between sections of the same branch) (P2)
+
+### Epic 3 (CAT) — weighed items + batches
+
+- **US-CAT-015** Flag an item as `is_weighed` with a weighing unit (P1)
+- **US-CAT-016** Parse embedded-weight EAN-13 at POS (P1)
+- **US-CAT-017** Flag an item as `tracks_batches` (P1)
+- **US-CAT-018** Bulk-edit weighed / batch-tracked flags (P2)
+
+### Epic 7 (POS) — refund / FX tender / gift card tender
+
+- **US-POS-019** Refund a same-day sale with receipt up to threshold (P1)
+- **US-POS-020** Manager-PIN refund above threshold / without receipt (P1)
+- **US-POS-021** Tender in a foreign currency at till (P1)
+- **US-POS-022** Tender via gift card (P1)
+- **US-POS-023** Apply staff price tier on employee badge scan (P2)
+- **US-POS-024** Section-stamping on every POS sale (P1)
+
+### Epic 10 (PROD) — production extensions
+
+- **US-PROD-009** Record wastage with category + reason (P1)
+- **US-PROD-010** Advance batch lifecycle through hot / cold / discounted / donated / write-off (P1)
+- **US-PROD-011** Pack-by-weight at output (P2)
+- **US-PROD-012** Sub-recipe references (parent BOM consuming child BOM) (P1)
+- **US-PROD-013** Section-owned BOMs (P1)
+
+### Epic 11 (DAY) — multi-currency close
+
+- **US-DAY-006** Compute close-till variance per currency (P1)
+
+### Epic 13 (RPT) — section + production reports
+
+- **US-RPT-011** Section P&L per branch per period (P1)
+- **US-RPT-012** Production yield + wastage by section (P1)
+- **US-RPT-013** Gift card outstanding-liability report (P1)
+- **US-RPT-014** Layby / pre-order ageing report (P2)
+
+---
+
 *End of User Stories. See [PRD.md](PRD.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DATA-MODEL.md](DATA-MODEL.md).*

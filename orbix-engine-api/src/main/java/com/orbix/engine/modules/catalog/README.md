@@ -182,3 +182,29 @@ Controllers never touch repositories. Repositories never return entities outside
 **Typeahead via Meilisearch, not the DB:** there is no `LIKE '%...%'` query in this module. The relational DB is for transactional truth; search is delegated. This is also what keeps the persistence layer DB-agnostic (no MySQL `FULLTEXT`, no Postgres `to_tsvector`).
 
 **Existing canonical implementation:** see `domain/Item.java` — the JPA mapping there (sequence generator, `@Version`, `Status` enum, multi-tenant `company_id`, `createdAt` / `updatedAt` / `createdBy` / `updatedBy` audit columns) is the template every other aggregate in the codebase should mirror.
+
+---
+
+## 11. Phase 1.1 additions
+
+See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md).
+
+**`item` gains:**
+- `is_weighed BOOLEAN` — sold by weight at the till
+- `weighing_unit VARCHAR(10)` — `KG` / `G` / `L` / `ML`, nullable
+- `tracks_batches BOOLEAN` — opts the item into `stock_batch` tracking with manufactured / expiry dates
+
+**`item_barcode` gains:**
+- `barcode_type VARCHAR(20)` — `UPC`, `EAN13`, `EAN8`, `PLU`, `EMBEDDED_WEIGHT`, `EMBEDDED_PRICE`. Embedded-weight EAN-13 has leading digit `2`, PLU bytes 2..7, weight bytes 8..12, check digit 13.
+
+**New invariants:**
+- `weighing_unit` non-null iff `is_weighed = true`.
+- Weighed items must have at least one barcode of type `EMBEDDED_WEIGHT` or `PLU`.
+- Items with `tracks_batches = true` cannot be archived while any `stock_batch.status = ACTIVE` references them.
+
+**New events:**
+- `ItemWeighingChanged.v1`, `ItemBatchTrackingEnabled.v1`, `ItemBatchTrackingDisabled.v1`.
+
+**New user stories:** US-CAT-015 (weighed flag), US-CAT-016 (EAN-13 embedded-weight parsing — POS-side), US-CAT-017 (batch-tracking flag), US-CAT-018 (bulk-edit weighed / batch flags).
+
+**Catalog is NOT the owner of:** `stock_batch` rows (those live in `stock`), `production_wastage` (lives in `production`), `currency` / `fx_rate` (lives in `admin`).

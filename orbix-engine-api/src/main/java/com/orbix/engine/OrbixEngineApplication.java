@@ -13,9 +13,18 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *                   auth          identity, login, JWT, security filter
  *                   common        cross-cutting infrastructure (audit
  *                                 aspect, transactional outbox, RequestContext)
- *                   business modules — minimum supermarket set:
- *                     party, catalog, stock, procurement, sales,
- *                     pos, cash, day
+ *                   admin         org, branch, section, currency, fx_rate masters
+ *                   party         customer / supplier / employee / agent
+ *                   catalog       item master, prices, promotions
+ *                   stock         ledger, balances, batches, transfers
+ *                   procurement   quotation → LPO → GRN → supplier payment
+ *                   sales         back-office quotation → invoice → receipt
+ *                   pos           till operations, sessions, refunds, FX tender
+ *                   cash          cash book, supplier payment, banking
+ *                   day           business-day open / close / override
+ *                   production    BOM, sub-recipes, batches, wastage
+ *                   orders        layby + pre-orders
+ *                   giftcard      gift card lifecycle + redemption ledger
  *                 every module follows the same shape:
  *                   domain.entity   JPA entities
  *                   domain.dto      request/response payloads

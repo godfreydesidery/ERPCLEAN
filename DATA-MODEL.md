@@ -1886,4 +1886,255 @@ These are choices that should be confirmed by domain owners before MVP cut. They
 
 ---
 
+# 17. Phase 1.1 — Scope additions
+
+The following entities and existing-entity changes are introduced in Phase 1.1 (supermarket operationalisation: sections, weighed items, batches/expiry, production extensions, layby/pre-orders, gift cards, internal consumption, refund-at-till, foreign-currency tender). See [docs/design/PHASE-1.1-ADDITIONS.md](docs/design/PHASE-1.1-ADDITIONS.md) for the locked decisions.
+
+## 17.1 `section` (admin module)
+
+Department within a branch (bakery, butchery, deli, retail floor, dairy, fresh, dry goods, household, electronics, other). Required dimension on `pos_sale`, `till`, `bom`, `production_batch`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `section_seq` |
+| `branch_id` | BIGINT FK → branch | |
+| `code` | VARCHAR(20) | UNIQUE `(branch_id, code)` |
+| `name` | VARCHAR(80) | |
+| `type` | VARCHAR(20) | `RETAIL_FLOOR`, `BAKERY`, `BUTCHERY`, `DELI`, `FRESH`, `DAIRY`, `DRY_GOODS`, `HOUSEHOLD`, `ELECTRONICS`, `OTHER` |
+| `manager_user_id` | BIGINT FK → app_user | nullable |
+| `status` | VARCHAR(32) | `ACTIVE`, `INACTIVE` |
+| audit cols + version | | |
+
+## 17.2 `currency` (admin module)
+
+ISO 4217 registry. PK is the 3-letter code; no surrogate id.
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | VARCHAR(3) PK | UGX, USD, EUR… |
+| `name` | VARCHAR(60) | |
+| `symbol` | VARCHAR(8) | UGX, $, € |
+| `minor_unit_digits` | INT | 0 for UGX/JPY, 2 for USD/EUR |
+| `status` | VARCHAR(32) | `ACTIVE`, `INACTIVE` |
+
+## 17.3 `fx_rate` (admin module)
+
+Daily snapshot. Most recent rate with `effective_at ≤ sale time` wins. Manual quote only at MVP; feed-based later.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `fx_rate_seq` |
+| `from_currency` | VARCHAR(3) FK → currency | |
+| `to_currency` | VARCHAR(3) FK → currency | |
+| `rate` | DECIMAL(20,8) | `qty_in_to = qty_in_from × rate` |
+| `effective_at` | TIMESTAMP | |
+| `created_by` | BIGINT | |
+| `created_at` | TIMESTAMP | |
+
+## 17.4 `till_currency` (admin module)
+
+Foreign currencies a till is allowed to accept. Composite PK.
+
+| Column | Type | Notes |
+|---|---|---|
+| `till_id` | BIGINT FK → till | composite PK |
+| `currency_code` | VARCHAR(3) FK → currency | composite PK |
+
+Functional currency for the company is implicitly accepted on every till (not stored here).
+
+## 17.5 `stock_batch` (stock module)
+
+Per-branch batch row carrying manufacture / expiry date. Created on GRN (when item is batch-tracked) or on `production_output`. Drains via FEFO consumption.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `stock_batch_seq` |
+| `item_id` | BIGINT FK | |
+| `branch_id` | BIGINT FK | |
+| `batch_no` | VARCHAR(40) | UNIQUE `(branch_id, item_id, batch_no)` |
+| `manufactured_at` | DATE | nullable |
+| `expiry_at` | DATE | nullable but typical |
+| `qty_received` | DECIMAL(18,4) | immutable |
+| `qty_on_hand` | DECIMAL(18,4) | drains on consume |
+| `cost` | DECIMAL(18,4) | unit cost at receipt |
+| `source_doc_type` | VARCHAR(40) | `GRN`, `PRODUCTION_OUTPUT`, `OPENING` |
+| `source_doc_id` | BIGINT | |
+| `status` | VARCHAR(32) | `ACTIVE`, `EXHAUSTED`, `EXPIRED`, `RECALLED` |
+| audit + version | | |
+
+## 17.6 `gift_card` (giftcard module)
+
+Bearer stored-value voucher. Liability ledger separate from `cash_book`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `gift_card_seq` |
+| `code` | VARCHAR(40) UNIQUE | bearer secret |
+| `initial_value` | DECIMAL(18,4) | |
+| `current_balance` | DECIMAL(18,4) | derived from `gift_card_txn` |
+| `status` | VARCHAR(32) | `ACTIVE`, `FULLY_REDEEMED`, `EXPIRED`, `FROZEN`, `REFUNDED` |
+| `issued_at` | TIMESTAMP | |
+| `expires_at` | TIMESTAMP | nullable |
+| `issued_by_branch_id` | BIGINT FK | |
+| `issued_by_user_id` | BIGINT FK | |
+| `company_id` | BIGINT FK | |
+| audit + version | | |
+
+## 17.7 `gift_card_txn` (giftcard module)
+
+Append-only ledger of gift card balance changes.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `gift_card_txn_seq` |
+| `gift_card_id` | BIGINT FK | |
+| `kind` | VARCHAR(20) | `LOAD`, `REDEEM`, `REFUND`, `EXPIRE` |
+| `amount` | DECIMAL(18,4) | always positive |
+| `balance_after` | DECIMAL(18,4) | post-tx snapshot |
+| `ref_doc_type` | VARCHAR(40) | `POS_SALE`, `ADMIN_ADJUSTMENT`, … |
+| `ref_doc_id` | BIGINT | |
+| `occurred_at` | TIMESTAMP | |
+| `by_user_id` | BIGINT FK | |
+
+## 17.8 `customer_order` (orders module)
+
+Layby + pre-order header. Distinct from `sales_invoice` — ownership doesn't transfer until `COLLECTED`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `customer_order_seq` |
+| `company_id` | BIGINT FK | |
+| `branch_id` | BIGINT FK | |
+| `section_id` | BIGINT FK | nullable; required for production-tied pre-orders |
+| `number` | VARCHAR(40) | per-branch sequence `ORD-BR1-000123` |
+| `customer_id` | BIGINT FK | |
+| `type` | VARCHAR(20) | `LAYBY`, `PRE_ORDER` |
+| `status` | VARCHAR(32) | `DRAFT`, `RESERVED`, `DEPOSIT_PAID`, `PARTIALLY_PAID`, `READY`, `COLLECTED`, `CANCELLED`, `EXPIRED` |
+| `reserved_until` | TIMESTAMP | nullable |
+| `deposit_required_amount` | DECIMAL(18,4) | |
+| `deposit_paid_amount` | DECIMAL(18,4) | |
+| `total_amount` | DECIMAL(18,4) | |
+| `balance_due` | DECIMAL(18,4) | |
+| `notes` | TEXT | |
+| audit + version | | |
+
+## 17.9 `customer_order_line` (orders module)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | |
+| `customer_order_id` | BIGINT FK | |
+| `item_id` | BIGINT FK | |
+| `qty` | DECIMAL(18,4) | |
+| `unit_price` | DECIMAL(18,4) | snapshot |
+| `discount_amount` | DECIMAL(18,4) | |
+| `line_total` | DECIMAL(18,4) | |
+
+## 17.10 `customer_order_payment` (orders module)
+
+Deposit / instalment receipts. Each row triggers a `cash_entry` in the `cash` module.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | |
+| `customer_order_id` | BIGINT FK | |
+| `amount` | DECIMAL(18,4) | |
+| `method` | VARCHAR(20) | `CASH`, `CARD`, `BANK_TRANSFER`, `MOBILE_MONEY`, `CHEQUE`, `GIFT_CARD` |
+| `ref_cash_entry_id` | BIGINT FK | |
+| `occurred_at` | TIMESTAMP | |
+
+## 17.11 `production_wastage` (production module)
+
+Category-tagged loss recorded against a batch. Wastage qty does NOT enter stock; it's logged for reporting and variance analysis.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGINT PK | `production_wastage_seq` |
+| `production_batch_id` | BIGINT FK | |
+| `item_id` | BIGINT FK | |
+| `qty` | DECIMAL(18,4) | |
+| `category` | VARCHAR(20) | `BURNT`, `EXPIRED`, `DROPPED`, `SAMPLED`, `DONATED`, `OTHER` |
+| `reason` | TEXT | non-empty |
+| `recorded_by` | BIGINT | |
+| `recorded_at` | TIMESTAMP | |
+
+## 17.12 Changes to existing tables
+
+### `item` (§3.2)
+- `+ is_weighed BOOLEAN NOT NULL DEFAULT FALSE`
+- `+ weighing_unit VARCHAR(10)` — `KG`, `G`, `L`, `ML`; null if not weighed
+- `+ tracks_batches BOOLEAN NOT NULL DEFAULT FALSE`
+
+### `item_barcode` (§3.3)
+- `+ barcode_type VARCHAR(20) NOT NULL` — `UPC`, `EAN13`, `EAN8`, `PLU`, `EMBEDDED_WEIGHT`, `EMBEDDED_PRICE`
+
+### `stock_move` (§4.1)
+- `+ batch_id BIGINT FK → stock_batch` nullable (set for batch-tracked items)
+- `+ section_id BIGINT FK → section` nullable (stamped on production / section-transfer)
+- `+ consumption_category VARCHAR(20)` nullable — `CANTEEN`, `DISPLAY`, `SAMPLES`, `DONATION`, `MAINTENANCE`, `OTHER` (required for `INTERNAL_CONSUMPTION` moves)
+- `+ authorised_by_user_id BIGINT FK` nullable (required for internal-consumption / oversell / above-threshold adjustment)
+- New `move_type` values: `INTERNAL_CONSUMPTION`, `STAFF_PURCHASE`, `EMPLOYEE_GIFT`, `RESERVED` (for layby reservation), `EXPIRY_WRITE_OFF`
+
+### `bom` (§9.1)
+- `+ parent_bom_id BIGINT FK → bom` nullable (sub-recipes)
+- `+ section_id BIGINT FK → section` required
+
+### `production_batch` (§9.3)
+- `+ section_id BIGINT FK → section` required
+- `+ lifecycle_state VARCHAR(32)` — `PLANNED`, `IN_PROGRESS`, `OUTPUT_HOT_DISPLAY`, `OUTPUT_COLD_DISPLAY`, `OUTPUT_DISCOUNTED`, `OUTPUT_DONATED`, `OUTPUT_WRITE_OFF`, `CLOSED`
+
+### `production_output` (§9.5)
+- `+ is_pack_by_weight BOOLEAN NOT NULL DEFAULT FALSE`
+- `+ batch_id BIGINT FK → stock_batch` — production output gets its own batch row
+
+### `grn_line` (§5.6)
+- `+ batch_no VARCHAR(40)` nullable
+- `+ expiry_at DATE` nullable
+
+### `pos_sale` (§7.3)
+- `+ section_id BIGINT FK → section` **REQUIRED**
+- `+ kind VARCHAR(20)` — `SALE`, `REFUND`, `NO_SALE`; default `SALE`
+- `+ refunded_from_sale_id BIGINT FK → pos_sale` self nullable
+
+### `pos_sale_line` (§7.4)
+- `+ section_id BIGINT FK → section` **REQUIRED**
+- `+ batch_id BIGINT FK → stock_batch` nullable (FEFO at scan for batch-tracked items)
+
+### `pos_payment` (§7.5)
+- `+ tender_currency VARCHAR(3) FK → currency` **REQUIRED**
+- `+ tender_amount DECIMAL(18,4)` — value in tender currency
+- `+ fx_rate_snapshot DECIMAL(20,8)`
+- Existing `amount` column re-interpreted as **functional-currency-converted amount**
+
+### `cash_book` (§10.3)
+- PK changes to `(branch_id, account, currency_code, business_date)`
+- `+ currency_code VARCHAR(3) FK → currency` (part of PK)
+
+### `cash_entry` (§10.2)
+- `+ currency_code VARCHAR(3) FK → currency`
+- `+ fx_rate_snapshot DECIMAL(20,8)`
+
+### `till` (§7.1)
+- `+ section_id BIGINT FK → section` **REQUIRED**
+
+### `employee` (§2.6)
+- `+ default_section_id BIGINT FK → section` nullable
+- `+ staff_price_list_id BIGINT FK → price_list` nullable
+
+## 17.13 Policy rules locked
+
+- **Refund-at-till.** Same-day + receipt scanned: cashier up to threshold (company-config, default UGX 50,000); above → manager PIN. Same-day, no receipt: manager PIN always. Past business day: back-office `customer_return` only.
+- **Foreign currency.** Functional currency single per company. Foreign tender allowed only at `pos_payment`. Backend stores tender + functional + fx-snapshot. Close-till variance per currency.
+- **Weighed items.** EAN-13 starting with `2` is embedded data: PLU bytes 2..7, weight bytes 8..12, check byte 13. POS client parses; backend trusts.
+- **Section dimension.** REQUIRED on `pos_sale`, `pos_sale_line`, `till`, `bom`, `production_batch`. OPTIONAL on `stock_move`. NOT on `sales_invoice` / `supplier_invoice`.
+- **Expiry / batch.** Item-level opt-in via `item.tracks_batches`. GRN captures `batch_no` + `expiry_at`. Consumption uses FEFO. Expired stock flagged by scheduled job.
+- **Internal consumption.** Requires `authorised_by_user_id`, `consumption_category`, and non-empty reason.
+
+## 17.14 New sequences
+
+Add to `db/migration/{mysql,postgres}/V1_3__phase11_sequences.sql`:
+`section_seq`, `fx_rate_seq`, `stock_batch_seq`, `gift_card_seq`, `gift_card_txn_seq`, `customer_order_seq`, `customer_order_line_seq`, `customer_order_payment_seq`, `production_batch_seq`, `production_consumption_seq`, `production_output_seq`, `production_wastage_seq`, `bom_seq`, `bom_line_seq`.
+
+---
+
 *End of Data Model. See [PRD.md](PRD.md) and [ARCHITECTURE.md](ARCHITECTURE.md).*

@@ -142,3 +142,44 @@ From `PRD.md §13` and `DATA-MODEL.md §16`, only the items that materially cons
 - **Idempotency.** `(source_doc_type, source_doc_id)` is unique across `stock_move` for sourced moves; the `clientOpId` UUID from sync push is mapped to this pair on entry. Duplicate deliveries from the event bus are absorbed silently.
 - **Outbox.** All published events (`StockMoved.v1`, `BalanceUpdated.v1`, `StockCountClosed.v1`, `TransferIssued.v1`, `TransferReceived.v1`, `LowStockTriggered.v1`, `NegativeStockBlocked.v1`) are written to `domain_event` in the same DB transaction as the business write, per `ARCHITECTURE.md §2.10`. No in-memory Spring events for cross-module signalling.
 - **Rebuild path.** A maintenance job can truncate `item_branch_balance` and replay `stock_move` in `(item_id, branch_id, at)` order to reconstruct the cache. This path is exercised by a nightly drift-check in non-production environments.
+
+---
+
+## 11. Phase 1.1 additions
+
+See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md).
+
+**New table:**
+- `stock_batch` — per-branch batch row carrying `batch_no`, `manufactured_at`, `expiry_at`, `qty_received`, `qty_on_hand`, `cost`, `source_doc_type` (`GRN` / `PRODUCTION_OUTPUT` / `OPENING`), `status` (`ACTIVE` / `EXHAUSTED` / `EXPIRED` / `RECALLED`). UNIQUE `(branch_id, item_id, batch_no)`.
+
+**`stock_move` gains:**
+- `batch_id BIGINT FK → stock_batch` nullable (populated for items with `tracks_batches = true`)
+- `section_id BIGINT FK → section` nullable (stamped on production / section-transfer)
+- `consumption_category VARCHAR(20)` nullable — `CANTEEN` / `DISPLAY` / `SAMPLES` / `DONATION` / `MAINTENANCE` / `OTHER` (required for `INTERNAL_CONSUMPTION`)
+- `authorised_by_user_id BIGINT FK` nullable
+- New `move_type` values: `INTERNAL_CONSUMPTION`, `STAFF_PURCHASE`, `EMPLOYEE_GIFT`, `RESERVED` (layby reservation), `EXPIRY_WRITE_OFF`
+- New `direction` value: `RESERVED` (sits alongside IN / OUT). Reserved stock is on hand but not available; `qty_reserved` tracked on `item_branch_balance`.
+
+**`item_branch_balance` gains:**
+- `qty_reserved DECIMAL(18,4)` — sum of open RESERVED moves
+- Effective availability is `qty_on_hand − qty_reserved`
+
+**FEFO consumption:**
+- For items with `tracks_batches = true`, outbound moves pick the batch with the earliest non-null `expiry_at` (FIFO among same-expiry).
+- Cost flows from the consumed batch, not the moving average.
+- POS / sales / production-consume must call `stock` to resolve the batch at consumption time; offline POS attaches its locally-resolved `batch_id` and the server validates.
+
+**Expired-stock workflow:**
+- Scheduled job marks `ACTIVE` batches with `expiry_at < now` and emits `BatchExpired.v1`.
+- Manual write-off via `stock_move` of type `EXPIRY_WRITE_OFF` (so accountants approve it).
+
+**Internal-consumption rules:**
+- Every `INTERNAL_CONSUMPTION` move requires `authorised_by_user_id` + `consumption_category` + non-empty `reason` (stored in existing `stock_move.notes`).
+- Privilege `STOCK.INTERNAL_CONSUMPTION_AUTHORISE`.
+
+**New events:**
+- `BatchCreated.v1`, `BatchExpired.v1`, `BatchRecalled.v1`, `BatchExhausted.v1`
+- `StockReserved.v1`, `StockReservationReleased.v1`
+- `InternalConsumptionPosted.v1`
+
+**New stories:** US-STOCK-011 .. US-STOCK-016 (see USER-STORIES.md Phase 1.1 section).
