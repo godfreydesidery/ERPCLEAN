@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
-  const token = auth.accessToken;
+  const token = auth.accessToken();
   const branchId = localStorage.getItem('orbix.activeBranchId');
 
   const headers: Record<string, string> = {};

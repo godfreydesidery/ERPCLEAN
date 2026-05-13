@@ -39,6 +39,12 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
     private final PasswordEncoder passwords;
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean isBootstrapped() {
+        return organisations.count() > 0;
+    }
+
+    @Override
     @Transactional
     public FirstRunResponseDto bootstrap(FirstRunRequestDto request) {
         if (organisations.count() > 0) {

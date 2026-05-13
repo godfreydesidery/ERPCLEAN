@@ -15,6 +15,9 @@ public interface FirstRunSetupService {
 
     FirstRunResponseDto bootstrap(FirstRunRequestDto request);
 
+    /** Returns true if any organisation exists — the wizard should redirect to /login. */
+    boolean isBootstrapped();
+
     class AlreadyBootstrappedException extends RuntimeException {
         public AlreadyBootstrappedException(String message) { super(message); }
     }

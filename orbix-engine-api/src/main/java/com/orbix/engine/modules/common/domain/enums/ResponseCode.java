@@ -1,0 +1,36 @@
+package com.orbix.engine.modules.common.domain.enums;
+
+/**
+ * Business-level response codes carried in {@code ApiResponseDto.responseCode}.
+ * String constants rather than an enum so other modules can extend the set
+ * without touching this file.
+ *
+ * <p>Convention: {@code MODULE_ACTION_OUTCOME}, all-caps, underscore-separated.
+ */
+public final class ResponseCode {
+
+    private ResponseCode() {}
+
+    // ----- generic ---------------------------------------------------------
+    public static final String SUCCESS                  = "SUCCESS";
+    public static final String CREATED                  = "CREATED";
+    public static final String VALIDATION_FAILED        = "VALIDATION_FAILED";
+    public static final String NOT_FOUND                = "NOT_FOUND";
+    public static final String CONFLICT                 = "CONFLICT";
+    public static final String UNAUTHORIZED             = "UNAUTHORIZED";
+    public static final String FORBIDDEN                = "FORBIDDEN";
+    public static final String INTERNAL_ERROR           = "INTERNAL_ERROR";
+    public static final String BAD_REQUEST              = "BAD_REQUEST";
+
+    // ----- auth ------------------------------------------------------------
+    public static final String AUTH_LOGIN_OK            = "AUTH_LOGIN_OK";
+    public static final String AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS";
+
+    // ----- setup -----------------------------------------------------------
+    public static final String SETUP_FIRST_RUN_OK       = "SETUP_FIRST_RUN_OK";
+    public static final String SETUP_ALREADY_BOOTSTRAPPED = "SETUP_ALREADY_BOOTSTRAPPED";
+    public static final String SETUP_STATUS_OK          = "SETUP_STATUS_OK";
+
+    // ----- catalog ---------------------------------------------------------
+    public static final String CATALOG_ITEM_CREATED     = "CATALOG_ITEM_CREATED";
+}
