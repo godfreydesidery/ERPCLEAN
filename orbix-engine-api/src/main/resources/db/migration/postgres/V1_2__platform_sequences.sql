@@ -1,0 +1,9 @@
+-- Platform sequences for identity + tenancy aggregates.
+CREATE SEQUENCE organisation_seq   START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE company_seq        START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE branch_seq         START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE app_user_seq       START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE role_seq           START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE privilege_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE user_role_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE refresh_token_seq  START WITH 1 INCREMENT BY 50;
