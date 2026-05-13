@@ -1,9 +1,9 @@
 package com.orbix.engine.api;
 
-import com.orbix.engine.platform.security.AuthService;
-import com.orbix.engine.platform.security.AuthService.InvalidCredentialsException;
-import com.orbix.engine.platform.security.LoginRequest;
-import com.orbix.engine.platform.security.LoginResponse;
+import com.orbix.engine.modules.auth.domain.dto.LoginRequest;
+import com.orbix.engine.modules.auth.domain.dto.LoginResponse;
+import com.orbix.engine.modules.auth.service.AuthService;
+import com.orbix.engine.modules.auth.service.AuthService.InvalidCredentialsException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

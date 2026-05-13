@@ -1,5 +1,6 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.auth.repository;
 
+import com.orbix.engine.modules.auth.domain.entity.AppUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

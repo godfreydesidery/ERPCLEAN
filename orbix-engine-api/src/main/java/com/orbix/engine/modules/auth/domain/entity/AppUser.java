@@ -1,5 +1,6 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.auth.domain.entity;
 
+import com.orbix.engine.modules.auth.domain.enums.AppUserStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;

@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.auth.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

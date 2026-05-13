@@ -1,4 +1,4 @@
-package com.orbix.engine.platform.security;
+package com.orbix.engine.modules.auth.domain.dto;
 
 public record LoginResponse(
     String accessToken,
