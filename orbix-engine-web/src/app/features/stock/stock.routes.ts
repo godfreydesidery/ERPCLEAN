@@ -1,8 +1,13 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
+  { path: '', pathMatch: 'full', redirectTo: 'balances' },
   {
-    path: '',
-    loadComponent: () => import('./stock.component').then(m => m.StockComponent)
+    path: 'balances',
+    loadComponent: () => import('./balances.component').then(m => m.BalancesComponent)
+  },
+  {
+    path: 'card/:itemId',
+    loadComponent: () => import('./stock-card.component').then(m => m.StockCardComponent)
   }
 ];

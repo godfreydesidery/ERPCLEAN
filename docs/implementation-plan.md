@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `9e32eea` — F1.7 party module.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `5493a0f` — F2.1 business day.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -26,8 +26,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 **Done in Phase 2:**
 - F2.1 — business day open/close/override (`BusinessDay` OPEN→CLOSING→CLOSED state machine + monotonic-date / single-non-closed-day invariants; `business_day_override` audit table via `V9`; `DayGuard` synchronous port; `DAY.*` permissions via `V10`; `BusinessDayController`; web `/day` dashboard)
+- F2.2 — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance` cache via `V11`; moving-average cost on inbound, consume-at-average on outbound; negative-stock guard + `STOCK.OVERSELL` via `V12`; posting requires an open day via `DayGuard`; `StockMoved`/`BalanceUpdated`/`LowStockTriggered.v1`; web `/stock/balances` + `/stock/card/:itemId`)
 
-**Next slice (start here):** **F2.2** — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance`, moving-average cost, negative-stock guard). Phase-0 test debt still outstanding.
+**Next slice (start here):** **F2.3** — stock counts + transfers. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -430,27 +431,26 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.2 — Stock ledger + balances
 
-**Story:** US-STOCK-001, US-STOCK-002, US-STOCK-009, US-STOCK-010 · **Size:** L · **Status:** `[ ]`
+**Story:** US-STOCK-001, US-STOCK-002, US-STOCK-009, US-STOCK-010 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.3 (items), F1.1 (branches).
 
 **Backend:**
-- [ ] `StockMove`, `ItemBranchBalance` entities + repos.
-- [ ] `StockMoveService` + Impl. Append-only — DB CHECK constraint rejects UPDATE.
-- [ ] Moving-average cost on inbound; outbound consumes at current `avg_cost`.
-- [ ] Negative-stock guard with supervisor override (`STOCK.OVERSELL` permission).
-- [ ] Events: `StockMoved.v1`, `BalanceUpdated.v1`, `LowStockTriggered.v1`, `NegativeStockBlocked.v1`.
-- [ ] `GET /api/v1/stock-moves` (paged, filtered), `GET /api/v1/balances`.
+- [x] `StockMove` (append-only, immutable) + `ItemBranchBalance` (composite-PK cache) entities + repos. Migration `V11` + `V11_1` sequence. Append-only is enforced at the app layer (no update path) — a portable DB-level UPDATE-reject trigger was skipped.
+- [x] `StockMoveService.post` updates the balance in the same transaction; moving-average cost on inbound, consume-at-`avg_cost` on outbound. Posting requires the branch's open business day (`DayGuard`).
+- [x] Negative-stock guard with `STOCK.OVERSELL` override (`V12` seeds the permission). *(`NegativeStockBlocked.v1` not emitted — a blocking throw rolls back the outbox row; needs a separate-tx emit, deferred.)*
+- [x] Events: `StockMoved.v1`, `BalanceUpdated.v1`, `LowStockTriggered.v1`.
+- [x] `GET /api/v1/stock-moves` (paged, branch filter), `GET /api/v1/balances`, `GET /api/v1/stock-card`. No POST endpoint — moves are posted by the modules that own the causing document (and F2.5 adjustments).
 
 **Web:**
-- [ ] `/stock/balances` grid with filters.
-- [ ] `/stock/card/:itemId` movement ledger per item.
+- [x] `/stock/balances` grid (active branch, low-stock rows highlighted).
+- [x] `/stock/card/:itemId` movement ledger per item.
 
 **Tests:**
-- **Unit:** Moving-average math; oversell block; same-tx event emission.
-- **Integration:** Replay stock_move to rebuild balance — match.
-- **System:** `TC-STOCK-001` .. `TC-STOCK-004`, `TC-STOCK-012`, `TC-STOCK-013`; `TC-E2E-021`.
+- **Unit:** `StockMoveServiceImplTest` (8) — moving-average math, oversell block + override, open-day requirement, same-tx event emission.
+- **Integration:** Replay stock_move to rebuild balance — match. *(pending)*
+- **System:** `TC-STOCK-001` .. `TC-STOCK-004`, `TC-STOCK-012`, `TC-STOCK-013`; `TC-E2E-021`. *(pending)*
 
-**DoD:** Stock balance updates atomically with every move. Stock card per item is queryable.
+**DoD:** A posted move updates `item_branch_balance` atomically (moving-average maintained); the per-item stock card is queryable; oversell is blocked without `STOCK.OVERSELL`.
 
 ---
 
