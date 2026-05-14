@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `d25ce25` — F0.4b role admin UI + endpoints.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `d569be7` — F0.5 active-branch switching.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -14,7 +14,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
 - F0.5 — active-branch switching: `BranchAccessGuard` + `JwtAuthenticationFilter` 403-on-denied-override; `SessionController` (`/session/branches`, `/session/active-branch`); web branch dropdown in the app shell
 
-**Next slice (start here):** **F1.1** — branch + section CRUD (admin module). Phase 0 feature work is complete; only the Phase-0 test debt remains.
+**Next slice (start here):** **F1.2** — currency + FX rate (admin module). F1.1 (branch + section CRUD) is done. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -214,25 +214,24 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.1 — Branch + section CRUD (admin module)
 
-**Story:** US-COMP-004, US-ADMIN-001, US-ADMIN-002 · **Size:** M · **Status:** `[ ]`
+**Story:** US-COMP-004, US-ADMIN-001, US-ADMIN-002 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [ ] `BranchService` + Impl + `BranchController` (`POST /api/v1/branches`, `PATCH`, `POST /{id}/deactivate`).
-- [ ] `SectionService` + Impl + `SectionController` (`POST /api/v1/branches/{id}/sections`, `PATCH`, `POST /{id}/deactivate`).
-- [ ] On branch create: auto-create default RETAIL_FLOOR section + per-branch number sequences (LPO, GRN, INV, RCT, TILL, ORD, GC) + walk-in customer (via `party` — deferred to F1.3).
-- [ ] Invariants: branch can't deactivate with open till; can't deactivate last RETAIL_FLOOR section; section can't deactivate with active tills / BOMs.
+- [x] `BranchService` + Impl + `BranchController` — list / get / `POST` / `PATCH` / `POST /{id}/deactivate`, gated by `ADMIN.MANAGE_BRANCHES`. Emits `BranchCreated/Updated/Deactivated.v1`.
+- [x] `SectionService` + Impl + `SectionController` — `GET|POST /api/v1/branches/{id}/sections`, `PATCH /sections/{id}`, `POST /sections/{id}/deactivate`, gated by `ADMIN.MANAGE_SECTIONS`. Emits `SectionCreated/Updated/Deactivated.v1`.
+- [x] On branch create: auto-create default `MAIN` RETAIL_FLOOR section. *(Per-branch number sequences deferred — `number_sequence` is a `common`-module concern, not yet built; walk-in customer deferred to F1.3 per plan.)*
+- [x] Invariants: can't deactivate the last active RETAIL_FLOOR section in a branch; can't deactivate an already-inactive branch/section. *(Open-till / active-BOM checks are TODO markers — those entities land in F5.1 / F7.3.)*
 
 **Web:**
-- [ ] `BranchListComponent`, `BranchEditComponent` under `/admin/branches`.
-- [ ] `SectionListComponent` under each branch.
+- [x] `BranchAdminComponent` under `/admin/branches` — branch list + create + edit + deactivate, and per-branch section list with create / edit / deactivate. (Single cohesive component, matching the `RoleAdminComponent` precedent rather than the 3-component split originally sketched.)
 
 **Tests:**
-- **Unit:** `BranchServiceImplTest`, `SectionServiceImplTest`.
-- **Integration:** Branch deactivate with open till → 422.
-- **System:** `TC-ADMIN-004` .. `TC-ADMIN-012`.
+- **Unit:** `BranchServiceImplTest` (6), `SectionServiceImplTest` (9) — done.
+- **Integration:** Branch deactivate with open till → 422. *(pending — needs the Till entity)*
+- **System:** `TC-ADMIN-004` .. `TC-ADMIN-012`. *(pending)*
 
-**DoD:** Admin creates a second branch, adds a Bakery section, sees both in the dropdown.
+**DoD:** Admin creates a second branch, adds a Bakery section, sees both in the dropdown. *(Branch dropdown wired in F0.5; the new branch appears once the user has a grant covering it.)*
 
 ---
 

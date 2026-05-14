@@ -8,5 +8,9 @@ export const routes: Routes = [
   {
     path: 'roles',
     loadComponent: () => import('./roles/role-admin.component').then(m => m.RoleAdminComponent)
+  },
+  {
+    path: 'branches',
+    loadComponent: () => import('./branches/branch-admin.component').then(m => m.BranchAdminComponent)
   }
 ];

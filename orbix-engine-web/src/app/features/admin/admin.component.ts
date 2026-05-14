@@ -17,6 +17,14 @@ import { HasPermissionDirective } from '../../core/auth/has-permission.directive
           </div>
         </a>
       </div>
+      <div class="col-12 col-md-4" *orbixHasPermission="'ADMIN.MANAGE_BRANCHES'">
+        <a class="card shadow-sm text-decoration-none" routerLink="branches">
+          <div class="card-body">
+            <div class="h6 mb-1">Branches &amp; sections</div>
+            <small class="text-muted">Create branches, manage sections per branch.</small>
+          </div>
+        </a>
+      </div>
     </div>
   `
 })
