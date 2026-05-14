@@ -11,6 +11,7 @@ import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.party.service.CustomerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ class BranchServiceImplTest {
 
     @Mock private BranchRepository branches;
     @Mock private SectionRepository sections;
+    @Mock private CustomerService customerService;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 

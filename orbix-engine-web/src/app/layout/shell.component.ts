@@ -27,6 +27,7 @@ import { AccessibleBranch, BranchService } from '../core/branch/branch.service';
         <nav class="nav flex-column flex-grow-1">
           <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
           <a class="nav-link" routerLink="/catalog"     routerLinkActive="active">Catalog</a>
+          <a class="nav-link" routerLink="/party"       routerLinkActive="active">Parties</a>
           <a class="nav-link" routerLink="/sales"       routerLinkActive="active">Sales</a>
           <a class="nav-link" routerLink="/procurement" routerLinkActive="active">Procurement</a>
           <a class="nav-link" routerLink="/stock"       routerLinkActive="active">Stock</a>

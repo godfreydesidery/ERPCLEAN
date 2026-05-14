@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `38ed425` — F1.5 catalog price lists.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `dde9968` — F1.6 catalog weighed/batch flags.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -21,8 +21,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F1.4 — catalog: barcodes, UoM, VAT groups (`Uom`/`VatGroup`/`ItemBarcode` entities + services + controllers, web UoM/VAT screens + barcode panel)
 - F1.5 — catalog: price lists + price-change audit (`PriceList`/`PriceListItem`/`PriceChangeLog`, close+open price flow, `ItemPriceChanged.v1`, web price-list screen + per-item price history)
 - F1.6 — catalog: weighed-item + batch-tracking flags (`item.is_weighed`/`weighing_unit` + `item_barcode.barcode_type` via migration `V6`; weighed↔unit + weighed-needs-PLU/embedded-weight-barcode validation; `ItemWeighingChanged`/`ItemBatchTracking*` events; web toggles + barcode-type dropdown)
+- F1.7 — party: customer, supplier, employee, sales agent (`party` + `party_address` + `party_contact` + 4 role tables via `V7`; shared-party-by-TIN reuse; per-branch walk-in customer hook; `@Pii` field marker; web screens under `/party/*`)
 
-**Next slice (start here):** **F1.7** — party: customer, supplier, employee, sales agent (size L). Phase-0 test debt still outstanding.
+**Next slice (start here):** **F1.8** — party biometric enrolment (optional MVP; the plan defers it to Phase 8 unless biometric-cashier-login is a launch requirement — so Phase 2 / F2.1 business day is effectively next). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -363,26 +364,27 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.7 — Party: customer, supplier, employee, sales agent
 
-**Story:** US-PROC-001, US-SALES-001, US-SALES-002, US-HR-001, US-HR-002 · **Size:** L · **Status:** `[ ]`
+**Story:** US-PROC-001, US-SALES-001, US-SALES-002, US-HR-001, US-HR-002 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [ ] `Party`, `PartyAddress`, `PartyContact`, `Customer`, `Supplier`, `Employee`, `SalesAgent` entities.
-- [ ] Repos and services per role.
-- [ ] Shared-party logic: adding `customer` role to an existing party (by matching TIN) does NOT create a new party row.
-- [ ] Walk-in `customer` per branch created from F1.1 hook.
-- [ ] PII tagging — fields scrubbed from `audit_log` and outbound events.
+- [x] `Party`, `PartyAddress`, `PartyContact`, `Customer`, `Supplier`, `Employee`, `SalesAgent` entities (migration `V7` + `V7_1` sequences). Role tables share the party PK. `V8` seeds the 4 `PARTY.MANAGE_*` permissions.
+- [x] Repos + a service per role (`CustomerService` / `SupplierService` / `EmployeeService` / `SalesAgentService`) over a shared `PartyService`; controllers gated by `PARTY.MANAGE_*`.
+- [x] Shared-party logic: `PartyService.resolveOrCreate` reuses an existing company party with the same TIN rather than inserting a new row; a `GET /api/v1/parties/by-tin` lookup backs the web hint.
+- [x] Walk-in `customer` per branch — `BranchServiceImpl.createBranch` now calls `CustomerService.createWalkInCustomer` (idempotent).
+- [~] PII tagging — `@Pii` field marker added on party PII fields; the audit-log / event scrubbing that consumes it is **deferred** (touches shared `AuditAspect` / `EventPublisher` infra).
+- [ ] `PartyAddress` / `PartyContact` CRUD endpoints — entities + tables exist; per-address/contact endpoints **deferred** (core party carries inline phone/email/address).
 
 **Web:**
-- [ ] `/customers`, `/suppliers`, `/employees`, `/agents` list + edit screens.
-- [ ] On "create supplier" with an existing TIN: "Looks like a customer with this TIN exists — add supplier role to existing party?" modal.
+- [x] `/party/customers`, `/party/suppliers`, `/party/employees`, `/party/agents` list + create screens, sharing a `PartyDetailsFormComponent`.
+- [x] On create-customer / create-supplier with an existing TIN: an inline hint shows the matching party and that the role will attach to it (form-driven rather than a modal).
 
 **Tests:**
-- **Unit:** Each service's create / edit / deactivate; PII redaction.
-- **Integration:** Customer credit-limit + deactivate flow.
-- **System:** `TC-PARTY-001` .. `TC-PARTY-018`.
+- **Unit:** `PartyServiceImplTest` (6), `CustomerServiceImplTest` (6), `SupplierServiceImplTest` (4) — shared-party reuse, duplicate-role rejection, walk-in idempotency, company scoping.
+- **Integration:** Customer credit-limit + deactivate flow. *(pending)*
+- **System:** `TC-PARTY-001` .. `TC-PARTY-018`. *(pending)*
 
-**DoD:** Back-office user creates a B2B customer, a vendor, and an employee. Walk-in customer exists per branch.
+**DoD:** Back-office user creates a B2B customer, a vendor, and an employee; a second supplier created with an existing customer's TIN attaches to that party instead of duplicating it. Walk-in customer is provisioned with every new branch.
 
 ---
 

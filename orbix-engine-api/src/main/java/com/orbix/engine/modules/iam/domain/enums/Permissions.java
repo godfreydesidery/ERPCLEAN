@@ -28,4 +28,10 @@ public final class Permissions {
     public static final String ITEM_CREATE  = "ITEM.CREATE";
     public static final String ITEM_UPDATE  = "ITEM.UPDATE";
     public static final String ITEM_ARCHIVE = "ITEM.ARCHIVE";
+
+    // ---- party -------------------------------------------------------------
+    public static final String PARTY_MANAGE_CUSTOMERS = "PARTY.MANAGE_CUSTOMERS";
+    public static final String PARTY_MANAGE_SUPPLIERS = "PARTY.MANAGE_SUPPLIERS";
+    public static final String PARTY_MANAGE_EMPLOYEES = "PARTY.MANAGE_EMPLOYEES";
+    public static final String PARTY_MANAGE_AGENTS    = "PARTY.MANAGE_AGENTS";
 }

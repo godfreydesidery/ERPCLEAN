@@ -12,6 +12,7 @@ import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.party.service.CustomerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class BranchServiceImpl implements BranchService {
 
     private final BranchRepository branches;
     private final SectionRepository sections;
+    private final CustomerService customerService;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -66,6 +68,9 @@ public class BranchServiceImpl implements BranchService {
         // Every branch needs at least one RETAIL_FLOOR section to trade from.
         sections.save(new Section(branch.getId(), "MAIN", "Main Floor",
             SectionType.RETAIL_FLOOR, actorId));
+
+        // ...and a synthetic walk-in customer for POS (F1.7 hook).
+        customerService.createWalkInCustomer(branch.getId());
 
         events.publish("BranchCreated.v1", "Branch", String.valueOf(branch.getId()),
             Map.of("branchId", branch.getId(), "companyId", companyId, "code", code));
