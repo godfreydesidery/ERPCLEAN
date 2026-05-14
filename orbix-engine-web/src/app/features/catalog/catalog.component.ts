@@ -24,6 +24,22 @@ import { RouterLink } from '@angular/router';
           </div>
         </a>
       </div>
+      <div class="col-12 col-md-4">
+        <a class="card shadow-sm text-decoration-none" routerLink="uoms">
+          <div class="card-body">
+            <div class="h6 mb-1">Units of measure</div>
+            <small class="text-muted">Register units and their dimensions.</small>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-4">
+        <a class="card shadow-sm text-decoration-none" routerLink="vat-groups">
+          <div class="card-body">
+            <div class="h6 mb-1">VAT groups</div>
+            <small class="text-muted">Tax classifications and rates.</small>
+          </div>
+        </a>
+      </div>
     </div>
   `
 })

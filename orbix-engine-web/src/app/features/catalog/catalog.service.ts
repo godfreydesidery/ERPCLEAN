@@ -4,13 +4,21 @@ import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import {
+  CreateItemBarcodeRequest,
   CreateItemGroupRequest,
   CreateItemRequest,
+  CreateUomRequest,
+  CreateVatGroupRequest,
   Item,
+  ItemBarcode,
   ItemGroup,
   ItemStatus,
   Page,
-  UpdateItemRequest
+  UpdateItemRequest,
+  UpdateUomRequest,
+  UpdateVatGroupRequest,
+  Uom,
+  VatGroup
 } from './catalog.models';
 
 @Injectable({ providedIn: 'root' })
@@ -70,5 +78,53 @@ export class CatalogService {
 
   archiveGroup(id: number): Observable<void> {
     return this.http.post(`${this.base}/item-groups/${id}/archive`, {}).pipe(map(() => void 0));
+  }
+
+  // ---- units of measure -----------------------------------------------------
+
+  listUoms(): Observable<Uom[]> {
+    return unwrap(this.http.get<ApiResponse<Uom[]>>(`${this.base}/uoms`));
+  }
+
+  createUom(request: CreateUomRequest): Observable<Uom> {
+    return unwrap(this.http.post<ApiResponse<Uom>>(`${this.base}/uoms`, request));
+  }
+
+  updateUom(id: number, request: UpdateUomRequest): Observable<Uom> {
+    return unwrap(this.http.patch<ApiResponse<Uom>>(`${this.base}/uoms/${id}`, request));
+  }
+
+  // ---- VAT groups -----------------------------------------------------------
+
+  listVatGroups(): Observable<VatGroup[]> {
+    return unwrap(this.http.get<ApiResponse<VatGroup[]>>(`${this.base}/vat-groups`));
+  }
+
+  createVatGroup(request: CreateVatGroupRequest): Observable<VatGroup> {
+    return unwrap(this.http.post<ApiResponse<VatGroup>>(`${this.base}/vat-groups`, request));
+  }
+
+  updateVatGroup(id: number, request: UpdateVatGroupRequest): Observable<VatGroup> {
+    return unwrap(this.http.patch<ApiResponse<VatGroup>>(`${this.base}/vat-groups/${id}`, request));
+  }
+
+  archiveVatGroup(id: number): Observable<void> {
+    return this.http.post(`${this.base}/vat-groups/${id}/archive`, {}).pipe(map(() => void 0));
+  }
+
+  // ---- item barcodes --------------------------------------------------------
+
+  listBarcodes(itemId: number): Observable<ItemBarcode[]> {
+    return unwrap(this.http.get<ApiResponse<ItemBarcode[]>>(`${this.base}/items/${itemId}/barcodes`));
+  }
+
+  addBarcode(itemId: number, request: CreateItemBarcodeRequest): Observable<ItemBarcode> {
+    return unwrap(this.http.post<ApiResponse<ItemBarcode>>(
+      `${this.base}/items/${itemId}/barcodes`, request
+    ));
+  }
+
+  deleteBarcode(id: number): Observable<void> {
+    return this.http.delete(`${this.base}/barcodes/${id}`).pipe(map(() => void 0));
   }
 }

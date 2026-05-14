@@ -5,11 +5,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
 import { ITEM_TYPES, ItemGroup, ItemType } from '../catalog.models';
+import { BarcodesPanelComponent } from './barcodes-panel.component';
 
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, BarcodesPanelComponent],
   template: `
     <h2 class="h3 mb-4">{{ itemId() ? 'Edit item' : 'New item' }}</h2>
 
@@ -74,6 +75,12 @@ import { ITEM_TYPES, ItemGroup, ItemType } from '../catalog.models';
         <a class="btn btn-outline-secondary" routerLink="/catalog/items">Cancel</a>
       </div>
     </form>
+
+    @if (itemId(); as id) {
+      <div style="max-width: 720px">
+        <orbix-barcodes-panel [itemId]="id" />
+      </div>
+    }
   `
 })
 export class ItemEditComponent implements OnInit {

@@ -64,3 +64,69 @@ export interface CreateItemGroupRequest {
   code: string;
   name: string;
 }
+
+// ---- F1.4: UoM, VAT groups, barcodes ----------------------------------------
+
+export type UomDimension = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH';
+export const UOM_DIMENSIONS: UomDimension[] = ['COUNT', 'WEIGHT', 'VOLUME', 'LENGTH'];
+
+export interface Uom {
+  id: number;
+  code: string;
+  name: string;
+  dimension: UomDimension;
+  base: boolean;
+}
+
+export interface CreateUomRequest {
+  code: string;
+  name: string;
+  dimension: UomDimension;
+  base: boolean;
+}
+
+export interface UpdateUomRequest {
+  name: string;
+  dimension: UomDimension;
+  base: boolean;
+}
+
+export interface VatGroup {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  rate: number;
+  validFrom: string;
+  isDefault: boolean;
+  status: ItemStatus;
+}
+
+export interface CreateVatGroupRequest {
+  code: string;
+  name: string;
+  rate: number;
+  validFrom: string;
+  isDefault: boolean;
+}
+
+export interface UpdateVatGroupRequest {
+  name: string;
+  rate: number;
+  validFrom: string;
+  isDefault: boolean;
+}
+
+export interface ItemBarcode {
+  id: number;
+  itemId: number;
+  barcode: string;
+  packUomId: number | null;
+  packQty: number;
+}
+
+export interface CreateItemBarcodeRequest {
+  barcode: string;
+  packUomId: number | null;
+  packQty: number | null;
+}

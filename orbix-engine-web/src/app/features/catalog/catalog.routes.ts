@@ -20,5 +20,13 @@ export const routes: Routes = [
   {
     path: 'groups',
     loadComponent: () => import('./groups/item-group.component').then(m => m.ItemGroupComponent)
+  },
+  {
+    path: 'uoms',
+    loadComponent: () => import('./uoms/uom.component').then(m => m.UomComponent)
+  },
+  {
+    path: 'vat-groups',
+    loadComponent: () => import('./vat-groups/vat-group.component').then(m => m.VatGroupComponent)
   }
 ];

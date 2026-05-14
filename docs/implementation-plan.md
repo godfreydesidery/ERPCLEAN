@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `57d6a68` — F1.2 currency + FX rate.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `ce2f87b` — F1.3 catalog item + group CRUD.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -18,8 +18,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F1.1 — branch + section CRUD (admin module)
 - F1.2 — currency + FX rate (admin module)
 - F1.3 — catalog: item CRUD + groups (item list/get/patch/archive/activate, `ItemGroup` tree CRUD + move, web catalog screens)
+- F1.4 — catalog: barcodes, UoM, VAT groups (`Uom`/`VatGroup`/`ItemBarcode` entities + services + controllers, web UoM/VAT screens + barcode panel)
 
-**Next slice (start here):** **F1.4** — catalog: barcodes, UoM, VAT groups. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F1.5** — catalog: price lists + price-change audit. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -291,24 +292,26 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.4 — Catalog: barcodes, UoM, VAT groups
 
-**Story:** US-CAT-003, US-COMP-006, US-COMP-007 · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-003, US-COMP-006, US-COMP-007 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.3.
 
 **Backend:**
-- [ ] `ItemBarcode`, `Uom`, `UomConversion`, `VatGroup` entities + repos.
-- [ ] CRUD endpoints.
-- [ ] Barcode UNIQUE per company; weighed item requires EMBEDDED_WEIGHT / PLU barcode.
+- [x] `Uom`, `VatGroup`, `ItemBarcode` entities + repos. Migration `V4_3` adds `uom_seq` / `vat_group_seq` / `item_barcode_seq` (mysql + postgres).
+- [x] CRUD endpoints — `UomController` (`/api/v1/uoms`), `VatGroupController` (`/api/v1/vat-groups`, + archive), `ItemBarcodeController` (`/api/v1/items/{id}/barcodes`, `DELETE /barcodes/{id}`). Gated by the `ITEM.*` catalog permissions.
+- [x] Barcode globally unique (matches the `uk_item_barcode` DDL); VAT group enforces single company default; `BarcodeAdded.v1` emitted.
+- [ ] `UomConversion` — **deferred**: no `uom_conversion` table yet (needs its own migration) and no UI in F1.4 scope; revisit alongside pack-conversion work.
+- [ ] Weighed-item requires EMBEDDED_WEIGHT / PLU barcode — **deferred to F1.6**: `item.is_weighed` and `item_barcode.barcode_type` are Phase-1.1 columns not yet added.
 
 **Web:**
-- [ ] `BarcodesPanelComponent` inside the item edit screen (add / remove rows).
-- [ ] `/admin/uoms`, `/admin/vat-groups`.
+- [x] `BarcodesPanelComponent` embedded in the item edit screen (add / remove rows).
+- [x] `/catalog/uoms` and `/catalog/vat-groups` screens. *(Placed under `/catalog` rather than `/admin` — the backend is the catalog module; linked from the catalog landing page.)*
 
 **Tests:**
-- **Unit:** Barcode uniqueness; UoM conversion arithmetic.
-- **Integration:** Create item with 3 barcodes, scan each.
-- **System:** `TC-CAT-010` .. `TC-CAT-015`.
+- **Unit:** `UomServiceImplTest` (4), `VatGroupServiceImplTest` (7), `ItemBarcodeServiceImplTest` (5) — code uniqueness, single-default, barcode uniqueness, company scoping.
+- **Integration:** Create item with 3 barcodes, scan each. *(pending)*
+- **System:** `TC-CAT-010` .. `TC-CAT-015`. *(pending)*
 
-**DoD:** A weighed item has both an `EAN13` and `EMBEDDED_WEIGHT` barcode; conversions are bidirectional.
+**DoD:** UoM + VAT registries are editable; an item can have multiple barcodes added/removed. *(Weighed-item barcode rule lands with F1.6; UoM conversions deferred.)*
 
 ---
 
