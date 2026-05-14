@@ -3,7 +3,17 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
-import { ItemBranchBalance, Page, StockMove } from './stock.models';
+import {
+  CreateStockCountRequest,
+  CreateStockTransferRequest,
+  ItemBranchBalance,
+  Page,
+  ReceiveTransferRequest,
+  RecordCountsRequest,
+  StockCount,
+  StockMove,
+  StockTransfer
+} from './stock.models';
 
 @Injectable({ providedIn: 'root' })
 export class StockService {
@@ -22,6 +32,62 @@ export class StockService {
       .set('itemId', itemId).set('branchId', branchId).set('page', page).set('size', size);
     return unwrap(this.http.get<ApiResponse<Page<StockMove>>>(
       `${this.base}/stock-card`, { params }
+    ));
+  }
+
+  // ---- stock counts ---------------------------------------------------------
+
+  listCounts(): Observable<StockCount[]> {
+    return unwrap(this.http.get<ApiResponse<StockCount[]>>(`${this.base}/stock-counts`));
+  }
+
+  createCount(request: CreateStockCountRequest): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts`, request));
+  }
+
+  startCount(id: number): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/start`, {}));
+  }
+
+  recordCounts(id: number, request: RecordCountsRequest): Observable<StockCount> {
+    return unwrap(this.http.put<ApiResponse<StockCount>>(
+      `${this.base}/stock-counts/${id}/counts`, request
+    ));
+  }
+
+  closeCount(id: number): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/close`, {}));
+  }
+
+  postCount(id: number): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/post`, {}));
+  }
+
+  // ---- stock transfers ------------------------------------------------------
+
+  listTransfers(): Observable<StockTransfer[]> {
+    return unwrap(this.http.get<ApiResponse<StockTransfer[]>>(`${this.base}/stock-transfers`));
+  }
+
+  createTransfer(request: CreateStockTransferRequest): Observable<StockTransfer> {
+    return unwrap(this.http.post<ApiResponse<StockTransfer>>(`${this.base}/stock-transfers`, request));
+  }
+
+  issueTransfer(id: number): Observable<StockTransfer> {
+    return unwrap(this.http.post<ApiResponse<StockTransfer>>(
+      `${this.base}/stock-transfers/${id}/issue`, {}
+    ));
+  }
+
+  receiveTransfer(id: number, request: ReceiveTransferRequest): Observable<StockTransfer> {
+    return unwrap(this.http.put<ApiResponse<StockTransfer>>(
+      `${this.base}/stock-transfers/${id}/receive`, request
+    ));
+  }
+
+  closeTransfer(id: number): Observable<StockTransfer> {
+    return unwrap(this.http.post<ApiResponse<StockTransfer>>(
+      `${this.base}/stock-transfers/${id}/close`, {}
     ));
   }
 }

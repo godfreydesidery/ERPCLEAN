@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `5493a0f` — F2.1 business day.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `83fd024` — F2.3 backend (stock counts + transfers).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -27,8 +27,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 **Done in Phase 2:**
 - F2.1 — business day open/close/override (`BusinessDay` OPEN→CLOSING→CLOSED state machine + monotonic-date / single-non-closed-day invariants; `business_day_override` audit table via `V9`; `DayGuard` synchronous port; `DAY.*` permissions via `V10`; `BusinessDayController`; web `/day` dashboard)
 - F2.2 — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance` cache via `V11`; moving-average cost on inbound, consume-at-average on outbound; negative-stock guard + `STOCK.OVERSELL` via `V12`; posting requires an open day via `DayGuard`; `StockMoved`/`BalanceUpdated`/`LowStockTriggered.v1`; web `/stock/balances` + `/stock/card/:itemId`)
+- F2.3 — stock counts + transfers (`StockCount`/`StockCountLine` DRAFT→IN_PROGRESS→CLOSED→POSTED with variance→ADJUSTMENT moves; `StockTransfer`/`StockTransferLine` DRAFT→ISSUED→RECEIVED→CLOSED with TRANSFER_OUT/IN moves; `V13`/`V14`; `STOCK.COUNT`/`STOCK.TRANSFER`; web `/stock/counts` + `/stock/transfers`)
 
-**Next slice (start here):** **F2.3** — stock counts + transfers. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F2.4** — batch tracking + FEFO consumption. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -456,22 +457,23 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.3 — Stock counts + transfers
 
-**Story:** US-STOCK-004 .. US-STOCK-008 · **Size:** M · **Status:** `[ ]`
+**Story:** US-STOCK-004 .. US-STOCK-008 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F2.2.
 
 **Backend:**
-- [ ] `StockCount`, `StockCountLine`, `StockTransfer`, `StockTransferLine`.
-- [ ] Count lifecycle: DRAFT → IN_PROGRESS → CLOSED → POSTED.
-- [ ] Transfer lifecycle: DRAFT → ISSUED (in-transit) → RECEIVED → CLOSED.
+- [x] `StockCount`, `StockCountLine`, `StockTransfer`, `StockTransferLine` entities + repos. Migration `V13` / `V13_1` sequences; `V14` seeds `STOCK.COUNT` + `STOCK.TRANSFER`.
+- [x] Count lifecycle DRAFT → IN_PROGRESS → CLOSED → POSTED — create freezes system qty from the balance; close computes per-line variance; post turns every non-zero variance into an `ADJUSTMENT` move (`allowOversell`, posted at the item's current avg cost). `StockCountController` gated by `STOCK.COUNT`.
+- [x] Transfer lifecycle DRAFT → ISSUED → RECEIVED → CLOSED — issue posts `TRANSFER_OUT` from the source branch (cost frozen from its avg cost), receive posts `TRANSFER_IN` into the destination at that cost. `StockTransferController` gated by `STOCK.TRANSFER`. *(`IN_TRANSIT` is in the enum but the flow goes ISSUED→RECEIVED directly; revisit if a separate in-transit confirmation step is wanted.)*
 
 **Web:**
-- [ ] `/stock/counts` and `/stock/transfers` flows.
+- [x] `/stock/counts` — list + create + lifecycle (start / record counts / close / post).
+- [x] `/stock/transfers` — list + create + lifecycle (issue / receive / close).
 
 **Tests:**
-- **Unit:** Variance posting on count close; transfer in-transit accounting.
-- **System:** `TC-STOCK-005` .. `TC-STOCK-011`; `TC-E2E-020`.
+- **Unit:** `StockCountServiceImplTest` (5), `StockTransferServiceImplTest` (5) — variance compute + post, dup-number rejection, issue freezes cost + posts TRANSFER_OUT, receive posts TRANSFER_IN, non-ISSUED receive rejected.
+- **System:** `TC-STOCK-005` .. `TC-STOCK-011`; `TC-E2E-020`. *(pending)*
 
-**DoD:** Storekeeper runs a cycle count; variances post as adjustment moves. Inter-branch transfer flows end-to-end.
+**DoD:** Storekeeper runs a cycle count; non-zero variances post as ADJUSTMENT moves. An inter-branch transfer flows DRAFT → ISSUED → RECEIVED → CLOSED with the matching stock moves.
 
 ---
 

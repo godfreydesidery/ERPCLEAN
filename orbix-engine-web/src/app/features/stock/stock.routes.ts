@@ -9,5 +9,13 @@ export const routes: Routes = [
   {
     path: 'card/:itemId',
     loadComponent: () => import('./stock-card.component').then(m => m.StockCardComponent)
+  },
+  {
+    path: 'counts',
+    loadComponent: () => import('./counts.component').then(m => m.CountsComponent)
+  },
+  {
+    path: 'transfers',
+    loadComponent: () => import('./transfers.component').then(m => m.TransfersComponent)
   }
 ];
