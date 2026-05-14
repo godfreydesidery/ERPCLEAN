@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `610c96d` — F1.1 branch + section CRUD.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `57d6a68` — F1.2 currency + FX rate.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -14,7 +14,12 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
 - F0.5 — active-branch switching: `BranchAccessGuard` + `JwtAuthenticationFilter` 403-on-denied-override; `SessionController` (`/session/branches`, `/session/active-branch`); web branch dropdown in the app shell
 
-**Next slice (start here):** **F1.3** — catalog: item CRUD + groups. F1.1 and F1.2 are done. Phase-0 test debt still outstanding.
+**Done in Phase 1:**
+- F1.1 — branch + section CRUD (admin module)
+- F1.2 — currency + FX rate (admin module)
+- F1.3 — catalog: item CRUD + groups (item list/get/patch/archive/activate, `ItemGroup` tree CRUD + move, web catalog screens)
+
+**Next slice (start here):** **F1.4** — catalog: barcodes, UoM, VAT groups. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -260,27 +265,27 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.3 — Catalog: item CRUD + groups
 
-**Story:** US-CAT-001, US-CAT-002, US-CAT-004 · **Size:** M · **Status:** `[~]` (Item entity exists; controller exists)
+**Story:** US-CAT-001, US-CAT-002, US-CAT-004 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
 - [x] `Item` entity + `ItemRepository` + `ItemServiceImpl.create()` + `ItemController` (POST).
-- [ ] Add: `GET /api/v1/items` (paged), `GET /{id}`, `PATCH /{id}`, `POST /{id}/archive`, `POST /{id}/activate`.
-- [ ] `ItemGroup` entity + tree-CRUD (`POST /api/v1/item-groups`, `POST /{id}/move`).
-- [ ] Soft-delete via `status = ARCHIVED`; archive blocked if active promotion (later) or active batches (later).
-- [ ] Meilisearch indexer that subscribes to `ItemCreated.v1` / `ItemUpdated.v1` / `BarcodeAdded.v1`.
+- [x] `GET /api/v1/items` (paged, optional `status` filter, `PageDto<T>` envelope), `GET /{id}`, `PATCH /{id}`, `POST /{id}/archive`, `POST /{id}/activate`. Emits `ItemUpdated/Archived/Activated.v1`.
+- [x] `ItemGroup` entity + repository + `ItemGroupService` tree-CRUD — `GET`, `POST /api/v1/item-groups`, `PATCH /{id}` (rename), `POST /{id}/move` (re-parents subtree, recomputes `level`, rejects cycles), `POST /{id}/archive`. Migration `V4_2` adds `item_group_seq` (mysql + postgres).
+- [x] Soft-delete via `status = ARCHIVED`; archive idempotency guarded. *(Active-promotion / active-batch blocks are TODO — those entities land in F1.5 / F2.4.)*
+- [ ] Meilisearch indexer that subscribes to `ItemCreated.v1` / `ItemUpdated.v1` / `BarcodeAdded.v1` — **deferred**: `platform.search` owns the indexer; catalog only emits the events (already does).
 
 **Web:**
-- [ ] `/catalog/items` list + filter + paged grid.
-- [ ] `/catalog/items/new` and `/catalog/items/:id/edit`.
-- [ ] `/catalog/groups` tree view + drag-to-reparent.
+- [x] `/catalog/items` list + status filter + paged grid (`ItemListComponent`).
+- [x] `/catalog/items/new` and `/catalog/items/:id/edit` (`ItemEditComponent`). *(UoM / VAT-group are raw id inputs pending F1.4 list endpoints.)*
+- [x] `/catalog/groups` tree view + move-under-parent (`ItemGroupComponent`). *(Move via parent dropdown rather than drag-and-drop.)*
 
 **Tests:**
-- **Unit:** `ItemServiceImplTest` covers create, edit, archive blocking rules.
-- **Integration:** Create item, search Meilisearch within 1s.
-- **System:** `TC-CAT-001` .. `TC-CAT-008`.
+- **Unit:** `ItemServiceImplTest` (10), `ItemGroupServiceImplTest` (8) — create / edit / archive / activate / list / move / cycle rejection.
+- **Integration:** Create item, search Meilisearch within 1s. *(pending — needs the search module)*
+- **System:** `TC-CAT-001` .. `TC-CAT-008`. *(pending)*
 
-**DoD:** Admin creates an item via the web form, sees it in the list, archives it, sees it disappear from default filters.
+**DoD:** Admin creates an item via the web form, sees it in the list, archives it, filters it back. Item-group tree is editable.
 
 ---
 

@@ -110,9 +110,33 @@ public class Item {
         this.updatedBy = actorId;
     }
 
+    /** Audited attribute edit. Code is immutable and not updatable here. */
+    @SuppressWarnings("java:S107")  // mirrors the constructor's field set; a VO would cost more than it saves
+    public void update(String name, String shortName, ItemType type, Long itemGroupId,
+                       Long uomId, Long vatGroupId, boolean tracked,
+                       java.math.BigDecimal minSellPrice, Long actorId) {
+        this.name = name;
+        this.shortName = shortName;
+        this.type = type;
+        this.itemGroupId = itemGroupId;
+        this.uomId = uomId;
+        this.vatGroupId = vatGroupId;
+        this.tracked = tracked;
+        this.minSellPrice = minSellPrice;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
     /** Audited archive — prefer this over {@code setStatus(ARCHIVED)}. */
     public void archive(Long actorId) {
         this.status = ItemStatus.ARCHIVED;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    /** Audited un-archive back to ACTIVE. */
+    public void activate(Long actorId) {
+        this.status = ItemStatus.ACTIVE;
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;
     }

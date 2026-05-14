@@ -8,22 +8,36 @@ import java.math.BigDecimal;
 
 public record ItemResponseDto(
     Long id,
+    Long companyId,
     String code,
     String name,
+    String shortName,
     ItemType type,
-    ItemStatus status,
+    Long itemGroupId,
+    Long uomId,
+    Long vatGroupId,
+    boolean tracked,
     BigDecimal avgCost,
-    BigDecimal lastCost
+    BigDecimal lastCost,
+    BigDecimal minSellPrice,
+    ItemStatus status
 ) {
     public static ItemResponseDto from(Item item) {
         return new ItemResponseDto(
             item.getId(),
+            item.getCompanyId(),
             item.getCode(),
             item.getName(),
+            item.getShortName(),
             item.getType(),
-            item.getStatus(),
+            item.getItemGroupId(),
+            item.getUomId(),
+            item.getVatGroupId(),
+            item.isTracked(),
             item.getAvgCost(),
-            item.getLastCost()
+            item.getLastCost(),
+            item.getMinSellPrice(),
+            item.getStatus()
         );
     }
 }
