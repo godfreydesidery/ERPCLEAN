@@ -39,4 +39,9 @@ public final class Permissions {
     public static final String DAY_OPEN     = "DAY.OPEN";
     public static final String DAY_CLOSE    = "DAY.CLOSE";
     public static final String DAY_OVERRIDE = "DAY.OVERRIDE";
+
+    // ---- stock -------------------------------------------------------------
+    public static final String STOCK_OVERSELL = "STOCK.OVERSELL";
+    public static final String STOCK_COUNT    = "STOCK.COUNT";
+    public static final String STOCK_TRANSFER = "STOCK.TRANSFER";
 }
