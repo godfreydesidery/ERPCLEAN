@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `b4b013a` — F0.4 backend + permission rename sweep.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `d25ce25` — F0.4b role admin UI + endpoints.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -12,11 +12,12 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F0.3 — logout + refresh tokens with theft detection (backend + web)
 - F0.4 backend — RBAC wired; ADMIN role + 10 permissions seeded; JWT now carries real `perms[]`
 - F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
+- F0.5 — active-branch switching: `BranchAccessGuard` + `JwtAuthenticationFilter` 403-on-denied-override; `SessionController` (`/session/branches`, `/session/active-branch`); web branch dropdown in the app shell
 
-**Next slice (start here):** **F0.5** — active-branch context switching in the shell (`BranchAccessGuard` + branch dropdown).
+**Next slice (start here):** **F1.1** — branch + section CRUD (admin module). Phase 0 feature work is complete; only the Phase-0 test debt remains.
 
 **Pending across all of Phase 0 (tests + docs):**
-- Unit + integration tests for F0.1 / F0.2 / F0.3 / F0.4 — none authored yet; the per-module + e2e test catalogue in [docs/qa/](qa/) describes what needs to land.
+- Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
 - POS (Flutter) login wiring — deferred until F5.1 (till session work).
 - "Logout everywhere" button — backend endpoint exists; UI button still missing.
 
@@ -187,21 +188,21 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.5 — Active branch context switching
 
-**Story:** US-COMP-005 · **Size:** S · **Status:** `[ ]`
+**Story:** US-COMP-005 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [x] `JwtAuthenticationFilter` already reads `X-Branch-Id` header to override JWT's `bid` (verify only).
-- [ ] `BranchAccessGuard` verifies the user has a `user_role` grant for that branch; returns 403 otherwise.
-- [ ] `PUT /api/v1/session/active-branch` persists preference on `app_user` (optional — purely UX).
+- [x] `JwtAuthenticationFilter` reads `X-Branch-Id` to override JWT's `bid`; when the override differs from the token branch it runs `BranchAccessGuard` and sends 403 if denied.
+- [x] `BranchAccessGuard` verifies the user holds an active `user_role` grant covering that branch (branch-specific or company-wide); throws `AccessDeniedException` otherwise.
+- [x] `SessionService` + `SessionController` — `GET /api/v1/session/branches` (branches the caller can switch into) and `PUT /api/v1/session/active-branch` (persists `default_branch_id` on `app_user`, access-guarded).
 
 **Web:**
-- [ ] Branch dropdown in the app shell. On change, persist to `sessionStorage` + add `X-Branch-Id` to all calls.
+- [x] Branch dropdown in the app shell (shown when the user has >1 accessible branch). On change it calls `PUT /session/active-branch`, persists to `localStorage` (`orbix.activeBranchId`, already read by `AuthInterceptor` as `X-Branch-Id`), then reloads. `AuthService` clears the key on login/logout.
 
 **Tests:**
-- **Unit:** `BranchAccessGuardTest`.
-- **Integration:** Switching branch then making a request — verify `RequestContext.branchId` matches.
-- **System:** `TC-ADMIN-018`, `TC-ADMIN-019`.
+- **Unit:** `BranchAccessGuardTest` — done (allow / deny / incomplete-context).
+- **Integration:** Switching branch then making a request — verify `RequestContext.branchId` matches. *(pending — Phase-0 test debt)*
+- **System:** `TC-ADMIN-018`, `TC-ADMIN-019`. *(pending)*
 
 **DoD:** A multi-branch user switches in the dropdown and reads / writes are scoped to the new branch.
 

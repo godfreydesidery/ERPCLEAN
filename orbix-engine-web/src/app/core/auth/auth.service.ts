@@ -24,6 +24,7 @@ export interface LoginResponse {
 const TOKEN_KEY = 'orbix.access';
 const REFRESH_KEY = 'orbix.refresh';
 const USER_KEY = 'orbix.user';
+const ACTIVE_BRANCH_KEY = 'orbix.activeBranchId';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -50,7 +51,11 @@ export class AuthService {
     return unwrap(this.http.post<ApiResponse<LoginResponse>>(
       `${environment.apiUrl}/auth/login`,
       { username, password }
-    )).pipe(tap(resp => this.storeSession(resp)));
+    )).pipe(tap(resp => {
+      // Fresh login — drop any active-branch left over from a prior session.
+      localStorage.removeItem(ACTIVE_BRANCH_KEY);
+      this.storeSession(resp);
+    }));
   }
 
   refresh(): Observable<LoginResponse> {
@@ -87,6 +92,7 @@ export class AuthService {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_KEY);
     sessionStorage.removeItem(USER_KEY);
+    localStorage.removeItem(ACTIVE_BRANCH_KEY);
     this._token.set(null);
     this._user.set(null);
   }
