@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `dde9968` — F1.6 catalog weighed/batch flags.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `9e32eea` — F1.7 party module.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -22,8 +22,12 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F1.5 — catalog: price lists + price-change audit (`PriceList`/`PriceListItem`/`PriceChangeLog`, close+open price flow, `ItemPriceChanged.v1`, web price-list screen + per-item price history)
 - F1.6 — catalog: weighed-item + batch-tracking flags (`item.is_weighed`/`weighing_unit` + `item_barcode.barcode_type` via migration `V6`; weighed↔unit + weighed-needs-PLU/embedded-weight-barcode validation; `ItemWeighingChanged`/`ItemBatchTracking*` events; web toggles + barcode-type dropdown)
 - F1.7 — party: customer, supplier, employee, sales agent (`party` + `party_address` + `party_contact` + 4 role tables via `V7`; shared-party-by-TIN reuse; per-branch walk-in customer hook; `@Pii` field marker; web screens under `/party/*`)
+- F1.8 — **deferred** to Phase 8 (biometric enrolment — not an MVP launch requirement)
 
-**Next slice (start here):** **F1.8** — party biometric enrolment (optional MVP; the plan defers it to Phase 8 unless biometric-cashier-login is a launch requirement — so Phase 2 / F2.1 business day is effectively next). Phase-0 test debt still outstanding.
+**Done in Phase 2:**
+- F2.1 — business day open/close/override (`BusinessDay` OPEN→CLOSING→CLOSED state machine + monotonic-date / single-non-closed-day invariants; `business_day_override` audit table via `V9`; `DayGuard` synchronous port; `DAY.*` permissions via `V10`; `BusinessDayController`; web `/day` dashboard)
+
+**Next slice (start here):** **F2.2** — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance`, moving-average cost, negative-stock guard). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -401,26 +405,26 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.1 — Business day open / close / override
 
-**Story:** US-DAY-001 .. US-DAY-005 · **Size:** M · **Status:** `[ ]`
+**Story:** US-DAY-001 .. US-DAY-005 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.1.
 
 **Backend:**
-- [ ] `BusinessDay`, `BusinessDayOverride` entities (tables in V1 baseline).
-- [ ] `BusinessDayService` + Impl. State machine OPEN → CLOSING → CLOSED.
-- [ ] `DayGuard` synchronous port consumed by every other module's posting service.
-- [ ] EOD pre-flight checks (delegated calls into pos / procurement / stock / production).
-- [ ] Scheduled job: auto-warn 30h, auto-revoke expired override.
-- [ ] Events: `BusinessDayOpened.v1`, `BusinessDayClosingStarted.v1`, `BusinessDayClosed.v1`, `BusinessDayOverrideOpened.v1`, `BusinessDayOverrideExpired.v1`.
+- [x] `BusinessDay` (composite PK, `@IdClass`) + `BusinessDayOverride` entities. `business_day` ships in V1; `V9` adds `business_day_override`, `V9_1` its sequence, `V10` seeds `DAY.*` permissions.
+- [x] `BusinessDayService` + Impl — OPEN → CLOSING → CLOSED state machine; invariants: at most one non-closed day per branch, monotonic business dates (no backdating an open). `BusinessDayController` gated by `DAY.OPEN` / `DAY.CLOSE`.
+- [x] `DayGuard` synchronous port — `requireOpenDay(branchId)` for other modules' posting services to consume.
+- [~] EOD pre-flight checks — `startClosing` is the hook; the delegated calls into pos / procurement / stock / production are **deferred** until those posting modules exist (TODO marker in place).
+- [ ] Scheduled job (auto-warn 30h, auto-revoke override) — **deferred**: the `business_day_override` schema is an audit record (no expiry/standing window), so the plan's `OverrideExpired` model doesn't match; revisit if a standing-override model is wanted.
+- [x] Events: `BusinessDayOpened.v1`, `BusinessDayClosingStarted.v1`, `BusinessDayClosed.v1`.
 
 **Web:**
-- [ ] `/day` dashboard: branch status, open day, end day, override dialog.
+- [x] `/day` dashboard: current-day status for the active branch, open-day form, start-closing + close-day actions (gated by `DAY.*`), recent-days table. *(Override dialog deferred — overrides are written when back-dating posts, which don't exist yet.)*
 
 **Tests:**
-- **Unit:** State transitions, monotonic-date, lockout on backdating.
-- **Integration:** Open day → fail EOD (open till) → close after till closes.
-- **System:** `TC-DAY-001` .. `TC-DAY-025`; cross-module `TC-E2E-017`, `TC-E2E-018`.
+- **Unit:** `BusinessDayServiceImplTest` (9) — open / start-closing / close transitions, single-non-closed-day + monotonic-date guards, company scoping.
+- **Integration:** Open day → fail EOD (open till) → close after till closes. *(pending — needs the till module)*
+- **System:** `TC-DAY-001` .. `TC-DAY-025`; cross-module `TC-E2E-017`, `TC-E2E-018`. *(pending)*
 
-**DoD:** Branch manager opens the day, runs through transactions, ends the day. Closed day rejects backdated postings unless an override is active.
+**DoD:** Branch manager opens the day on the `/day` dashboard and ends it (start-closing → close); a second open is rejected while one is non-closed; backdated opens are rejected.
 
 ---
 

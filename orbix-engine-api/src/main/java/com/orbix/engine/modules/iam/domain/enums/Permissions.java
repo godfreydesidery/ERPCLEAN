@@ -34,4 +34,9 @@ public final class Permissions {
     public static final String PARTY_MANAGE_SUPPLIERS = "PARTY.MANAGE_SUPPLIERS";
     public static final String PARTY_MANAGE_EMPLOYEES = "PARTY.MANAGE_EMPLOYEES";
     public static final String PARTY_MANAGE_AGENTS    = "PARTY.MANAGE_AGENTS";
+
+    // ---- day ---------------------------------------------------------------
+    public static final String DAY_OPEN     = "DAY.OPEN";
+    public static final String DAY_CLOSE    = "DAY.CLOSE";
+    public static final String DAY_OVERRIDE = "DAY.OVERRIDE";
 }
