@@ -28,5 +28,9 @@ export const routes: Routes = [
   {
     path: 'vat-groups',
     loadComponent: () => import('./vat-groups/vat-group.component').then(m => m.VatGroupComponent)
+  },
+  {
+    path: 'price-lists',
+    loadComponent: () => import('./price-lists/price-list.component').then(m => m.PriceListComponent)
   }
 ];

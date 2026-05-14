@@ -6,11 +6,12 @@ import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
 import { ITEM_TYPES, ItemGroup, ItemType } from '../catalog.models';
 import { BarcodesPanelComponent } from './barcodes-panel.component';
+import { PriceHistoryPanelComponent } from './price-history-panel.component';
 
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [FormsModule, RouterLink, BarcodesPanelComponent],
+  imports: [FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
   template: `
     <h2 class="h3 mb-4">{{ itemId() ? 'Edit item' : 'New item' }}</h2>
 
@@ -79,6 +80,7 @@ import { BarcodesPanelComponent } from './barcodes-panel.component';
     @if (itemId(); as id) {
       <div style="max-width: 720px">
         <orbix-barcodes-panel [itemId]="id" />
+        <orbix-price-history-panel [itemId]="id" />
       </div>
     }
   `

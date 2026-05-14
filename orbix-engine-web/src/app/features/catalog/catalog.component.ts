@@ -40,6 +40,14 @@ import { RouterLink } from '@angular/router';
           </div>
         </a>
       </div>
+      <div class="col-12 col-md-4">
+        <a class="card shadow-sm text-decoration-none" routerLink="price-lists">
+          <div class="card-body">
+            <div class="h6 mb-1">Price lists</div>
+            <small class="text-muted">Price books and price-change history.</small>
+          </div>
+        </a>
+      </div>
     </div>
   `
 })

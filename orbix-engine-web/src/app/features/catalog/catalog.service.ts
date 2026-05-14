@@ -7,6 +7,7 @@ import {
   CreateItemBarcodeRequest,
   CreateItemGroupRequest,
   CreateItemRequest,
+  CreatePriceListRequest,
   CreateUomRequest,
   CreateVatGroupRequest,
   Item,
@@ -14,7 +15,12 @@ import {
   ItemGroup,
   ItemStatus,
   Page,
+  PriceChangeLog,
+  PriceList,
+  PriceListItem,
+  SetPriceRequest,
   UpdateItemRequest,
+  UpdatePriceListRequest,
   UpdateUomRequest,
   UpdateVatGroupRequest,
   Uom,
@@ -126,5 +132,41 @@ export class CatalogService {
 
   deleteBarcode(id: number): Observable<void> {
     return this.http.delete(`${this.base}/barcodes/${id}`).pipe(map(() => void 0));
+  }
+
+  // ---- price lists ----------------------------------------------------------
+
+  listPriceLists(): Observable<PriceList[]> {
+    return unwrap(this.http.get<ApiResponse<PriceList[]>>(`${this.base}/price-lists`));
+  }
+
+  createPriceList(request: CreatePriceListRequest): Observable<PriceList> {
+    return unwrap(this.http.post<ApiResponse<PriceList>>(`${this.base}/price-lists`, request));
+  }
+
+  updatePriceList(id: number, request: UpdatePriceListRequest): Observable<PriceList> {
+    return unwrap(this.http.patch<ApiResponse<PriceList>>(`${this.base}/price-lists/${id}`, request));
+  }
+
+  archivePriceList(id: number): Observable<void> {
+    return this.http.post(`${this.base}/price-lists/${id}/archive`, {}).pipe(map(() => void 0));
+  }
+
+  listPrices(priceListId: number): Observable<PriceListItem[]> {
+    return unwrap(this.http.get<ApiResponse<PriceListItem[]>>(
+      `${this.base}/price-lists/${priceListId}/items`
+    ));
+  }
+
+  setPrice(priceListId: number, request: SetPriceRequest): Observable<PriceListItem> {
+    return unwrap(this.http.put<ApiResponse<PriceListItem>>(
+      `${this.base}/price-lists/${priceListId}/items`, request
+    ));
+  }
+
+  priceHistory(itemId: number): Observable<PriceChangeLog[]> {
+    return unwrap(this.http.get<ApiResponse<PriceChangeLog[]>>(
+      `${this.base}/items/${itemId}/price-changes`
+    ));
   }
 }

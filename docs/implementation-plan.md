@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `ce2f87b` — F1.3 catalog item + group CRUD.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `a7f8048` — F1.4 catalog barcodes/UoM/VAT.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -19,8 +19,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F1.2 — currency + FX rate (admin module)
 - F1.3 — catalog: item CRUD + groups (item list/get/patch/archive/activate, `ItemGroup` tree CRUD + move, web catalog screens)
 - F1.4 — catalog: barcodes, UoM, VAT groups (`Uom`/`VatGroup`/`ItemBarcode` entities + services + controllers, web UoM/VAT screens + barcode panel)
+- F1.5 — catalog: price lists + price-change audit (`PriceList`/`PriceListItem`/`PriceChangeLog`, close+open price flow, `ItemPriceChanged.v1`, web price-list screen + per-item price history)
 
-**Next slice (start here):** **F1.5** — catalog: price lists + price-change audit. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F1.6** — catalog: weighed-item + batch-tracking flags (`item.is_weighed` / `weighing_unit` / `tracks_batches` columns, V8-style migration). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -317,24 +318,24 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.5 — Catalog: price lists + price-change audit
 
-**Story:** US-CAT-007, US-CAT-008, US-CAT-014 · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-007, US-CAT-008, US-CAT-014 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.3, F1.4.
 
 **Backend:**
-- [ ] `PriceList`, `PriceListItem`, `PriceChangeLog` entities.
-- [ ] `PriceListService` + Impl. Setting a new price **closes** the prior `price_list_item` row (`valid_to = effective_from − 1`) and **appends** to `price_change_log`.
-- [ ] `ItemPriceChanged.v1` emitted.
+- [x] `PriceList`, `PriceListItem`, `PriceChangeLog` entities + repos. Migration `V5` creates the three tables; `V5_1` seeds their sequences (mysql + postgres).
+- [x] `PriceListService` + Impl + `PriceListController` (`/api/v1/price-lists` CRUD + archive, `GET|PUT /{id}/items`, `GET /items/{id}/price-changes`). `setPrice` **closes** the prior open `price_list_item` row (`valid_to = effective_from − 1`) and **appends** to `price_change_log`; rejects an effective date not after the current row's start. Single company-default invariant. Gated by `ITEM.*`.
+- [x] `ItemPriceChanged.v1` emitted on every price set.
 
 **Web:**
-- [ ] `/catalog/price-lists` with bulk-edit grid (CSV-style).
-- [ ] Price-change-log read-only view per item.
+- [x] `/catalog/price-lists` — price-list list + create/edit/archive, and a per-list current-price grid with a "set price" form (close+open). *(Form-driven rather than a CSV-style bulk grid.)*
+- [x] Price-change-log read-only view per item — `PriceHistoryPanelComponent` embedded in the item edit screen.
 
 **Tests:**
-- **Unit:** Close+open atomic; append-only price_change_log.
-- **Integration:** Multiple price changes — query log shows full history.
-- **System:** `TC-CAT-016` .. `TC-CAT-019`.
+- **Unit:** `PriceListServiceImplTest` (10) — close+open flow, null old-price on first set, effective-date guard, single-default, company scoping.
+- **Integration:** Multiple price changes — query log shows full history. *(pending)*
+- **System:** `TC-CAT-016` .. `TC-CAT-019`. *(pending)*
 
-**DoD:** Buyer changes RETAIL price for 10 items; reports show the old prices for sales made before the change.
+**DoD:** Buyer sets a price on a list; the prior row closes and the change is logged; per-item price history shows the trail.
 
 ---
 

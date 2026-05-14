@@ -130,3 +130,66 @@ export interface CreateItemBarcodeRequest {
   packUomId: number | null;
   packQty: number | null;
 }
+
+// ---- F1.5: price lists + price-change audit ---------------------------------
+
+export interface PriceList {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  currencyCode: string;
+  validFrom: string;
+  validTo: string | null;
+  isDefault: boolean;
+  taxInclusive: boolean;
+  status: ItemStatus;
+}
+
+export interface CreatePriceListRequest {
+  code: string;
+  name: string;
+  currencyCode: string;
+  validFrom: string;
+  validTo: string | null;
+  isDefault: boolean;
+  taxInclusive: boolean;
+}
+
+export interface UpdatePriceListRequest {
+  name: string;
+  currencyCode: string;
+  validFrom: string;
+  validTo: string | null;
+  isDefault: boolean;
+  taxInclusive: boolean;
+}
+
+export interface PriceListItem {
+  id: number;
+  priceListId: number;
+  itemId: number;
+  uomId: number;
+  price: number;
+  validFrom: string;
+  validTo: string | null;
+}
+
+export interface SetPriceRequest {
+  itemId: number;
+  uomId: number;
+  price: number;
+  effectiveFrom: string;
+  reason: string | null;
+}
+
+export interface PriceChangeLog {
+  id: number;
+  priceListItemId: number;
+  oldPrice: number | null;
+  newPrice: number;
+  effectiveFrom: string;
+  changedAt: string;
+  changedBy: number;
+  reason: string | null;
+}
