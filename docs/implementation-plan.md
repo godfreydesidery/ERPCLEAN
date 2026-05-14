@@ -4,7 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `83fd024` — F2.3 backend (stock counts + transfers).
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `ffaa34d` — F2.3 (stock counts + transfers).
+
+**▶ RESUME POINT:** next slice is **F2.4 — batch tracking + FEFO consumption** (`StockBatch` entity + FEFO picker; also unblocks the deferred F1.6 batch-archive guard). All work through F2.3 is committed; working tree clean. Read the F2.4 section below + DATA-MODEL §17.5 / catalog README before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
