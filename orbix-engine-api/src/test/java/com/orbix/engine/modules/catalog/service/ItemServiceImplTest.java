@@ -4,8 +4,12 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.ItemResponseDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateItemRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
+import com.orbix.engine.modules.catalog.domain.entity.ItemBarcode;
+import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
+import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.EventPublisher;
@@ -40,6 +44,7 @@ class ItemServiceImplTest {
     private static final Long ACTOR_ID = 5L;
 
     @Mock private ItemRepository repo;
+    @Mock private ItemBarcodeRepository barcodes;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -57,6 +62,12 @@ class ItemServiceImplTest {
         item.setId(id);
         item.setStatus(status);
         return item;
+    }
+
+    /** A plain (not weighed, not batch-tracked) edit payload. */
+    private static UpdateItemRequestDto plainUpdate(String name) {
+        return new UpdateItemRequestDto(name, "Sugar", ItemType.BOTH, 11L, 21L, 31L,
+            false, new BigDecimal("4500"), false, null, false);
     }
 
     @Test
@@ -125,14 +136,88 @@ class ItemServiceImplTest {
         Item existing = item(1L, ItemStatus.ACTIVE);
         when(repo.findById(1L)).thenReturn(Optional.of(existing));
 
-        ItemResponseDto result = service.updateItem(1L, new UpdateItemRequestDto(
-            "Sugar 2kg", "Sugar", ItemType.BOTH, 11L, 21L, 31L, false, new BigDecimal("4500")));
+        ItemResponseDto result = service.updateItem(1L, plainUpdate("Sugar 2kg"));
 
         assertThat(result.name()).isEqualTo("Sugar 2kg");
         assertThat(existing.getType()).isEqualTo(ItemType.BOTH);
         assertThat(existing.getItemGroupId()).isEqualTo(11L);
         assertThat(existing.isTracked()).isFalse();
         verify(events).publish(eq("ItemUpdated.v1"), any(), any(), any());
+    }
+
+    @Test
+    void updateItem_weighedWithoutUnit_isRejected() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Bananas", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, true, null, false);
+
+        assertThatThrownBy(() -> service.updateItem(1L, request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("weighingUnit");
+    }
+
+    @Test
+    void updateItem_weighedWithoutCapableBarcode_isRejected() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+        when(barcodes.findByItemId(1L)).thenReturn(List.of(
+            new ItemBarcode(1L, "5901234123457", BarcodeType.EAN13, null, BigDecimal.ONE)));
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Bananas", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, true, WeighingUnit.KG, false);
+
+        assertThatThrownBy(() -> service.updateItem(1L, request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("PLU or EMBEDDED_WEIGHT");
+    }
+
+    @Test
+    void updateItem_weighedWithPluBarcode_succeedsAndEmitsWeighingEvent() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+        when(barcodes.findByItemId(1L)).thenReturn(List.of(
+            new ItemBarcode(1L, "21234", BarcodeType.PLU, null, BigDecimal.ONE)));
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Bananas", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, true, WeighingUnit.KG, false);
+
+        ItemResponseDto result = service.updateItem(1L, request);
+
+        assertThat(result.weighed()).isTrue();
+        assertThat(result.weighingUnit()).isEqualTo(WeighingUnit.KG);
+        assertThat(existing.getWeighingUnit()).isEqualTo(WeighingUnit.KG);
+        verify(events).publish(eq("ItemWeighingChanged.v1"), any(), any(), any());
+    }
+
+    @Test
+    void updateItem_enablingBatchTracking_emitsEnabledEvent() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Milk", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, false, null, true);
+
+        ItemResponseDto result = service.updateItem(1L, request);
+
+        assertThat(result.batchTracked()).isTrue();
+        verify(events).publish(eq("ItemBatchTrackingEnabled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void updateItem_disablingBatchTracking_emitsDisabledEvent() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        existing.setBatchTracked(true);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Milk", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, false, null, false);
+
+        ItemResponseDto result = service.updateItem(1L, request);
+
+        assertThat(result.batchTracked()).isFalse();
+        verify(events).publish(eq("ItemBatchTrackingDisabled.v1"), any(), any(), any());
     }
 
     @Test

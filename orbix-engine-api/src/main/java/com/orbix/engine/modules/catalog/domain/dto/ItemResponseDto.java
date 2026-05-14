@@ -3,6 +3,7 @@ package com.orbix.engine.modules.catalog.domain.dto;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
 
 import java.math.BigDecimal;
 
@@ -17,6 +18,9 @@ public record ItemResponseDto(
     Long uomId,
     Long vatGroupId,
     boolean tracked,
+    boolean weighed,
+    WeighingUnit weighingUnit,
+    boolean batchTracked,
     BigDecimal avgCost,
     BigDecimal lastCost,
     BigDecimal minSellPrice,
@@ -34,6 +38,9 @@ public record ItemResponseDto(
             item.getUomId(),
             item.getVatGroupId(),
             item.isTracked(),
+            item.isWeighed(),
+            item.getWeighingUnit(),
+            item.isBatchTracked(),
             item.getAvgCost(),
             item.getLastCost(),
             item.getMinSellPrice(),

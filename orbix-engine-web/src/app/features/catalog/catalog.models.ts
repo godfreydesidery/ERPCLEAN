@@ -10,8 +10,10 @@ export interface Page<T> {
 
 export type ItemType = 'SELLABLE' | 'CONSUMABLE' | 'BOTH' | 'SERVICE';
 export type ItemStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type WeighingUnit = 'KG' | 'G' | 'L' | 'ML';
 
 export const ITEM_TYPES: ItemType[] = ['SELLABLE', 'CONSUMABLE', 'BOTH', 'SERVICE'];
+export const WEIGHING_UNITS: WeighingUnit[] = ['KG', 'G', 'L', 'ML'];
 
 export interface Item {
   id: number;
@@ -24,6 +26,9 @@ export interface Item {
   uomId: number;
   vatGroupId: number;
   tracked: boolean;
+  weighed: boolean;
+  weighingUnit: WeighingUnit | null;
+  batchTracked: boolean;
   avgCost: number;
   lastCost: number;
   minSellPrice: number | null;
@@ -48,6 +53,9 @@ export interface UpdateItemRequest {
   vatGroupId: number;
   tracked: boolean;
   minSellPrice: number | null;
+  weighed: boolean;
+  weighingUnit: WeighingUnit | null;
+  batchTracked: boolean;
 }
 
 export interface ItemGroup {
@@ -117,16 +125,22 @@ export interface UpdateVatGroupRequest {
   isDefault: boolean;
 }
 
+export type BarcodeType = 'UPC' | 'EAN13' | 'EAN8' | 'PLU' | 'EMBEDDED_WEIGHT' | 'EMBEDDED_PRICE';
+export const BARCODE_TYPES: BarcodeType[] =
+  ['UPC', 'EAN13', 'EAN8', 'PLU', 'EMBEDDED_WEIGHT', 'EMBEDDED_PRICE'];
+
 export interface ItemBarcode {
   id: number;
   itemId: number;
   barcode: string;
+  barcodeType: BarcodeType;
   packUomId: number | null;
   packQty: number;
 }
 
 export interface CreateItemBarcodeRequest {
   barcode: string;
+  barcodeType: BarcodeType;
   packUomId: number | null;
   packQty: number | null;
 }

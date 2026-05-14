@@ -46,8 +46,8 @@ public class ItemBarcodeServiceImpl implements ItemBarcodeService {
         if (barcodes.existsByBarcode(code)) {
             throw new IllegalArgumentException("Barcode already in use: " + code);
         }
-        ItemBarcode saved = barcodes.save(
-            new ItemBarcode(itemId, code, request.packUomId(), request.packQty()));
+        ItemBarcode saved = barcodes.save(new ItemBarcode(
+            itemId, code, request.barcodeType(), request.packUomId(), request.packQty()));
         events.publish("BarcodeAdded.v1", "Item", String.valueOf(itemId),
             Map.of("itemId", itemId, "barcodeId", saved.getId(), "barcode", code));
         return ItemBarcodeDto.from(saved);

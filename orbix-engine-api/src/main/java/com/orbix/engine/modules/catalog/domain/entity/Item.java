@@ -2,6 +2,7 @@ package com.orbix.engine.modules.catalog.domain.entity;
 
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -57,6 +58,16 @@ public class Item {
 
     @Column(name = "is_tracked", nullable = false)
     private boolean tracked = true;
+
+    @Column(name = "is_weighed", nullable = false)
+    private boolean weighed = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weighing_unit", length = 10)
+    private WeighingUnit weighingUnit;
+
+    @Column(name = "is_batch_tracked", nullable = false)
+    private boolean batchTracked = false;
 
     @Column(name = "avg_cost", precision = 18, scale = 4, nullable = false)
     private BigDecimal avgCost = BigDecimal.ZERO;
@@ -137,6 +148,23 @@ public class Item {
     /** Audited un-archive back to ACTIVE. */
     public void activate(Long actorId) {
         this.status = ItemStatus.ACTIVE;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Sets the weighed flag and its unit together. {@code unit} must be non-null
+     * iff {@code weighed} — the caller validates that invariant.
+     */
+    public void applyWeighing(boolean weighed, WeighingUnit unit, Long actorId) {
+        this.weighed = weighed;
+        this.weighingUnit = weighed ? unit : null;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    public void applyBatchTracking(boolean batchTracked, Long actorId) {
+        this.batchTracked = batchTracked;
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;
     }

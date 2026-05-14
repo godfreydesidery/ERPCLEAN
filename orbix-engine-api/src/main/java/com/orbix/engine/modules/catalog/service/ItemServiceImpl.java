@@ -4,7 +4,10 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateItemRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.ItemResponseDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateItemRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
+import com.orbix.engine.modules.catalog.domain.entity.ItemBarcode;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
+import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -17,12 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class ItemServiceImpl implements ItemService {
 
     private final ItemRepository repo;
+    private final ItemBarcodeRepository barcodes;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -75,12 +80,55 @@ public class ItemServiceImpl implements ItemService {
     @Auditable(action = "UPDATE", entityType = "Item")
     public ItemResponseDto updateItem(Long itemId, UpdateItemRequestDto request) {
         Item item = requireItem(itemId);
+        Long actorId = context.userId();
+
         item.update(request.name(), request.shortName(), request.type(), request.itemGroupId(),
             request.uomId(), request.vatGroupId(), request.tracked(), request.minSellPrice(),
-            context.userId());
+            actorId);
         events.publish("ItemUpdated.v1", "Item", String.valueOf(item.getId()),
             Map.of("itemId", item.getId()));
+
+        applyWeighing(item, request, actorId);
+        applyBatchTracking(item, request.batchTracked(), actorId);
+
         return ItemResponseDto.from(item);
+    }
+
+    /** Phase-1.1 weighed-item rules: unit ⟺ weighed, and weighed items need a PLU / embedded-weight barcode. */
+    private void applyWeighing(Item item, UpdateItemRequestDto request, Long actorId) {
+        WeighingUnit unit = request.weighingUnit();
+        boolean weighed = request.weighed();
+        if (weighed == (unit == null)) {
+            throw new IllegalArgumentException(
+                "weighingUnit must be set if and only if the item is weighed");
+        }
+        if (weighed && !hasWeighedCapableBarcode(item.getId())) {
+            throw new IllegalArgumentException(
+                "A weighed item needs at least one PLU or EMBEDDED_WEIGHT barcode");
+        }
+
+        boolean changed = item.isWeighed() != weighed || item.getWeighingUnit() != unit;
+        item.applyWeighing(weighed, unit, actorId);
+        if (changed) {
+            events.publish("ItemWeighingChanged.v1", "Item", String.valueOf(item.getId()),
+                Map.of("itemId", item.getId(), "weighed", weighed));
+        }
+    }
+
+    private void applyBatchTracking(Item item, boolean batchTracked, Long actorId) {
+        boolean was = item.isBatchTracked();
+        if (was == batchTracked) {
+            return;
+        }
+        item.applyBatchTracking(batchTracked, actorId);
+        String type = batchTracked ? "ItemBatchTrackingEnabled.v1" : "ItemBatchTrackingDisabled.v1";
+        events.publish(type, "Item", String.valueOf(item.getId()), Map.of("itemId", item.getId()));
+    }
+
+    private boolean hasWeighedCapableBarcode(Long itemId) {
+        return barcodes.findByItemId(itemId).stream()
+            .map(ItemBarcode::getBarcodeType)
+            .anyMatch(t -> t != null && t.isWeighedCapable());
     }
 
     @Override
@@ -91,6 +139,7 @@ public class ItemServiceImpl implements ItemService {
         if (item.getStatus() == ItemStatus.ARCHIVED) {
             throw new IllegalArgumentException("Item is already archived: " + itemId);
         }
+        // TODO (F2.4): a batch-tracked item cannot be archived while it has active stock_batch rows.
         item.archive(context.userId());
         events.publish("ItemArchived.v1", "Item", String.valueOf(item.getId()),
             Map.of("itemId", item.getId()));
@@ -112,7 +161,7 @@ public class ItemServiceImpl implements ItemService {
     private Item requireItem(Long itemId) {
         Item item = repo.findById(itemId)
             .orElseThrow(() -> new NoSuchElementException("Item not found: " + itemId));
-        if (!item.getCompanyId().equals(context.companyId())) {
+        if (!Objects.equals(item.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Item not found: " + itemId);
         }
         return item;

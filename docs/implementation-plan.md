@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `a7f8048` — F1.4 catalog barcodes/UoM/VAT.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `38ed425` — F1.5 catalog price lists.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -20,8 +20,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F1.3 — catalog: item CRUD + groups (item list/get/patch/archive/activate, `ItemGroup` tree CRUD + move, web catalog screens)
 - F1.4 — catalog: barcodes, UoM, VAT groups (`Uom`/`VatGroup`/`ItemBarcode` entities + services + controllers, web UoM/VAT screens + barcode panel)
 - F1.5 — catalog: price lists + price-change audit (`PriceList`/`PriceListItem`/`PriceChangeLog`, close+open price flow, `ItemPriceChanged.v1`, web price-list screen + per-item price history)
+- F1.6 — catalog: weighed-item + batch-tracking flags (`item.is_weighed`/`weighing_unit` + `item_barcode.barcode_type` via migration `V6`; weighed↔unit + weighed-needs-PLU/embedded-weight-barcode validation; `ItemWeighingChanged`/`ItemBatchTracking*` events; web toggles + barcode-type dropdown)
 
-**Next slice (start here):** **F1.6** — catalog: weighed-item + batch-tracking flags (`item.is_weighed` / `weighing_unit` / `tracks_batches` columns, V8-style migration). Phase-0 test debt still outstanding.
+**Next slice (start here):** **F1.7** — party: customer, supplier, employee, sales agent (size L). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -341,21 +342,22 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.6 — Catalog: weighed-item + batch-tracking flags
 
-**Story:** US-CAT-015, US-CAT-017 · **Size:** S · **Status:** `[ ]`
+**Story:** US-CAT-015, US-CAT-017 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F1.3.
 
 **Backend:**
-- [ ] Flyway adds `is_weighed`, `weighing_unit`, `tracks_batches` to `item` (V8 migration).
-- [ ] Validation: weighed item needs PLU / EMBEDDED_WEIGHT barcode; un-set `tracks_batches = false` blocked when active batches exist.
+- [x] Migration `V6` adds `item.is_weighed` + `item.weighing_unit` and `item_barcode.barcode_type`. *(`item.is_batch_tracked` already existed from the V2 baseline — it is now mapped on the entity as `batchTracked`; the plan's `tracks_batches` name resolves to that column.)*
+- [x] Validation in `ItemServiceImpl.updateItem`: `weighing_unit` set iff `weighed`; a weighed item needs ≥1 PLU / EMBEDDED_WEIGHT barcode. Emits `ItemWeighingChanged.v1`, `ItemBatchTrackingEnabled/Disabled.v1`.
+- [ ] Un-set `batch_tracked` / archive blocked when active batches exist — **deferred to F2.4** (`stock_batch` entity doesn't exist yet; TODO markers in place).
 
 **Web:**
-- [ ] Toggles on the item edit form.
+- [x] Weighed + batch-tracked toggles and a weighing-unit dropdown on the item edit form; barcode-type dropdown in the barcodes panel.
 
 **Tests:**
-- **Unit:** Validation rules.
-- **System:** `TC-CAT-025`, `TC-CAT-026`, `TC-CAT-027`.
+- **Unit:** `ItemServiceImplTest` extended (15) — weighed↔unit rule, weighed-needs-capable-barcode, weighing + batch-tracking events.
+- **System:** `TC-CAT-025`, `TC-CAT-026`, `TC-CAT-027`. *(pending)*
 
-**DoD:** "Bananas — KG" item has `is_weighed = true`, `weighing_unit = KG`, with a PLU barcode.
+**DoD:** A "Bananas — KG" item with a PLU barcode can be flagged `weighed = true`, `weighing_unit = KG`; flagging it weighed without such a barcode is rejected.
 
 ---
 

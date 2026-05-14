@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.catalog.domain.dto;
 
 import com.orbix.engine.modules.catalog.domain.entity.ItemBarcode;
+import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
 
 import java.math.BigDecimal;
 
@@ -8,6 +9,7 @@ public record ItemBarcodeDto(
     Long id,
     Long itemId,
     String barcode,
+    BarcodeType barcodeType,
     Long packUomId,
     BigDecimal packQty
 ) {
@@ -16,6 +18,7 @@ public record ItemBarcodeDto(
             barcode.getId(),
             barcode.getItemId(),
             barcode.getBarcode(),
+            barcode.getBarcodeType(),
             barcode.getPackUomId(),
             barcode.getPackQty()
         );

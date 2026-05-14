@@ -4,6 +4,7 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateItemBarcodeRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.ItemBarcodeDto;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.ItemBarcode;
+import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
@@ -66,10 +67,11 @@ class ItemBarcodeServiceImplTest {
         });
 
         ItemBarcodeDto result = service.addBarcode(1L,
-            new CreateItemBarcodeRequestDto("5901234123457", 2L, new BigDecimal("12")));
+            new CreateItemBarcodeRequestDto("5901234123457", BarcodeType.EAN13, 2L, new BigDecimal("12")));
 
         assertThat(result.id()).isEqualTo(10L);
         assertThat(result.barcode()).isEqualTo("5901234123457");
+        assertThat(result.barcodeType()).isEqualTo(BarcodeType.EAN13);
         verify(events).publish(eq("BarcodeAdded.v1"), any(), any(), any());
     }
 
@@ -79,7 +81,7 @@ class ItemBarcodeServiceImplTest {
         when(barcodes.existsByBarcode("DUP")).thenReturn(true);
 
         assertThatThrownBy(() -> service.addBarcode(1L,
-            new CreateItemBarcodeRequestDto("DUP", null, null)))
+            new CreateItemBarcodeRequestDto("DUP", BarcodeType.EAN13, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already in use");
         verify(barcodes, never()).save(any());
@@ -90,13 +92,13 @@ class ItemBarcodeServiceImplTest {
         when(items.findById(1L)).thenReturn(Optional.of(item(1L, 999L)));
 
         assertThatThrownBy(() -> service.addBarcode(1L,
-            new CreateItemBarcodeRequestDto("X", null, null)))
+            new CreateItemBarcodeRequestDto("X", BarcodeType.EAN13, null, null)))
             .isInstanceOf(NoSuchElementException.class);
     }
 
     @Test
     void deleteBarcode_removesWhenItemInCompany() {
-        ItemBarcode barcode = new ItemBarcode(1L, "X", null, BigDecimal.ONE);
+        ItemBarcode barcode = new ItemBarcode(1L, "X", BarcodeType.EAN13, null, BigDecimal.ONE);
         barcode.setId(10L);
         when(barcodes.findById(10L)).thenReturn(Optional.of(barcode));
         when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));

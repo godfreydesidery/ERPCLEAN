@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
-import { ITEM_TYPES, ItemGroup, ItemType } from '../catalog.models';
+import { ITEM_TYPES, ItemGroup, ItemType, WEIGHING_UNITS, WeighingUnit } from '../catalog.models';
 import { BarcodesPanelComponent } from './barcodes-panel.component';
 import { PriceHistoryPanelComponent } from './price-history-panel.component';
 
@@ -68,6 +68,35 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
             <label class="form-check-label" for="tracked">Stock-tracked</label>
           </div>
         </div>
+
+        <div class="col-12"><hr class="my-1"></div>
+        <div class="col-md-3 d-flex align-items-center">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="weighed" name="weighed"
+                   [(ngModel)]="form.weighed" (ngModelChange)="onWeighedChange()">
+            <label class="form-check-label" for="weighed">Weighed item</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Weighing unit</label>
+          <select class="form-select" name="wunit" [(ngModel)]="form.weighingUnit"
+                  [disabled]="!form.weighed" [required]="form.weighed">
+            <option [ngValue]="null">—</option>
+            @for (u of weighingUnits; track u) { <option [ngValue]="u">{{ u }}</option> }
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="batch" name="batch"
+                   [(ngModel)]="form.batchTracked">
+            <label class="form-check-label" for="batch">Batch-tracked</label>
+          </div>
+        </div>
+        <div class="col-12">
+          <small class="text-muted">
+            A weighed item needs at least one PLU or EMBEDDED_WEIGHT barcode (added below).
+          </small>
+        </div>
       }
       <div class="col-12 d-flex gap-2">
         <button class="btn btn-primary" [disabled]="saving() || f.invalid">
@@ -105,9 +134,13 @@ export class ItemEditComponent implements OnInit {
     vatGroupId: number | null;
     tracked: boolean;
     minSellPrice: number | null;
+    weighed: boolean;
+    weighingUnit: WeighingUnit | null;
+    batchTracked: boolean;
   } = {
     code: '', name: '', shortName: '', type: 'SELLABLE',
-    itemGroupId: null, uomId: null, vatGroupId: null, tracked: true, minSellPrice: null
+    itemGroupId: null, uomId: null, vatGroupId: null, tracked: true, minSellPrice: null,
+    weighed: false, weighingUnit: null, batchTracked: false
   };
 
   ngOnInit(): void {
@@ -131,11 +164,20 @@ export class ItemEditComponent implements OnInit {
             uomId: item.uomId,
             vatGroupId: item.vatGroupId,
             tracked: item.tracked,
-            minSellPrice: item.minSellPrice
+            minSellPrice: item.minSellPrice,
+            weighed: item.weighed,
+            weighingUnit: item.weighingUnit,
+            batchTracked: item.batchTracked
           };
         },
         error: err => this.showError(err)
       });
+    }
+  }
+
+  onWeighedChange(): void {
+    if (!this.form.weighed) {
+      this.form.weighingUnit = null;
     }
   }
 
@@ -157,7 +199,10 @@ export class ItemEditComponent implements OnInit {
         uomId: this.form.uomId!,
         vatGroupId: this.form.vatGroupId!,
         tracked: this.form.tracked,
-        minSellPrice: this.form.minSellPrice
+        minSellPrice: this.form.minSellPrice,
+        weighed: this.form.weighed,
+        weighingUnit: this.form.weighed ? this.form.weighingUnit : null,
+        batchTracked: this.form.batchTracked
       }).subscribe(done);
     } else {
       this.catalog.createItem({
@@ -181,6 +226,7 @@ export class ItemEditComponent implements OnInit {
   }
 
   readonly itemTypes = ITEM_TYPES;
+  readonly weighingUnits = WEIGHING_UNITS;
 }
 
 function emptyToNull(value: string): string | null {

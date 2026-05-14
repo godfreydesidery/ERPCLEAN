@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.catalog.domain.entity;
 
+import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -31,15 +32,21 @@ public class ItemBarcode {
     @Column(nullable = false, length = 40)
     private String barcode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "barcode_type", nullable = false, length = 20)
+    private BarcodeType barcodeType = BarcodeType.EAN13;
+
     @Column(name = "pack_uom_id")
     private Long packUomId;
 
     @Column(name = "pack_qty", nullable = false, precision = 18, scale = 4)
     private BigDecimal packQty = BigDecimal.ONE;
 
-    public ItemBarcode(Long itemId, String barcode, Long packUomId, BigDecimal packQty) {
+    public ItemBarcode(Long itemId, String barcode, BarcodeType barcodeType,
+                       Long packUomId, BigDecimal packQty) {
         this.itemId = itemId;
         this.barcode = barcode;
+        this.barcodeType = barcodeType != null ? barcodeType : BarcodeType.EAN13;
         this.packUomId = packUomId;
         this.packQty = packQty != null ? packQty : BigDecimal.ONE;
     }

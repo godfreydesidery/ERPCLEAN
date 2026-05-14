@@ -4,7 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
-import { ItemBarcode } from '../catalog.models';
+import { BARCODE_TYPES, BarcodeType, ItemBarcode } from '../catalog.models';
 
 @Component({
   selector: 'orbix-barcodes-panel',
@@ -17,14 +17,15 @@ import { ItemBarcode } from '../catalog.models';
       <div class="alert alert-danger py-2">{{ error() }}</div>
     }
 
-    <table class="table table-sm align-middle" style="max-width: 560px">
+    <table class="table table-sm align-middle" style="max-width: 640px">
       <thead>
-        <tr><th>Barcode</th><th>Pack UoM id</th><th class="text-end">Pack qty</th><th></th></tr>
+        <tr><th>Barcode</th><th>Type</th><th>Pack UoM id</th><th class="text-end">Pack qty</th><th></th></tr>
       </thead>
       <tbody>
         @for (barcode of barcodes(); track barcode.id) {
           <tr>
             <td>{{ barcode.barcode }}</td>
+            <td>{{ barcode.barcodeType }}</td>
             <td>{{ barcode.packUomId ?? '—' }}</td>
             <td class="text-end">{{ barcode.packQty }}</td>
             <td class="text-end">
@@ -33,17 +34,23 @@ import { ItemBarcode } from '../catalog.models';
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="4" class="text-muted">No barcodes.</td></tr>
+          <tr><td colspan="5" class="text-muted">No barcodes.</td></tr>
         }
       </tbody>
     </table>
 
-    <form (ngSubmit)="add()" #bf="ngForm" class="row g-2 align-items-end" style="max-width: 560px">
-      <div class="col-5">
+    <form (ngSubmit)="add()" #bf="ngForm" class="row g-2 align-items-end" style="max-width: 640px">
+      <div class="col-4">
         <label class="form-label">Barcode</label>
         <input class="form-control" name="bc" [(ngModel)]="form.barcode" required>
       </div>
       <div class="col-3">
+        <label class="form-label">Type</label>
+        <select class="form-select" name="bt" [(ngModel)]="form.barcodeType" required>
+          @for (t of barcodeTypes; track t) { <option [value]="t">{{ t }}</option> }
+        </select>
+      </div>
+      <div class="col-2">
         <label class="form-label">Pack UoM id</label>
         <input class="form-control" type="number" name="puom" [(ngModel)]="form.packUomId">
       </div>
@@ -51,7 +58,7 @@ import { ItemBarcode } from '../catalog.models';
         <label class="form-label">Pack qty</label>
         <input class="form-control" type="number" name="pqty" [(ngModel)]="form.packQty">
       </div>
-      <div class="col-2">
+      <div class="col-1">
         <button class="btn btn-primary w-100" [disabled]="busy() || bf.invalid">Add</button>
       </div>
     </form>
@@ -66,7 +73,8 @@ export class BarcodesPanelComponent implements OnInit {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
-  form: { barcode: string; packUomId: number | null; packQty: number | null } = blank();
+  readonly barcodeTypes = BARCODE_TYPES;
+  form: { barcode: string; barcodeType: BarcodeType; packUomId: number | null; packQty: number | null } = blank();
 
   ngOnInit(): void {
     this.load();
@@ -75,6 +83,7 @@ export class BarcodesPanelComponent implements OnInit {
   add(): void {
     this.run(this.catalog.addBarcode(this.itemId(), {
       barcode: this.form.barcode.trim(),
+      barcodeType: this.form.barcodeType,
       packUomId: this.form.packUomId,
       packQty: this.form.packQty
     }), () => {
@@ -113,6 +122,6 @@ export class BarcodesPanelComponent implements OnInit {
   }
 }
 
-function blank(): { barcode: string; packUomId: number | null; packQty: number | null } {
-  return { barcode: '', packUomId: null, packQty: null };
+function blank(): { barcode: string; barcodeType: BarcodeType; packUomId: number | null; packQty: number | null } {
+  return { barcode: '', barcodeType: 'EAN13', packUomId: null, packQty: null };
 }
