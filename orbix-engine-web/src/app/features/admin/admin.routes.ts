@@ -12,5 +12,13 @@ export const routes: Routes = [
   {
     path: 'branches',
     loadComponent: () => import('./branches/branch-admin.component').then(m => m.BranchAdminComponent)
+  },
+  {
+    path: 'currencies',
+    loadComponent: () => import('./currencies/currency-admin.component').then(m => m.CurrencyAdminComponent)
+  },
+  {
+    path: 'fx-rates',
+    loadComponent: () => import('./currencies/fx-rate-admin.component').then(m => m.FxRateAdminComponent)
   }
 ];

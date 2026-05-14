@@ -25,6 +25,22 @@ import { HasPermissionDirective } from '../../core/auth/has-permission.directive
           </div>
         </a>
       </div>
+      <div class="col-12 col-md-4" *orbixHasPermission="'ADMIN.MANAGE_CURRENCIES'">
+        <a class="card shadow-sm text-decoration-none" routerLink="currencies">
+          <div class="card-body">
+            <div class="h6 mb-1">Currencies</div>
+            <small class="text-muted">Register currencies, enable or disable them.</small>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-4" *orbixHasPermission="'ADMIN.MANAGE_FX'">
+        <a class="card shadow-sm text-decoration-none" routerLink="fx-rates">
+          <div class="card-body">
+            <div class="h6 mb-1">FX rates</div>
+            <small class="text-muted">Quote exchange rates and view rate history.</small>
+          </div>
+        </a>
+      </div>
     </div>
   `
 })

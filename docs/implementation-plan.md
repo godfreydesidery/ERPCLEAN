@@ -4,7 +4,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `d569be7` — F0.5 active-branch switching.
+**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `610c96d` — F1.1 branch + section CRUD.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -14,7 +14,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
 - F0.5 — active-branch switching: `BranchAccessGuard` + `JwtAuthenticationFilter` 403-on-denied-override; `SessionController` (`/session/branches`, `/session/active-branch`); web branch dropdown in the app shell
 
-**Next slice (start here):** **F1.2** — currency + FX rate (admin module). F1.1 (branch + section CRUD) is done. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F1.3** — catalog: item CRUD + groups. F1.1 and F1.2 are done. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -237,24 +237,24 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.2 — Currency + FX rate
 
-**Story:** US-ADMIN-003, US-ADMIN-004, US-ADMIN-006 · **Size:** S · **Status:** `[ ]`
+**Story:** US-ADMIN-003, US-ADMIN-004, US-ADMIN-006 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F1.1.
 
 **Backend:**
-- [ ] `Currency`, `FxRate`, `TillCurrency` entities + repos.
-- [ ] `CurrencyService` + Impl, `FxRateService` + Impl with "most recent ≤ time" lookup.
-- [ ] Controllers: `POST /api/v1/currencies`, `POST /api/v1/fx-rates`, `PUT /api/v1/tills/{id}/currencies`.
+- [x] `Currency`, `FxRate` entities + repos (pre-existing from V3). *(`TillCurrency` deferred to F5.1 — needs the Till entity.)*
+- [x] `CurrencyService` + Impl, `FxRateService` + Impl. FX `effectiveRate(from,to,at)` does the "most recent ≤ time" lookup; `quoteRate` is append-only and rejects same-currency / non-positive / unknown-currency quotes.
+- [x] Controllers: `CurrencyController` (`GET`, `POST`, `POST /{code}/enable|disable`, gated `ADMIN.MANAGE_CURRENCIES`); `FxRateController` (`GET`, `POST`, `GET /effective`, gated `ADMIN.MANAGE_FX`). *(`PUT /api/v1/tills/{id}/currencies` deferred to F5.1.)*
 
 **Web:**
-- [ ] `/admin/currencies` enable / disable currencies.
-- [ ] `/admin/fx-rates` quote form + history table.
+- [x] `/admin/currencies` — currency table with enable/disable + add-currency form.
+- [x] `/admin/fx-rates` — quote form + rate-history table.
 
 **Tests:**
-- **Unit:** `FxRateServiceImplTest` — most-recent lookup; rejects same-currency rate; rejects rate ≤ 0.
-- **Integration:** Quote rate, look up at various timestamps.
-- **System:** `TC-ADMIN-013`, `TC-ADMIN-014`, `TC-ADMIN-015`, `TC-ADMIN-016`.
+- **Unit:** `FxRateServiceImplTest` (7) — done (most-recent lookup, same-currency, rate ≤ 0, unknown currency).
+- **Integration:** Quote rate, look up at various timestamps. *(pending)*
+- **System:** `TC-ADMIN-013` .. `TC-ADMIN-016`. *(pending)*
 
-**DoD:** Admin enables USD, quotes today's rate; till accepts USD.
+**DoD:** Admin enables USD, quotes today's rate. *(Till-accepts-USD half deferred with `TillCurrency` to F5.1.)*
 
 ---
 
