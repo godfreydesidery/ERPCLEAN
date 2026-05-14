@@ -73,4 +73,21 @@ public class Role {
     public void grantPermission(Permission permission) {
         this.permissions.add(permission);
     }
+
+    public void updateDetails(String name, String description, Long actorId) {
+        this.name = name;
+        this.description = description;
+        touch(actorId);
+    }
+
+    public void replacePermissions(Set<Permission> newPermissions, Long actorId) {
+        this.permissions.clear();
+        this.permissions.addAll(newPermissions);
+        touch(actorId);
+    }
+
+    private void touch(Long actorId) {
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
 }

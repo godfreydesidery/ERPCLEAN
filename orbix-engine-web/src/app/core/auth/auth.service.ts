@@ -36,6 +36,13 @@ export class AuthService {
   readonly currentUser = this._user.asReadonly();
   readonly accessToken = this._token.asReadonly();
 
+  /** Permission codes carried in the access token's `perms` claim. */
+  readonly permissions = computed(() => decodePermissions(this._token()));
+
+  hasPermission(code: string): boolean {
+    return this.permissions().includes(code);
+  }
+
   /** Refresh-in-flight latch so concurrent 401s share a single refresh call. */
   private inFlightRefresh: Observable<LoginResponse> | null = null;
 
@@ -96,5 +103,19 @@ export class AuthService {
     const raw = sessionStorage.getItem(USER_KEY);
     if (!raw) return null;
     try { return JSON.parse(raw) as UserSummary; } catch { return null; }
+  }
+}
+
+/** Reads the `perms` claim out of a JWT access token without verifying the signature. */
+function decodePermissions(token: string | null): string[] {
+  if (!token) return [];
+  const payload = token.split('.')[1];
+  if (!payload) return [];
+  try {
+    const json = atob(payload.replaceAll('-', '+').replaceAll('_', '/'));
+    const claims = JSON.parse(json) as { perms?: unknown };
+    return Array.isArray(claims.perms) ? (claims.perms as string[]) : [];
+  } catch {
+    return [];
   }
 }

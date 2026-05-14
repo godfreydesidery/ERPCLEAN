@@ -12,6 +12,10 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     List<UserRole> findByUserIdAndCompanyIdAndRevokedAtIsNull(Long userId, Long companyId);
 
+    List<UserRole> findByRoleIdAndRevokedAtIsNull(Long roleId);
+
+    boolean existsByRoleIdAndRevokedAtIsNull(Long roleId);
+
     /**
      * Returns the distinct permission codes granted to a user in a company
      * (and matching the requested branch, if any). Branch-scoped grants are

@@ -11,8 +11,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F0.2 — login + JWT (backend + web)
 - F0.3 — logout + refresh tokens with theft detection (backend + web)
 - F0.4 backend — RBAC wired; ADMIN role + 10 permissions seeded; JWT now carries real `perms[]`
+- F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
 
-**Next slice (start here tomorrow):** **F0.4b web** — `RoleAdminComponent` for managing roles/permissions/user-role grants + `HasPermissionDirective` to hide UI per permission. Then **F0.5** — active-branch context switching in the shell.
+**Next slice (start here):** **F0.5** — active-branch context switching in the shell (`BranchAccessGuard` + branch dropdown).
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 / F0.4 — none authored yet; the per-module + e2e test catalogue in [docs/qa/](qa/) describes what needs to land.
@@ -161,19 +162,19 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.4 — RBAC wiring (permissions in JWT)
 
-**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[~]` (backend done — commit `b4b013a`; web admin UI pending)
+**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[x]` (backend `b4b013a`; F0.4b admin UI + endpoints follow-up)
 **Dependencies:** F0.2.
 
 **Backend:**
 - [x] `Role`, `Permission`, `UserRole` entities + repos (role_permission via `@ManyToMany` join table).
-- [ ] `RoleAdminService` + Impl + `RoleAdminController` for CRUD — **NEXT** (admin endpoints for managing roles + grants).
+- [x] `RoleAdminService` + Impl + `RoleAdminController` — role CRUD, permission assignment, grant/revoke endpoints, all gated by `@PreAuthorize("hasAuthority('IAM.MANAGE_ROLES')")`. System roles are mutation-locked.
 - [x] `AuthServiceImpl.login()` + `refresh()` load permissions via `PermissionResolverService.resolve(userId, companyId, branchId)`.
 - [x] JWT `perms[]` populated from resolver instead of `List.of()`.
 - [x] Flyway `V4` seeds 10 permissions + ADMIN role + grants all-to-ADMIN. Bootstrap (FirstRunSetupService + DevSeed) assigns ADMIN role to the admin user.
 
 **Web:**
-- [ ] `RoleAdminComponent` for admins to create roles, assign permissions, grant to users — **NEXT**.
-- [ ] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission — **NEXT**.
+- [x] `RoleAdminComponent` (`/admin/roles`) — create roles, edit details, assign permissions (grouped by module), grant/revoke to users.
+- [x] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission; `AuthService` decodes the JWT `perms[]` claim into a signal.
 
 **Tests:**
 - **Unit:** `RoleAdminServiceImplTest`, `AuthServiceImplTest` extended to load permissions.
