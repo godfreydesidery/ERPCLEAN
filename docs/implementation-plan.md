@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `449f4d3` — F5.1 (till + till session lifecycle).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `6f48339` — F5.2 web (POS sales read-only admin view).
 
-**▶ RESUME POINT:** next slice is **F5.2 — Basic POS sale (cash tender)**. `PosSale` + `PosSaleLine` + `PosPayment` entities, validates tender sum + section stamp + open-day + stock available; emits `PosSaleClosed.v1`. Flutter POS UI (barcode scan / cart / tender / thermal-printer receipt) is the heavy part — likely warrants its own sub-slice. All work through F5.1 is committed; working tree clean. Read F5.2 + DATA-MODEL §7.3/§7.4/§7.5 (POS sales) before starting.
+**▶ RESUME POINT:** next slice is **F5.3 — Discounts, voids, mixed tender** (line/header discount approval threshold, void-on-same-day, mixed-tender finalisation including FX hooks). Mixed-tender already works (multiple `pos_payment` rows); F5.3 layers the discount-approval + void path. All work through F5.2 is committed; working tree clean.
 
-**Progress:** ~50% of MVP slices complete (26 of 52 — Phases 0-4 + F5.1 done; F5.2–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~52% of MVP slices complete (27 of 52 — Phases 0-4 + F5.1 + F5.2 done; F5.3–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -49,9 +49,10 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F4.5 — Packing lists (`PackingList` + `PackingListLine` (DATA-MODEL §6.10/§6.11); DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED; created against POSTED/PARTIALLY_PAID/PAID invoices; tracking-only — no stock moves (parent invoice already decremented on post); `V31` + `V31_1`; `PackingListCreated/Dispatched/Delivered/Cancelled.v1` events; web `/sales/packing-lists` with per-invoice-line tick + qty picker.)
 
 **Done in Phase 5:**
-- F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred to F5.2.)
+- F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred.)
+- F5.2 — Basic POS sale (cash + mixed tender) — backend ships the full server-side contract; Flutter till app deferred. `PosSale` + `PosSaleLine` + `PosPayment` entities (DATA-MODEL §7.3-§7.5 + Phase 1.1 §17.12 additions); POS sales committed locally and pushed as POSTED (no DRAFT); idempotent on `clientOpId` per company. Validation: OPEN till session, `section_id` matches the till's branch (required), customer exists, tender ≥ total. Posting writes outbound SALE stock moves via `StockMoveService` (DayGuard inherited) — batch-tracked items drain FEFO via `StockBatchService` and emit one stock_move per pick. Mixed tender (cash + card + mobile money + voucher + store credit) via N `pos_payment` rows; card terminals record `terminal_id` + `last4` only. `V34` + `V34_1` + `V35` migrations seed `POS.SALE_POST`. Event: `PosSaleClosed.v1`. Web: read-only `/admin/pos-sales` viewer for managers.
 
-**Next slice (start here):** **F5.2** — Basic POS sale (cash tender). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.3** — Discounts, voids, mixed tender (the mixed-tender path is already live in F5.2; F5.3 adds the discount-approval-threshold flow + same-day void). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -771,23 +772,28 @@ The biggest phase. Strongly recommend doing F5.1 → F5.2 → F5.4 (offline sync
 
 ## F5.2 — Basic POS sale (cash tender)
 
-**Story:** US-POS-003, US-POS-004, US-POS-009, US-POS-010 · **Size:** L · **Status:** `[ ]`
+**Story:** US-POS-003, US-POS-004, US-POS-009, US-POS-010 · **Size:** L · **Status:** `[x]` *(backend-complete; Flutter till app deferred)*
 **Dependencies:** F5.1, F2.2.
 
 **Backend:**
-- [ ] `PosSale`, `PosSaleLine`, `PosPayment` entities.
-- [ ] `PosSaleService` + Impl. Validates tender sum, section stamp, day open, stock available.
-- [ ] `PosSaleClosed.v1`.
+- [x] `PosSale` + `PosSaleLine` + `PosPayment` entities (`V34` + `V34_1`). POS sales are committed locally and pushed as POSTED — there is no DRAFT. Per-company unique `(number, client_op_id)`; section_id required on the header per Phase 1.1 §17.12.
+- [x] `PosSaleService` + Impl. Validates: idempotent retry on `clientOpId`; till session must be OPEN; section must belong to the till's branch; customer in-company; tender sum ≥ total → `change_amount = tender - total`. Posting routes through `StockMoveService` so DayGuard + moving-average + per-batch FEFO drains are reused. Batch-tracked items emit one stock_move per FEFO pick with `batch_id` stamped; `line.cost_amount` is the qty-weighted cost.
+- [x] Mixed tender supported via N `pos_payment` rows (CASH / CARD / MOBILE_MONEY / VOUCHER / STORE_CREDIT). Card payments record `terminal_id` + `last4` only — never the PAN.
+- [x] Events: `PosSaleClosed.v1`. `V35` seeds `POS.SALE_POST`.
 
 **Flutter POS:**
-- [ ] Barcode scan / typeahead → cart.
-- [ ] Tender + cash drawer interaction.
-- [ ] Thermal-printer receipt.
+- [ ] Barcode scan / typeahead → cart — **deferred** to the Flutter app slice.
+- [ ] Tender + cash drawer interaction — **deferred**.
+- [ ] Thermal-printer receipt — **deferred**.
+
+**Web:**
+- [x] `/admin/pos-sales` read-only viewer for managers (the push endpoint will be hit by the Flutter app; the admin web page lets managers inspect each sale's lines + payments).
 
 **Tests:**
-- **System:** `TC-POS-005` .. `TC-POS-011`; `TC-E2E-001`.
+- **Unit:** `PosSaleServiceImplTest` (10) — single-line cash sale + stock move + change; tender < total rejected; mixed-tender sums to zero change; idempotent retry on same `clientOpId` returns the prior sale without re-posting stock; closed till session rejected; section from wrong branch rejected; duplicate number rejected; batch-tracked FEFO drain emits one move per pick; closed business day propagates from `StockMoveService`; card payment persists reference / terminal / last4.
+- **System:** `TC-POS-005` .. `TC-POS-011`; `TC-E2E-001`. *(pending — exercise once Flutter app + Testcontainers end-to-end stack lands)*
 
-**DoD:** Cashier scans 5 items, takes cash, prints receipt.
+**DoD:** Cashier scans 5 items, takes cash, prints receipt. *(Backend ready; cashier UI lands with the Flutter app slice.)*
 
 ---
 
