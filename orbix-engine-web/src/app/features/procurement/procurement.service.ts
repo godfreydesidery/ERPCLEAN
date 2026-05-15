@@ -4,7 +4,9 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import {
+  CreateGrnRequest,
   CreateLpoOrderRequest,
+  Grn,
   LpoOrder,
   UpdateLpoOrderRequest
 } from './procurement.models';
@@ -42,5 +44,29 @@ export class ProcurementService {
 
   cancelLpo(id: number): Observable<LpoOrder> {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/cancel`, {}));
+  }
+
+  // ---- GRN (F3.2) ----------------------------------------------------------
+
+  listGrns(branchId: number | null): Observable<Grn[]> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<Grn[]>>(`${this.base}/grns`, { params }));
+  }
+
+  getGrn(id: number): Observable<Grn> {
+    return unwrap(this.http.get<ApiResponse<Grn>>(`${this.base}/grns/${id}`));
+  }
+
+  createGrn(request: CreateGrnRequest): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns`, request));
+  }
+
+  postGrn(id: number): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/post`, {}));
+  }
+
+  cancelGrn(id: number): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/cancel`, {}));
   }
 }

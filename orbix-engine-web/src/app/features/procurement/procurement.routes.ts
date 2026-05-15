@@ -5,5 +5,9 @@ export const routes: Routes = [
   {
     path: 'lpos',
     loadComponent: () => import('./lpos.component').then(m => m.LposComponent)
+  },
+  {
+    path: 'grns',
+    loadComponent: () => import('./grns.component').then(m => m.GrnsComponent)
   }
 ];
