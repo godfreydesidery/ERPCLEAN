@@ -4,9 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `fbbca7a` — F4.4 + F4.5 (customer returns + credit notes + packing lists).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `449f4d3` — F5.1 (till + till session lifecycle).
 
-**▶ RESUME POINT:** Phase 4 outbound is complete (F4.1 quotation skipped per plan; F3.5 vendor-return deferred to Phase 8). Next slice is **F5.1 — Till + session lifecycle** — the POS phase opens here. `Till` + `TillSession` entities, open with float, close with declared cash + variance, supervisor PIN above threshold; `TillSessionOpened/Closed.v1` events. Flutter-heavy phase ahead. All work through F4.5 is committed; working tree clean. Read the F5.x slices + DATA-MODEL §7 (POS) before starting.
+**▶ RESUME POINT:** next slice is **F5.2 — Basic POS sale (cash tender)**. `PosSale` + `PosSaleLine` + `PosPayment` entities, validates tender sum + section stamp + open-day + stock available; emits `PosSaleClosed.v1`. Flutter POS UI (barcode scan / cart / tender / thermal-printer receipt) is the heavy part — likely warrants its own sub-slice. All work through F5.1 is committed; working tree clean. Read F5.2 + DATA-MODEL §7.3/§7.4/§7.5 (POS sales) before starting.
+
+**Progress:** ~50% of MVP slices complete (26 of 52 — Phases 0-4 + F5.1 done; F5.2–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -46,7 +48,10 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F4.4 — Customer returns + credit notes (`CustomerReturn` + `CustomerReturnLine` (DATA-MODEL §6.7/§6.8); DRAFT → POSTED → CREDITED + DRAFT → CANCELLED; `ReturnReason` (DAMAGED/EXPIRED/WRONG_ITEM/BUYER_REMORSE/OTHER); on post (DayGuard required) writes RETURN_IN moves when `restock=true`, DAMAGE moves otherwise — batch-tracked items rejected for now (restock-to-original-batch is a follow-on); issue-credit-note transitions POSTED → CREDITED and creates `CustomerCreditNote` (DATA-MODEL §6.9) at full return amount — allocation to open invoices is follow-on work; `V30` + `V30_1`; `CustomerReturnCreated/Posted/Cancelled.v1` + `CustomerCreditNoteIssued.v1` events; web `/sales/returns` with state-aware action buttons.)
 - F4.5 — Packing lists (`PackingList` + `PackingListLine` (DATA-MODEL §6.10/§6.11); DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED; created against POSTED/PARTIALLY_PAID/PAID invoices; tracking-only — no stock moves (parent invoice already decremented on post); `V31` + `V31_1`; `PackingListCreated/Dispatched/Delivered/Cancelled.v1` events; web `/sales/packing-lists` with per-invoice-line tick + qty picker.)
 
-**Next slice (start here):** **F5.1** — Till + session lifecycle. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
+**Done in Phase 5:**
+- F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred to F5.2.)
+
+**Next slice (start here):** **F5.2** — Basic POS sale (cash tender). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -739,24 +744,28 @@ The biggest phase. Strongly recommend doing F5.1 → F5.2 → F5.4 (offline sync
 
 ## F5.1 — Till + session lifecycle
 
-**Story:** US-POS-002, US-POS-016 · **Size:** L · **Status:** `[ ]`
+**Story:** US-POS-002, US-POS-016 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.1, F2.1, F0.2.
 
 **Backend:**
-- [ ] `Till`, `TillSession` entities.
-- [ ] `TillSessionService` + Impl. Open with float; close with declared cash + variance; supervisor PIN above threshold.
-- [ ] `TillSessionOpened.v1`, `TillSessionClosed.v1`.
+- [x] `Till` + `TillSession` entities (`V32` + `V32_1`). Till status ACTIVE / INACTIVE; cannot deactivate while a session is OPEN.
+- [x] `TillSessionService` + Impl. OPEN → CLOSED → RECONCILED; at most one OPEN per till. Opening requires `DayGuard.requireOpenDay`. On close: `expected_cash = opening_float` (POS-sale cash + pickups + petty-cash contributions wire in F5.2+); `variance = declared - expected`. When `|variance| > orbix.pos.session-variance-threshold` (defaults to 1000), the close request requires a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`, different from the caller (`PermissionResolverService` verifies).
+- [x] Events: `TillCreated/Activated/Deactivated.v1`, `TillSessionOpened/Closed/Reconciled.v1`.
+- [x] `V33` seeds `POS.MANAGE_TILL` / `SESSION_OPEN` / `SESSION_CLOSE` / `SESSION_RECONCILE` / `SESSION_VARIANCE_APPROVE`.
 
 **Flutter POS:**
-- [ ] Till-open screen, cashier+supervisor PIN flow.
-- [ ] Till-close screen; declare cash; show variance.
+- [ ] Till-open screen, cashier+supervisor PIN flow — **deferred** to the Flutter POS slice. F5.1 ships the backend + a web admin screen at `/admin/tills` so managers can manage tills and inspect / close / reconcile sessions while the cashier flow lives in the upcoming Flutter app.
+- [ ] Till-close screen; declare cash; show variance — same deferral.
+
+**Web:**
+- [x] `/admin/tills` — list + create + activate/deactivate tills; open / close / reconcile sessions; live variance display per session.
 
 **Tests:**
-- **Unit (backend):** Variance math, lockout on second open.
-- **Integration:** Open → multiple sales → close.
-- **System:** `TC-POS-001` .. `TC-POS-004`, `TC-POS-020`, `TC-POS-021`.
+- **Unit (backend):** `TillSessionServiceImplTest` (11) — open succeeds + emits event; rejects when an OPEN session exists; rejects inactive till; requires open business day; close below threshold succeeds; close above threshold without supervisor / with self-supervisor / with unauthorised supervisor / with approved supervisor; reconcile from CLOSED succeeds; reconcile from OPEN rejected.
+- **Integration:** Open → multiple sales → close. *(pending until F5.2 lands cash sales)*
+- **System:** `TC-POS-001` .. `TC-POS-004`, `TC-POS-020`, `TC-POS-021`. *(pending)*
 
-**DoD:** Cashier signs in, opens till, signs out at end of shift.
+**DoD:** Cashier signs in, opens till, signs out at end of shift. *(Backend ready; Flutter cashier UI lands with the POS sale slice.)*
 
 ---
 
