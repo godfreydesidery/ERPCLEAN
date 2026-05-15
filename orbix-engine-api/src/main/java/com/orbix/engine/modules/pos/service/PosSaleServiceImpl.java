@@ -14,6 +14,7 @@ import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
+import com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPosSaleRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto;
 import com.orbix.engine.modules.pos.domain.entity.PosPayment;
@@ -21,6 +22,7 @@ import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.PosSaleLine;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
+import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
 import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
@@ -59,6 +61,7 @@ public class PosSaleServiceImpl implements PosSaleService {
     private static final String F_BRANCH_ID = "branchId";
 
     static final String DISCOUNT_APPROVE_PERMISSION = "POS.DISCOUNT_APPROVE";
+    static final String REFUND_APPROVE_PERMISSION = "POS.REFUND_APPROVE";
 
     private final PosSaleRepository sales;
     private final PosSaleLineRepository lines;
@@ -78,6 +81,9 @@ public class PosSaleServiceImpl implements PosSaleService {
 
     @org.springframework.beans.factory.annotation.Value("${orbix.pos.discount-threshold-pct}")
     private BigDecimal discountThresholdPct;
+
+    @org.springframework.beans.factory.annotation.Value("${orbix.pos.refund-threshold}")
+    private BigDecimal refundThreshold;
 
     @Override
     @Transactional
@@ -203,6 +209,76 @@ public class PosSaleServiceImpl implements PosSaleService {
                 "reason", request.reason()));
         return PosSaleDto.from(sale, saleLines,
             payments.findByPosSaleIdOrderByIdAsc(sale.getId()));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "REFUND", entityType = AGG)
+    public PosSaleDto refund(PostPosRefundRequestDto request) {
+        Long companyId = context.companyId();
+        Long actorId = context.userId();
+
+        Optional<PosSale> existing = sales.findByCompanyIdAndClientOpId(companyId, request.clientOpId());
+        if (existing.isPresent()) {
+            PosSale prior = existing.get();
+            return PosSaleDto.from(prior,
+                lines.findByPosSaleIdOrderByLineNoAsc(prior.getId()),
+                payments.findByPosSaleIdOrderByIdAsc(prior.getId()));
+        }
+
+        TillSession session = requireOpenSession(request.tillSessionId(), companyId);
+        Section section = requireSection(request.sectionId(), session.getBranchId());
+        requireCustomer(request.customerId());
+        if (sales.existsByCompanyIdAndNumber(companyId, request.number())) {
+            throw new IllegalArgumentException(
+                "POS-sale number already exists: " + request.number());
+        }
+        PosSale original = requireRefundableOriginal(request.originalSaleId(), session.getBranchId());
+
+        BusinessDay day = dayGuard.requireOpenDay(session.getBranchId());
+        if (!Objects.equals(day.getBusinessDate(), original.getBusinessDate())) {
+            throw new IllegalArgumentException(
+                "POS sales can only be refunded on the same business day they were posted ("
+                    + original.getBusinessDate() + ")");
+        }
+
+        Map<Long, BigDecimal> snapCosts = snapOriginalCosts(original.getId());
+        RefundTotals totals = computeRefundTotals(request, companyId, snapCosts);
+        validateRefundTender(totals.tenderSum, totals.total);
+        validateRefundApprover(totals.total, request.supervisorId(), actorId, companyId);
+
+        PosSale refund = sales.save(new PosSale(
+            request.number().trim(),
+            request.clientOpId().trim(),
+            session.getId(),
+            session.getTillId(),
+            session.getBranchId(),
+            companyId,
+            section.getId(),
+            request.customerId(),
+            actorId,
+            request.supervisorId(),
+            PosSaleKind.REFUND,
+            request.saleAt(),
+            session.getBusinessDate(),
+            totals.subtotal, BigDecimal.ZERO, totals.tax, totals.total,
+            totals.tenderSum, BigDecimal.ZERO,
+            request.notes()
+        ));
+        refund.setRefundedFromSaleId(original.getId());
+
+        List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts);
+        List<PosPayment> savedPayments = saveRefundPayments(refund, request.payments());
+
+        events.publish("PosSaleRefunded.v1", AGG, String.valueOf(refund.getId()),
+            Map.of(F_ID, refund.getId(),
+                F_NUMBER, refund.getNumber(),
+                "originalSaleId", original.getId(),
+                "tillSessionId", session.getId(),
+                F_BRANCH_ID, session.getBranchId(),
+                "totalAmount", refund.getTotalAmount(),
+                "tenderedAmount", refund.getTenderedAmount()));
+        return PosSaleDto.from(refund, savedLines, savedPayments);
     }
 
     @Override
@@ -426,4 +502,156 @@ public class PosSaleServiceImpl implements PosSaleService {
 
     private record Totals(BigDecimal subtotal, BigDecimal headerDiscount, BigDecimal tax,
                           BigDecimal total, BigDecimal tenderSum) {}
+
+    /** Refund totals — no header discount applies, tender must match total exactly. */
+    private record RefundTotals(BigDecimal subtotal, BigDecimal tax,
+                                BigDecimal total, BigDecimal tenderSum) {}
+
+    private PosSale requireRefundableOriginal(Long originalSaleId, Long sessionBranchId) {
+        PosSale original = requireSale(originalSaleId);
+        if (original.getStatus() != PosSaleStatus.POSTED) {
+            throw new IllegalArgumentException(
+                "Cannot refund POS sale " + original.getNumber() + " — it is "
+                    + original.getStatus());
+        }
+        if (original.getKind() != PosSaleKind.SALE) {
+            throw new IllegalArgumentException(
+                "Cannot refund POS sale " + original.getNumber() + " — its kind is "
+                    + original.getKind() + " (only SALE may be refunded)");
+        }
+        if (!Objects.equals(original.getBranchId(), sessionBranchId)) {
+            throw new IllegalArgumentException(
+                "Refund must be issued from the same branch as the original sale (branch "
+                    + original.getBranchId() + ")");
+        }
+        return original;
+    }
+
+    private Map<Long, BigDecimal> snapOriginalCosts(Long originalSaleId) {
+        java.util.HashMap<Long, BigDecimal> map = new java.util.HashMap<>();
+        for (PosSaleLine line : lines.findByPosSaleIdOrderByLineNoAsc(originalSaleId)) {
+            map.putIfAbsent(line.getItemId(), line.getCostAmount());
+        }
+        return map;
+    }
+
+    private RefundTotals computeRefundTotals(PostPosRefundRequestDto request,
+                                             Long companyId,
+                                             Map<Long, BigDecimal> snapCosts) {
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal tax = BigDecimal.ZERO;
+        for (PostPosRefundRequestDto.Line input : request.lines()) {
+            Item item = requireItem(input.itemId(), companyId);
+            if (item.isBatchTracked()) {
+                throw new IllegalArgumentException(
+                    "Cannot refund a POS sale containing batch-tracked items (item "
+                        + item.getCode() + "); restore-to-original-batch is not supported yet");
+            }
+            if (!snapCosts.containsKey(input.itemId())) {
+                throw new IllegalArgumentException(
+                    "Refund line item " + item.getCode()
+                        + " was not on the original sale");
+            }
+            Long vatGroupId = input.vatGroupId() != null ? input.vatGroupId() : item.getVatGroupId();
+            VatGroup vat = requireVatGroup(vatGroupId, companyId);
+            BigDecimal discountPct = input.discountPct() != null ? input.discountPct() : BigDecimal.ZERO;
+
+            BigDecimal gross = input.qty().multiply(input.unitPrice())
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal discountAmount = gross.multiply(discountPct)
+                .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal netLine = gross.subtract(discountAmount);
+            BigDecimal lineTax = netLine.multiply(vat.getRate())
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+
+            subtotal = subtotal.add(netLine);
+            tax = tax.add(lineTax);
+        }
+        BigDecimal total = subtotal.add(tax);
+        BigDecimal tenderSum = request.payments().stream()
+            .map(PostPosRefundRequestDto.Payment::amount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new RefundTotals(subtotal, tax, total, tenderSum);
+    }
+
+    private void validateRefundTender(BigDecimal tenderSum, BigDecimal total) {
+        if (tenderSum.compareTo(total) != 0) {
+            throw new IllegalArgumentException(
+                "Refund tender sum " + tenderSum + " must equal refund total " + total
+                    + " (no change is paid on a refund)");
+        }
+    }
+
+    private void validateRefundApprover(BigDecimal total, Long supervisorId, Long actorId, Long companyId) {
+        if (total.compareTo(refundThreshold) <= 0) {
+            return;
+        }
+        if (supervisorId == null) {
+            throw new IllegalArgumentException(
+                "Refund total " + total + " exceeds threshold " + refundThreshold
+                    + " — a supervisor holding " + REFUND_APPROVE_PERMISSION + " must authorise");
+        }
+        if (Objects.equals(supervisorId, actorId)) {
+            throw new IllegalArgumentException("You cannot authorise your own refund");
+        }
+        boolean ok = permissions.resolve(supervisorId, companyId, null)
+            .contains(REFUND_APPROVE_PERMISSION);
+        if (!ok) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "Supervisor " + supervisorId + " does not hold " + REFUND_APPROVE_PERMISSION);
+        }
+    }
+
+    private List<PosSaleLine> saveRefundLines(PosSale refund,
+                                              List<PostPosRefundRequestDto.Line> requestLines,
+                                              Long companyId,
+                                              Map<Long, BigDecimal> snapCosts) {
+        List<PosSaleLine> savedLines = new ArrayList<>(requestLines.size());
+        int lineNo = 1;
+        for (PostPosRefundRequestDto.Line input : requestLines) {
+            Item item = requireItem(input.itemId(), companyId);
+            Long uomId = input.uomId() != null ? input.uomId() : item.getUomId();
+            Long vatGroupId = input.vatGroupId() != null ? input.vatGroupId() : item.getVatGroupId();
+            VatGroup vat = requireVatGroup(vatGroupId, companyId);
+            BigDecimal discountPct = input.discountPct() != null ? input.discountPct() : BigDecimal.ZERO;
+
+            BigDecimal gross = input.qty().multiply(input.unitPrice())
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal discountAmount = gross.multiply(discountPct)
+                .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal netLine = gross.subtract(discountAmount);
+            BigDecimal lineTax = netLine.multiply(vat.getRate())
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal lineTotal = netLine.add(lineTax);
+            BigDecimal snappedCost = snapCosts.get(input.itemId());
+
+            PosSaleLine line = lines.save(new PosSaleLine(
+                refund.getId(), lineNo++, input.itemId(), uomId,
+                input.qty(), input.unitPrice(), discountPct, discountAmount,
+                vatGroupId, lineTax, lineTotal
+            ));
+            // Compensating inbound at the original snapped cost — keeps avg cost stable.
+            stockMoveService.post(new PostStockMoveRequestDto(
+                line.getItemId(), refund.getBranchId(),
+                line.getQty(), snappedCost,
+                StockMoveType.RETURN_IN, AGG, refund.getId(),
+                null, false, null
+            ));
+            line.setCostAmount(snappedCost);
+            savedLines.add(line);
+        }
+        return savedLines;
+    }
+
+    private List<PosPayment> saveRefundPayments(PosSale refund,
+                                                List<PostPosRefundRequestDto.Payment> requestPayments) {
+        List<PosPayment> saved = new ArrayList<>(requestPayments.size());
+        for (PostPosRefundRequestDto.Payment input : requestPayments) {
+            saved.add(payments.save(new PosPayment(
+                refund.getId(), input.method(), input.amount(),
+                input.reference(), input.terminalId(), input.last4()
+            )));
+        }
+        return saved;
+    }
 }

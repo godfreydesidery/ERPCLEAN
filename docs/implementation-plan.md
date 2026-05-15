@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `cc64410` — F5.4 backend (offline-sync push + catalog/balance snapshots).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `2d37ace` — F5.5 backend (refund-at-till flow + supervisor-threshold rule + RETURN_IN compensating stock moves).
 
-**▶ RESUME POINT:** next slice is **F5.5 — Refund at till**. `pos_sale.kind = REFUND` flow + supervisor-threshold rule; cash refund posts a `cash_entry` OUT. The PosSaleKind.REFUND enum slot is already in place from F5.2; F5.5 builds the create-refund-from-original-sale flow. All work through F5.4 backend is committed; Flutter POS app (offline outbox queue, Drift local DB, conflict UI) is deferred to a dedicated mini-phase. Working tree clean.
+**▶ RESUME POINT:** next slice is **F5.6 — FX tender**. Per US-POS-021 — accept tender in a non-functional currency at a snapped daily FX rate, with the difference booked as exchange gain/loss when the cash module clears the entry in F6.2. F5.5 cash-out is deferred to F6.1's event subscriber on `PosSaleRefunded.v1`. Working tree clean.
 
-**Progress:** ~58% of MVP slices complete (30 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend done; F5.5–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~60% of MVP slices complete (31 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend done; F5.6–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -54,7 +54,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
 - F5.4 — Offline-sync server contract (backend-complete; Flutter app deferred). `POST /api/v1/sync/push` batch-pushes locally-committed POS sales — each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch; idempotency on `clientOpId` was already in place from F5.2. `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` returns active items + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty + all barcodes (so the till's local DB can scan EAN/PLU offline). `GET /api/v1/sync/balances/snapshot?branchId=` returns current `item_branch_balance` rows for a soft pre-flight oversell check. `V37` seeds `POS.SYNC`.
 
-**Next slice (start here):** **F5.5** — Refund at till. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.6** — FX tender. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -853,14 +853,17 @@ Split into:
 
 ## F5.5 — Refund at till
 
-**Story:** US-POS-019, US-POS-020 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-019, US-POS-020 · **Size:** M · **Status:** `[x]` backend (cash-out wiring deferred to F6.1)
 **Dependencies:** F5.2, F6.1.
 
 **Backend:**
-- [ ] `pos_sale.kind = REFUND` flow; threshold rule + supervisor override.
-- [ ] Cash refund posts `cash_entry` OUT.
+- [x] `pos_sale.kind = REFUND` flow: `POST /api/v1/pos-sales/refund` gated by `POS.REFUND_POST`. Creates a new `PosSale` with `kind = REFUND` and `refunded_from_sale_id` pointing at the original; writes compensating `RETURN_IN` stock moves at the snapped line cost; same-business-day only; rejects batch-tracked items (restore-to-original-batch deferred); rejects refund lines whose item wasn't on the original; idempotent on `clientOpId`.
+- [x] Threshold rule: `orbix.pos.refund-threshold` (default 10000). Above-threshold refund totals require `supervisorId` holding `POS.REFUND_APPROVE`, different from cashier.
+- [x] Tender must equal refund total exactly (no change paid on a refund).
+- [x] `V38` seeds `POS.REFUND_POST` + `POS.REFUND_APPROVE`. Event: `PosSaleRefunded.v1` — carries `originalSaleId`, `totalAmount`, `tenderedAmount`, `branchId`, `tillSessionId`. F6.1 subscribes to write `cash_entry` OUT.
+- [ ] Cash refund posts `cash_entry` OUT — deferred to F6.1's event subscriber.
 
-**Tests:** `TC-POS-026` .. `TC-POS-030`; `TC-E2E-005`.
+**Tests:** `TC-POS-026` .. `TC-POS-030`; `TC-E2E-005`. Unit-test coverage in `PosSaleServiceImplTest` (9 new cases): happy-path RETURN_IN snap, idempotency, different-day rejection, batch-tracked rejection, tender ≠ total rejection, above-threshold no-supervisor rejection, supervisor-missing-permission 403, supervisor-approved happy path, already-VOIDED original rejection.
 
 ---
 

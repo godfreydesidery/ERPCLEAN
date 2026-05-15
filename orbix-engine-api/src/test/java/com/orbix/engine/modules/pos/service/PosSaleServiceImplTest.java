@@ -97,6 +97,8 @@ class PosSaleServiceImplTest {
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
         org.springframework.test.util.ReflectionTestUtils.setField(service,
             "discountThresholdPct", new BigDecimal("10"));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,
+            "refundThreshold", new BigDecimal("10000"));
 
         TillSession session = openSession();
         lenient().when(tillSessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
@@ -510,6 +512,206 @@ class PosSaleServiceImplTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("same business day");
         verify(stockMoveService, never()).post(any());
+    }
+
+    // ---- F5.5: refund -------------------------------------------------------
+
+    private com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto refundRequest(
+            String number, String opId, Long originalSaleId,
+            BigDecimal qty, BigDecimal price, BigDecimal tender, Long supervisorId) {
+        return new com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto(
+            number, opId, SESSION_ID, originalSaleId, SECTION_ID, CUSTOMER_ID, supervisorId,
+            Instant.parse("2026-05-13T15:00:00Z"),
+            List.of(new com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto.Line(
+                ITEM_ID, UOM_ID, qty, price, null, VAT_GROUP_ID)),
+            List.of(new com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto.Payment(
+                PosPaymentMethod.CASH, tender, null, null, null)),
+            null
+        );
+    }
+
+    private PosSaleLine originalLine(Long saleId, BigDecimal qty, BigDecimal cost) {
+        PosSaleLine l = new PosSaleLine(saleId, 1, ITEM_ID, UOM_ID,
+            qty, new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
+            VAT_GROUP_ID, BigDecimal.ZERO, new BigDecimal("100"));
+        l.setId(nextId.getAndIncrement());
+        l.setCostAmount(cost);
+        return l;
+    }
+
+    @Test
+    void refund_sameDay_writesNewRefundSaleAndCompensatingMove() {
+        PosSale original = persistedSale("TILL-1-R", "op-orig");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("2"), new BigDecimal("75"))));
+
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        PosSaleDto dto = service.refund(refundRequest("TILL-1-R-REF", "op-ref",
+            original.getId(), new BigDecimal("2"), new BigDecimal("100"),
+            new BigDecimal("236"), null));
+
+        assertThat(dto.kind()).isEqualTo(com.orbix.engine.modules.pos.domain.enums.PosSaleKind.REFUND);
+        assertThat(dto.refundedFromSaleId()).isEqualTo(original.getId());
+        assertThat(dto.status()).isEqualTo(PosSaleStatus.POSTED);
+        assertThat(dto.totalAmount()).isEqualByComparingTo("236");
+        assertThat(dto.changeAmount()).isEqualByComparingTo("0");
+
+        ArgumentCaptor<PostStockMoveRequestDto> captor =
+            ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
+        verify(stockMoveService).post(captor.capture());
+        PostStockMoveRequestDto move = captor.getValue();
+        assertThat(move.moveType()).isEqualTo(StockMoveType.RETURN_IN);
+        assertThat(move.qty()).isEqualByComparingTo("2");
+        assertThat(move.unitCost()).isEqualByComparingTo("75");
+        verify(events).publish(eq("PosSaleRefunded.v1"), any(), any(), any());
+    }
+
+    @Test
+    void refund_idempotent_returnsPriorOnSameClientOpId() {
+        PosSale prior = persistedSale("TILL-1-R-PRIOR", "op-ref-dup");
+        when(sales.findByCompanyIdAndClientOpId(COMPANY_ID, "op-ref-dup"))
+            .thenReturn(Optional.of(prior));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(prior.getId())).thenReturn(List.of());
+        when(payments.findByPosSaleIdOrderByIdAsc(prior.getId())).thenReturn(List.of());
+
+        PosSaleDto dto = service.refund(refundRequest("TILL-1-R-NEW", "op-ref-dup",
+            999L, new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("118"), null));
+
+        assertThat(dto.id()).isEqualTo(prior.getId());
+        verify(stockMoveService, never()).post(any());
+        verify(events, never()).publish(eq("PosSaleRefunded.v1"), any(), any(), any());
+    }
+
+    @Test
+    void refund_differentBusinessDay_isRejected() {
+        PosSale original = persistedSale("TILL-1-R-D", "op-ref-d");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        BusinessDay nextDay = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 14), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(nextDay);
+
+        Long origId = original.getId();
+        var req = refundRequest("TILL-1-R-D-REF", "op-ref-late",
+            origId, new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("118"), null);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("same business day");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void refund_batchTrackedItem_isRejected() {
+        Item batched = new Item(COMPANY_ID, "MILK", "Milk", ItemType.SELLABLE, 10L, UOM_ID, VAT_GROUP_ID, ACTOR_ID);
+        batched.setId(ITEM_ID);
+        batched.setBatchTracked(true);
+        when(items.findById(ITEM_ID)).thenReturn(Optional.of(batched));
+
+        PosSale original = persistedSale("TILL-1-R-B", "op-ref-b");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("1"), new BigDecimal("60"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        Long origId = original.getId();
+        var req = refundRequest("TILL-1-R-B-REF", "op-ref-bb",
+            origId, new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("118"), null);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("batch-tracked");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void refund_tenderNotEqualTotal_isRejected() {
+        PosSale original = persistedSale("TILL-1-R-T", "op-ref-t");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("1"), new BigDecimal("75"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        Long origId = original.getId();
+        // total = 118; tender = 120 — mismatch
+        var req = refundRequest("TILL-1-R-T-REF", "op-ref-tt",
+            origId, new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("120"), null);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("no change is paid");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void refund_aboveThreshold_requiresSupervisor() {
+        PosSale original = persistedSale("TILL-1-R-X", "op-ref-x");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("120"), new BigDecimal("75"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        Long origId = original.getId();
+        // 120 * 100 = 12000; tax 2160; total 14160 — above 10000 threshold, no supervisor
+        var req = refundRequest("TILL-1-R-X-REF", "op-ref-xx",
+            origId, new BigDecimal("120"), new BigDecimal("100"), new BigDecimal("14160"), null);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("supervisor");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void refund_aboveThreshold_supervisorMissingPermission_403() {
+        PosSale original = persistedSale("TILL-1-R-P", "op-ref-p");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("120"), new BigDecimal("75"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+        when(permissions.resolve(77L, COMPANY_ID, null)).thenReturn(java.util.Set.of());
+
+        Long origId = original.getId();
+        var req = refundRequest("TILL-1-R-P-REF", "op-ref-pp",
+            origId, new BigDecimal("120"), new BigDecimal("100"), new BigDecimal("14160"), 77L);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+            .hasMessageContaining(PosSaleServiceImpl.REFUND_APPROVE_PERMISSION);
+    }
+
+    @Test
+    void refund_aboveThreshold_approvedSupervisor_succeeds() {
+        PosSale original = persistedSale("TILL-1-R-OK", "op-ref-ok");
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(original.getId()))
+            .thenReturn(List.of(originalLine(original.getId(), new BigDecimal("120"), new BigDecimal("75"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+        when(permissions.resolve(77L, COMPANY_ID, null))
+            .thenReturn(java.util.Set.of(PosSaleServiceImpl.REFUND_APPROVE_PERMISSION));
+
+        PosSaleDto dto = service.refund(refundRequest("TILL-1-R-OK-REF", "op-ref-okok",
+            original.getId(), new BigDecimal("120"), new BigDecimal("100"),
+            new BigDecimal("14160"), 77L));
+
+        assertThat(dto.kind()).isEqualTo(com.orbix.engine.modules.pos.domain.enums.PosSaleKind.REFUND);
+        assertThat(dto.totalAmount()).isEqualByComparingTo("14160");
+        assertThat(dto.supervisorId()).isEqualTo(77L);
+    }
+
+    @Test
+    void refund_alreadyVoidedOriginal_isRejected() {
+        PosSale original = persistedSale("TILL-1-R-V", "op-ref-v");
+        original.voidSale("already voided", ACTOR_ID);
+        when(sales.findById(original.getId())).thenReturn(Optional.of(original));
+
+        Long origId = original.getId();
+        var req = refundRequest("TILL-1-R-V-REF", "op-ref-vv",
+            origId, new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("118"), null);
+        assertThatThrownBy(() -> service.refund(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("VOIDED");
     }
 
     @Test

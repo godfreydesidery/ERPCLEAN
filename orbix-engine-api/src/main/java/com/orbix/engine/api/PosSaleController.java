@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
+import com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPosSaleRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto;
 import com.orbix.engine.modules.pos.service.PosSaleService;
@@ -49,5 +50,12 @@ public class PosSaleController {
     public PosSaleDto voidSale(@PathVariable Long id,
                                @Valid @RequestBody VoidPosSaleRequestDto request) {
         return service.voidSale(id, request);
+    }
+
+    @PostMapping("/refund")
+    @PreAuthorize("hasAuthority('POS.REFUND_POST')")
+    public ResponseEntity<PosSaleDto> refund(@Valid @RequestBody PostPosRefundRequestDto request) {
+        PosSaleDto sale = service.refund(request);
+        return ResponseEntity.created(URI.create("/api/v1/pos-sales/" + sale.id())).body(sale);
     }
 }

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
+import com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPosSaleRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto;
 
@@ -33,6 +34,19 @@ public interface PosSaleService {
      * current open day.
      */
     PosSaleDto voidSale(Long saleId, VoidPosSaleRequestDto request);
+
+    /**
+     * Post a refund against a POSTED POS sale (F5.5). Creates a new
+     * {@code PosSale} with {@code kind = REFUND} that references the
+     * original via {@code refunded_from_sale_id} and writes compensating
+     * {@code RETURN_IN} stock moves at the snapped line cost. Same-business-day
+     * only; rejects batch-tracked items. Above
+     * {@code orbix.pos.refund-threshold} the request needs a supervisor
+     * holding {@code POS.REFUND_APPROVE}. The cash-out side
+     * ({@code cash_entry OUT}) is owned by F6.1 and subscribes to
+     * {@code PosSaleRefunded.v1}.
+     */
+    PosSaleDto refund(PostPosRefundRequestDto request);
 
     List<PosSaleDto> list(Long branchId);
 
