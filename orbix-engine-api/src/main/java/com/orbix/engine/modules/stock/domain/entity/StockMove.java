@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.domain.entity;
 
+import com.orbix.engine.modules.stock.domain.enums.ConsumptionCategory;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveDirection;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import jakarta.persistence.*;
@@ -74,10 +75,24 @@ public class StockMove {
     @Column(name = "batch_id")
     private Long batchId;
 
+    /** Section (department) the move belongs to — stamped on production / section-tagged adjustments. */
+    @Column(name = "section_id")
+    private Long sectionId;
+
+    /** Required for {@code INTERNAL_CONSUMPTION} moves; drives the per-category consumption report. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "consumption_category", length = 20)
+    private ConsumptionCategory consumptionCategory;
+
+    /** Required for internal-consumption / oversell / above-threshold adjustment moves. */
+    @Column(name = "authorised_by_user_id")
+    private Long authorisedByUserId;
+
     @SuppressWarnings("java:S107")  // a posting row is inherently wide; a VO would only shuffle the args
     public StockMove(Instant at, Long itemId, Long branchId, Long companyId, BigDecimal qty,
                      BigDecimal costAmount, StockMoveType moveType, String refType, Long refId,
-                     Long actorId, String notes, Long batchId) {
+                     Long actorId, String notes, Long batchId, Long sectionId,
+                     ConsumptionCategory consumptionCategory, Long authorisedByUserId) {
         this.at = at;
         this.itemId = itemId;
         this.branchId = branchId;
@@ -91,5 +106,8 @@ public class StockMove {
         this.actorId = actorId;
         this.notes = notes;
         this.batchId = batchId;
+        this.sectionId = sectionId;
+        this.consumptionCategory = consumptionCategory;
+        this.authorisedByUserId = authorisedByUserId;
     }
 }

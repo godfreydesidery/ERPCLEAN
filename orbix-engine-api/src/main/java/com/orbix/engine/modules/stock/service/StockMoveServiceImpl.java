@@ -71,7 +71,8 @@ public class StockMoveServiceImpl implements StockMoveService {
 
         StockMove move = moves.save(new StockMove(now, itemId, branchId, companyId, qty, costAmount,
             request.moveType(), request.refType(), request.refId(), context.userId(), request.notes(),
-            request.batchId()));
+            request.batchId(), request.sectionId(), request.consumptionCategory(),
+            request.authorisedByUserId()));
         balances.save(balance);
 
         events.publish("StockMoved.v1", "StockMove", String.valueOf(move.getId()),

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.stock.domain.dto;
 
 import com.orbix.engine.modules.stock.domain.entity.StockMove;
+import com.orbix.engine.modules.stock.domain.enums.ConsumptionCategory;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveDirection;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 
@@ -21,7 +22,10 @@ public record StockMoveDto(
     Long refId,
     Long actorId,
     String notes,
-    Long batchId
+    Long batchId,
+    Long sectionId,
+    ConsumptionCategory consumptionCategory,
+    Long authorisedByUserId
 ) {
     public static StockMoveDto from(StockMove move) {
         return new StockMoveDto(
@@ -38,7 +42,10 @@ public record StockMoveDto(
             move.getRefId(),
             move.getActorId(),
             move.getNotes(),
-            move.getBatchId()
+            move.getBatchId(),
+            move.getSectionId(),
+            move.getConsumptionCategory(),
+            move.getAuthorisedByUserId()
         );
     }
 }
