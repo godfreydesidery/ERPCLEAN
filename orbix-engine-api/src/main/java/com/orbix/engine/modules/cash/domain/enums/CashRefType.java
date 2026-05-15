@@ -31,4 +31,10 @@ public final class CashRefType {
 
     /** Petty-cash payout — single OUT-TILL. */
     public static final String PETTY_CASH = "PettyCash";
+
+    /** End-of-day banking — paired OUT-CASH_BOX / IN-BANK. */
+    public static final String BANK_DEPOSIT = "BankDeposit";
+
+    /** Supervisor cash adjustment — single entry, mandatory reason. */
+    public static final String CASH_ADJUSTMENT = "CashAdjustment";
 }
