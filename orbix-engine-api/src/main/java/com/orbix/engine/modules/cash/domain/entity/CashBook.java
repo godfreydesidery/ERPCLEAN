@@ -11,9 +11,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Daily summary per branch / account. Write-through projection — every
- * {@code cash_entry} insert upserts the matching row in the same transaction;
- * always satisfies {@code closing = opening + in − out}. DATA-MODEL.md §10.3.
+ * Daily summary per branch / account / currency. Write-through projection —
+ * every {@code cash_entry} insert upserts the matching row in the same
+ * transaction; always satisfies {@code closing = opening + in − out}.
+ * DATA-MODEL.md §10.3 + Phase 1.1 §202. Amounts are in the row's own
+ * {@code currency_code} (the tender currency), so per-currency variance
+ * (US-DAY-006) is a direct row read with no FX involved.
  */
 @Entity
 @Table(name = "cash_book")
@@ -27,9 +30,6 @@ public class CashBook {
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
-
-    @Column(name = "currency_code", nullable = false, length = 3)
-    private String currencyCode;
 
     @Column(name = "opening_amount", nullable = false, precision = 18, scale = 4)
     private BigDecimal openingAmount = BigDecimal.ZERO;
@@ -49,10 +49,9 @@ public class CashBook {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public CashBook(CashBookId id, Long companyId, String currencyCode, BigDecimal openingAmount) {
+    public CashBook(CashBookId id, Long companyId, BigDecimal openingAmount) {
         this.id = id;
         this.companyId = companyId;
-        this.currencyCode = currencyCode;
         this.openingAmount = openingAmount != null ? openingAmount : BigDecimal.ZERO;
         this.inAmount = BigDecimal.ZERO;
         this.outAmount = BigDecimal.ZERO;
@@ -62,6 +61,7 @@ public class CashBook {
 
     public Long getBranchId() { return id.getBranchId(); }
     public com.orbix.engine.modules.cash.domain.enums.CashAccount getAccount() { return id.getAccount(); }
+    public String getCurrencyCode() { return id.getCurrencyCode(); }
     public LocalDate getBusinessDate() { return id.getBusinessDate(); }
 
     public void addIn(BigDecimal amount) {

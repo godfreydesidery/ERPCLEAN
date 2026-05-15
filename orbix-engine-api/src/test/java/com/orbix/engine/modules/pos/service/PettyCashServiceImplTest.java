@@ -101,7 +101,8 @@ class PettyCashServiceImplTest {
 
         verify(cashLedger).post(any(), eq(COMPANY_ID), eq(BRANCH_ID), eq(BUSINESS_DATE),
             eq(CashAccount.TILL), eq(CashDirection.OUT), eq(new BigDecimal("2000")),
-            eq("TZS"), eq(CashRefType.PETTY_CASH), any(), eq(GlCategory.PETTY), any(), eq(ACTOR_ID));
+            eq(BigDecimal.ONE), eq("TZS"), eq(CashRefType.PETTY_CASH),
+            any(), eq(GlCategory.PETTY), any(), eq(ACTOR_ID));
         verify(events).publish(eq("PettyCashPaid.v1"), any(), any(), any());
     }
 

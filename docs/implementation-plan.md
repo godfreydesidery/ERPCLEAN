@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `2039680` — F5.9 backend (cash pickup + petty cash + close-till variance math). Uncommitted: F5.10 backend slice (X / Z report data contract; PDF + object storage deferred).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `d27387f` — F5.10 backend (X / Z report data contract). Uncommitted: F6.2 backend slice (multi-currency cash book + FX-aware ledger).
 
-**▶ RESUME POINT:** next slice is **F6.2 — multi-currency cash book** (depends on F6.1 + F5.6; both done). F6.3 (end-of-day banking + supervisor adjustment) is also unblocked. F5.7 gift-card tender still blocked on F7.1; PDF rendering + object-storage upload of the Z-report is a separate follow-on slice. F5.10 backend (`TillReportDto` + `TillReportService` computing X-report (live, OPEN sessions) and Z-report (recomputed, CLOSED/RECONCILED sessions) from the immutable source tables; per-tender-method breakdown, refunds/voids math, pickups + petty-cash by category, variance from the till-session snapshot) is done. `GET /api/v1/reports/x-report` + `/z-report` shipped. Working tree dirty until the F5.10 commit.
+**▶ RESUME POINT:** next slice is **F6.3 — end-of-day banking + supervisor adjustment** (depends on F6.1 + F2.1; both done). F5.7 gift-card tender still blocked on F7.1; Z-report PDF + object-storage upload is a separate follow-on infra slice. F6.2 backend (cash_book PK extended to include `currency_code` so the projection splits per tender currency; cash_entry gains `tender_amount` + `fx_rate_snapshot`; `CashLedgerService.post` signature now takes `tenderAmount + fxRateSnapshot + tenderCurrency` and derives the functional amount; POS sale/refund/void cash entries now flow the FX info from `pos_payment` straight through to the cash book, so a USD tender lands in a per-USD bucket with the right rate snapshot; other producers (TillSession, SalesReceipt, SupplierPayment, CashPickup, PettyCash) stay functional-only with `fx_rate_snapshot = 1`. Per-currency close variance is a follow-on (needs `declaredCashByCurrency` on the close request). Working tree dirty until the F6.2 commit.
 
-**Progress:** ~69% of MVP slices complete (36 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F5.9 backend + F5.10 backend + F6.1 backend done; F5.7 blocked, F6.2 / F6.3 next, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~71% of MVP slices complete (37 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F5.9 backend + F5.10 backend + F6.1 backend + F6.2 backend done; F5.7 blocked, F6.3 next, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -61,8 +61,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 **Done in Phase 6:**
 - F6.1 — Cash entries + cash book (backend; web `/cash/ledger` + `/cash/cash-book` screens deferred). `cash_entry` append-only ledger + `cash_book` write-through projection (per-branch / per-account / per-business-date opening + in + out + closing); idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call is a no-op; CashLedgerService is the posting port — all source modules call it in the same transaction so a rolled-back source doc rolls back the cash entry too; `V40` schema + `V40_1` sequence (per dialect) + `V41` seeds `CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`; `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1` events. Producer wiring landed in this slice: POS sale closes write IN-TILL per CASH `pos_payment` (`ref_type = PosSalePayment`); POS refunds write OUT-TILL per CASH refund payment (`PosRefundPayment`, `gl_category = CASH_REFUND`); same-day voids reverse the original CASH rows (`PosVoidPayment`); TillSession open writes the opening-float IN-TILL (`TillFloat` / `TILL_FLOAT`); TillSession close writes a variance entry on non-zero variance (surplus = IN, shortage = OUT, `TillVariance` / `VARIANCE`); SalesReceipt posts an IN entry on the method-mapped account (`CASH_BOX` / `BANK` / `MOBILE_MONEY`; CARD + STORE_CREDIT settle off-ledger); SupplierPayment posts an OUT entry on the method-mapped account. Read API at `GET /api/v1/cash-entries` + `GET /api/v1/cash-book` (gated by `CASH.READ`). Direct supervisor-adjustment + bank-deposit endpoints + cash pickup / petty cash consumers + multi-currency book deferred to follow-on slices.
+- F6.2 — Multi-currency cash book (backend). `V44` extends `cash_book` PK from `(branch_id, account, business_date)` to `(branch_id, account, currency_code, business_date)` so the projection splits per tender currency (US-DAY-006); `cash_entry` gains `tender_amount` + `fx_rate_snapshot` columns and the existing `currency_code` is re-interpreted as the tender currency (functional-currency rows backfill cleanly with `fx_rate_snapshot = 1`). `CashLedgerService.post` signature now takes `(tenderAmount, fxRateSnapshot, tenderCurrency, …)` and derives the functional `amount = tenderAmount × fxRateSnapshot`. POS sale/refund/void cash entries now flow the FX info from `pos_payment` straight through (so a USD tender lands in a per-USD `cash_book` bucket with the snapped rate); TillSession open/close, SalesReceipt, SupplierPayment, CashPickup, PettyCash stay functional-only with `fx_rate_snapshot = 1`. `cash_book` amounts are stored in the row's own tender currency so per-currency variance is a direct row read with no FX involved. Per-currency close variance (the cashier declares per currency) is deferred to a follow-on — needs `declaredCashByCurrency` on the close request.
 
-**Next slice (start here):** **F6.2** — Multi-currency cash book. Then F6.3 (end-of-day banking + supervisor adjustment). F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred; F5.10 PDF + object-storage upload deferred to a follow-on infra slice. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F6.3** — End-of-day banking + supervisor adjustment. F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred; F5.10 PDF + object-storage upload deferred to a follow-on infra slice; F6.2 per-currency close variance deferred (needs `declaredCashByCurrency` on the close request). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -994,13 +995,18 @@ Skip until F7.1 lands.
 
 ## F6.2 — Multi-currency cash book
 
-**Story:** US-DAY-006 · **Size:** M · **Status:** `[ ]`
+**Story:** US-DAY-006 · **Size:** M · **Status:** `[~]` (backend done; per-currency close variance deferred)
 **Dependencies:** F6.1, F5.6.
 
 **Backend:**
-- [ ] Composite PK extension; per-currency variance.
+- [x] `V44` extends `cash_book` PK to include `currency_code` so the projection splits per tender currency; `cash_entry` gains `tender_amount` + `fx_rate_snapshot` (existing rows backfill to tender = amount, rate = 1). Existing `cash_entry.currency_code` re-interpreted as the **tender** currency.
+- [x] `CashEntry` / `CashBook` / `CashBookId` entities updated; `CashBook` getters delegate to the composite PK for `branchId` / `account` / `currencyCode` / `businessDate`; row amounts stay in the row's own tender currency.
+- [x] `CashLedgerService.post(...)` signature now takes `(tenderAmount, fxRateSnapshot, tenderCurrency, ...)` and derives the functional `amount = tenderAmount × fxRateSnapshot` (HALF_UP at scale 4). Idempotency on `(refType, refId, direction)` unchanged.
+- [x] Producer wiring updated — POS sale/refund/void cash entries flow `pos_payment.tenderAmount / fxRateSnapshot / tenderCurrency` through (US-DAY-006 main use case: USD tender lands in a per-USD bucket); TillSession open/close, SalesReceipt, SupplierPayment, CashPickup, PettyCash pass `fx_rate_snapshot = 1` (these source docs aren't FX-aware yet).
+- [x] Unit tests — `CashLedgerServiceImplTest` extended (8 cases, +2 new: USD-5-at-3800 derives functional 19,000 + saves tender + rate / currency on the entry; cash_book USD bucket records the tender amount (5), not functional). Other producer tests updated for the new signature.
+- [ ] **Deferred to a follow-on slice:** per-currency close variance — needs `declaredCashByCurrency` on the close request, then `computeExpectedCash` partitioned per currency, and one variance entry per non-zero per-currency delta. The cash_book per-currency split needed to make this trivial is already in place.
 
-**Tests:** `TC-CASH-017` .. `TC-CASH-019`; `TC-E2E-007`.
+**Tests:** `TC-CASH-017` (composite PK extension) + `TC-CASH-018` (foreign-currency entry stores tender + functional) + `TC-CASH-019` (functional entries have fx_rate_snapshot = 1) covered by unit tests; `TC-E2E-007` (per-currency variance e2e) pending the close-request extension.
 
 ---
 

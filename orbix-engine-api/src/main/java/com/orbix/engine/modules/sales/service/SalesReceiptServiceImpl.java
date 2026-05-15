@@ -113,6 +113,8 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
         // other methods land an IN entry on their matching account.
         Optional<CashAccount> account = accountFor(receipt.getMethod());
         if (account.isPresent()) {
+            // Sales receipts are single-currency per receipt; F6.2 multi-currency
+            // book stores the tender amount as-is with fx_rate_snapshot = 1.
             cashLedger.post(
                 Instant.now(),
                 receipt.getCompanyId(),
@@ -121,6 +123,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
                 account.get(),
                 CashDirection.IN,
                 receipt.getTotalAmount(),
+                java.math.BigDecimal.ONE,
                 receipt.getCurrencyCode(),
                 CashRefType.SALES_RECEIPT,
                 receipt.getId(),

@@ -23,6 +23,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +64,9 @@ public class PettyCashServiceImpl implements PettyCashService {
         ));
 
         // Single OUT-TILL — petty cash leaves the system; no paired IN.
+        // Always functional currency; F6.2 stores fx_rate_snapshot = 1.
         cashLedger.post(at, companyId, session.getBranchId(), session.getBusinessDate(),
-            CashAccount.TILL, CashDirection.OUT, request.amount(),
+            CashAccount.TILL, CashDirection.OUT, request.amount(), BigDecimal.ONE,
             requireCompanyCurrency(companyId),
             CashRefType.PETTY_CASH, saved.getId(), GlCategory.PETTY,
             request.description(), actorId);

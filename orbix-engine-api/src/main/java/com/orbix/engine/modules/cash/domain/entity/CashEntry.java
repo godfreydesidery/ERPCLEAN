@@ -56,9 +56,19 @@ public class CashEntry {
     @Column(nullable = false, length = 10)
     private CashDirection direction;
 
+    /** Functional-currency-converted value. {@code amount = tenderAmount × fxRateSnapshot}. */
     @Column(nullable = false, precision = 18, scale = 4)
     private BigDecimal amount;
 
+    /** Value in {@link #currencyCode} (the tender currency). Equal to {@link #amount} when functional. */
+    @Column(name = "tender_amount", nullable = false, precision = 18, scale = 4)
+    private BigDecimal tenderAmount;
+
+    /** Rate used to back-convert {@link #tenderAmount} → {@link #amount}. 1 for functional entries. */
+    @Column(name = "fx_rate_snapshot", nullable = false, precision = 20, scale = 8)
+    private BigDecimal fxRateSnapshot;
+
+    /** Tender currency. Identifies the cash_book bucket the row aggregates into (F6.2). */
     @Column(name = "currency_code", nullable = false, length = 3)
     private String currencyCode;
 
@@ -84,10 +94,16 @@ public class CashEntry {
     @SuppressWarnings("java:S107")  // posting row is inherently wide
     public CashEntry(Instant at, Long companyId, Long branchId, LocalDate businessDate,
                      CashAccount account, CashDirection direction, BigDecimal amount,
-                     String currencyCode, String refType, Long refId,
-                     GlCategory glCategory, String notes, Long actorId) {
+                     BigDecimal tenderAmount, BigDecimal fxRateSnapshot, String currencyCode,
+                     String refType, Long refId, GlCategory glCategory, String notes, Long actorId) {
         if (amount.signum() <= 0) {
             throw new IllegalArgumentException("cash_entry amount must be > 0; direction carries the sign");
+        }
+        if (tenderAmount.signum() <= 0) {
+            throw new IllegalArgumentException("cash_entry tender_amount must be > 0");
+        }
+        if (fxRateSnapshot.signum() <= 0) {
+            throw new IllegalArgumentException("cash_entry fx_rate_snapshot must be > 0");
         }
         this.at = at;
         this.companyId = companyId;
@@ -96,6 +112,8 @@ public class CashEntry {
         this.account = account;
         this.direction = direction;
         this.amount = amount;
+        this.tenderAmount = tenderAmount;
+        this.fxRateSnapshot = fxRateSnapshot;
         this.currencyCode = currencyCode;
         this.refType = refType;
         this.refId = refId;

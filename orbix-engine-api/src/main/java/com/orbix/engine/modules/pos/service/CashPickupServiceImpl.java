@@ -23,6 +23,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -65,11 +66,14 @@ public class CashPickupServiceImpl implements CashPickupService {
         // Paired entries: cash leaves the till, lands in the back-office cash box.
         // Same ref_id (the pickup), different direction → both pass the (ref_type, ref_id, direction)
         // idempotency UNIQUE constraint.
+        // Pickups always move functional currency (cashier-side cash hand-off);
+        // F6.2 multi-currency book splits per tender currency but pickups land in
+        // the functional bucket with fx_rate_snapshot = 1.
         cashLedger.post(at, companyId, session.getBranchId(), session.getBusinessDate(),
-            CashAccount.TILL, CashDirection.OUT, request.amount(), currency,
+            CashAccount.TILL, CashDirection.OUT, request.amount(), BigDecimal.ONE, currency,
             CashRefType.CASH_PICKUP, saved.getId(), GlCategory.CASH, request.note(), actorId);
         cashLedger.post(at, companyId, session.getBranchId(), session.getBusinessDate(),
-            CashAccount.CASH_BOX, CashDirection.IN, request.amount(), currency,
+            CashAccount.CASH_BOX, CashDirection.IN, request.amount(), BigDecimal.ONE, currency,
             CashRefType.CASH_PICKUP, saved.getId(), GlCategory.CASH, request.note(), actorId);
 
         events.publish("CashPickupRecorded.v1", AGG, String.valueOf(saved.getId()),

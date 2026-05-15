@@ -17,7 +17,13 @@ public record CashEntryDto(
     LocalDate businessDate,
     CashAccount account,
     CashDirection direction,
+    /** Functional-currency-converted value. */
     BigDecimal amount,
+    /** Value in {@link #currencyCode} (the tender currency). */
+    BigDecimal tenderAmount,
+    /** Rate used to back-convert {@link #tenderAmount} → {@link #amount}. 1 for functional. */
+    BigDecimal fxRateSnapshot,
+    /** Tender currency. */
     String currencyCode,
     String refType,
     Long refId,
@@ -29,7 +35,8 @@ public record CashEntryDto(
         return new CashEntryDto(
             entry.getId(), entry.getAt(), entry.getCompanyId(), entry.getBranchId(),
             entry.getBusinessDate(), entry.getAccount(), entry.getDirection(),
-            entry.getAmount(), entry.getCurrencyCode(), entry.getRefType(),
-            entry.getRefId(), entry.getGlCategory(), entry.getNotes(), entry.getActorId());
+            entry.getAmount(), entry.getTenderAmount(), entry.getFxRateSnapshot(),
+            entry.getCurrencyCode(), entry.getRefType(), entry.getRefId(),
+            entry.getGlCategory(), entry.getNotes(), entry.getActorId());
     }
 }

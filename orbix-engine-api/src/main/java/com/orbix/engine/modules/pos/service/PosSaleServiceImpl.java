@@ -475,13 +475,15 @@ public class PosSaleServiceImpl implements PosSaleService {
     }
 
     /**
-     * F6.1: post one {@code cash_entry} per CASH payment row. Card / mobile-money /
-     * voucher / store-credit tenders settle on their own rails and don't hit the
-     * cash module. FX tenders post the functional-currency-converted amount.
+     * F6.1 + F6.2: post one {@code cash_entry} per CASH payment row. Card /
+     * mobile-money / voucher / store-credit tenders settle on their own rails
+     * and don't hit the cash module. FX-aware: the entry stores
+     * {@code tender_currency} + {@code tender_amount} + {@code fx_rate_snapshot}
+     * straight from the {@code pos_payment} row, so the multi-currency cash
+     * book splits per tender currency (US-DAY-006).
      */
     private void postCashEntriesForPayments(PosSale sale, List<PosPayment> rows,
                                             CashDirection direction, String refType, GlCategory gl) {
-        String functional = requireCompanyCurrency(sale.getCompanyId());
         for (PosPayment payment : rows) {
             if (payment.getMethod() != PosPaymentMethod.CASH) {
                 continue;
@@ -493,8 +495,9 @@ public class PosSaleServiceImpl implements PosSaleService {
                 sale.getBusinessDate(),
                 CashAccount.TILL,
                 direction,
-                payment.getAmount(),
-                functional,
+                payment.getTenderAmount(),
+                payment.getFxRateSnapshot(),
+                payment.getTenderCurrency(),
                 refType,
                 payment.getId(),
                 gl,

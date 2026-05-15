@@ -99,12 +99,14 @@ class CashPickupServiceImplTest {
 
         verify(cashLedger).post(any(), eq(COMPANY_ID), eq(BRANCH_ID), eq(BUSINESS_DATE),
             eq(CashAccount.TILL), eq(CashDirection.OUT), eq(new BigDecimal("10000")),
-            eq("TZS"), eq(CashRefType.CASH_PICKUP), any(), any(), any(), eq(ACTOR_ID));
+            eq(BigDecimal.ONE), eq("TZS"), eq(CashRefType.CASH_PICKUP),
+            any(), any(), any(), eq(ACTOR_ID));
         verify(cashLedger).post(any(), eq(COMPANY_ID), eq(BRANCH_ID), eq(BUSINESS_DATE),
             eq(CashAccount.CASH_BOX), eq(CashDirection.IN), eq(new BigDecimal("10000")),
-            eq("TZS"), eq(CashRefType.CASH_PICKUP), any(), any(), any(), eq(ACTOR_ID));
+            eq(BigDecimal.ONE), eq("TZS"), eq(CashRefType.CASH_PICKUP),
+            any(), any(), any(), eq(ACTOR_ID));
         verify(cashLedger, times(2)).post(any(), any(), any(), any(), any(), any(), any(),
-            any(), any(), any(), any(), any(), any());
+            any(), any(), any(), any(), any(), any(), any());
         verify(events).publish(eq("CashPickupRecorded.v1"), any(), any(), any());
     }
 
@@ -121,7 +123,7 @@ class CashPickupServiceImplTest {
             .hasMessageContaining(TillSessionStatus.CLOSED.name());
         verify(pickups, never()).save(any());
         verify(cashLedger, never()).post(any(), any(), any(), any(), any(), any(), any(),
-            any(), any(), any(), any(), any(), any());
+            any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

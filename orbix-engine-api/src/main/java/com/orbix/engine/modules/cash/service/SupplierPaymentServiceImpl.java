@@ -109,6 +109,8 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
 
         // F6.1: paired cash entry on the OUT side. Method determines the account
         // (CASH→CASH_BOX, BANK_TRANSFER/CHEQUE→BANK, MOBILE_MONEY→MOBILE_MONEY).
+        // Supplier payments are single-currency per payment; F6.2 multi-currency
+        // book stores the tender amount as-is with fx_rate_snapshot = 1.
         cashLedger.post(
             Instant.now(),
             payment.getCompanyId(),
@@ -117,6 +119,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
             accountFor(payment.getMethod()),
             CashDirection.OUT,
             payment.getTotalAmount(),
+            BigDecimal.ONE,
             payment.getCurrencyCode(),
             CashRefType.SUPPLIER_PAYMENT,
             payment.getId(),

@@ -96,6 +96,7 @@ public class TillSessionServiceImpl implements TillSessionService {
         // recorded as a single IN since the cash box ledger row is owned by
         // the float assignment doc, not by the till session).
         if (request.openingFloatAmount().signum() > 0) {
+            // Opening float is always functional currency; F6.2 stores fx_rate_snapshot = 1.
             cashLedger.post(
                 Instant.now(),
                 companyId,
@@ -104,6 +105,7 @@ public class TillSessionServiceImpl implements TillSessionService {
                 CashAccount.TILL,
                 CashDirection.IN,
                 request.openingFloatAmount(),
+                BigDecimal.ONE,
                 requireCompanyCurrency(companyId),
                 CashRefType.TILL_FLOAT,
                 session.getId(),
@@ -147,7 +149,10 @@ public class TillSessionServiceImpl implements TillSessionService {
             request.supervisorId(), request.notes());
 
         // F6.1: variance entry on TILL. surplus (declared > expected) → IN,
-        // shortage → OUT. Zero variance posts nothing.
+        // shortage → OUT. Zero variance posts nothing. F6.2: per-currency
+        // variance is a follow-on — for now the close request is a single
+        // functional-currency declared total, so the variance lands in the
+        // functional bucket with fx_rate_snapshot = 1.
         if (variance.signum() != 0) {
             cashLedger.post(
                 Instant.now(),
@@ -157,6 +162,7 @@ public class TillSessionServiceImpl implements TillSessionService {
                 CashAccount.TILL,
                 variance.signum() > 0 ? CashDirection.IN : CashDirection.OUT,
                 variance.abs(),
+                BigDecimal.ONE,
                 requireCompanyCurrency(session.getCompanyId()),
                 CashRefType.TILL_VARIANCE,
                 session.getId(),

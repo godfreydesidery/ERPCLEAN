@@ -22,11 +22,15 @@ import java.util.Optional;
 public interface CashLedgerService {
 
     /**
-     * Idempotent post. Returns the existing entry if the {@code (refType, refId, direction)}
-     * triple has already been written, else inserts a new one. Maintains the
-     * {@code cash_book} projection write-through.
+     * Idempotent FX-aware post. Returns the existing entry if the
+     * {@code (refType, refId, direction)} triple has already been written, else
+     * inserts a new one. Maintains the {@code cash_book} projection
+     * write-through, partitioned by {@code tenderCurrency} (F6.2 / US-DAY-006).
+     * The functional-currency {@code amount} is derived as
+     * {@code tenderAmount × fxRateSnapshot}; pass {@code fxRateSnapshot = 1}
+     * for functional-currency entries.
      *
-     * @throws IllegalArgumentException if {@code amount <= 0}
+     * @throws IllegalArgumentException if {@code tenderAmount <= 0} or {@code fxRateSnapshot <= 0}
      */
     @SuppressWarnings("java:S107")  // posting row is inherently wide; a VO would only shuffle the args
     CashEntryDto post(Instant at,
@@ -35,8 +39,9 @@ public interface CashLedgerService {
                       LocalDate businessDate,
                       CashAccount account,
                       CashDirection direction,
-                      BigDecimal amount,
-                      String currencyCode,
+                      BigDecimal tenderAmount,
+                      BigDecimal fxRateSnapshot,
+                      String tenderCurrency,
                       String refType,
                       Long refId,
                       GlCategory glCategory,
