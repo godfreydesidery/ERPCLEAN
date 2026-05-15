@@ -6,8 +6,10 @@ import { ApiResponse, unwrap } from '../../core/api/api-response';
 import {
   CreateGrnRequest,
   CreateLpoOrderRequest,
+  CreateSupplierInvoiceRequest,
   Grn,
   LpoOrder,
+  SupplierInvoice,
   UpdateLpoOrderRequest
 } from './procurement.models';
 
@@ -68,5 +70,39 @@ export class ProcurementService {
 
   cancelGrn(id: number): Observable<Grn> {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/cancel`, {}));
+  }
+
+  // ---- supplier invoices (F3.3) -------------------------------------------
+
+  listSupplierInvoices(branchId: number | null): Observable<SupplierInvoice[]> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<SupplierInvoice[]>>(
+      `${this.base}/supplier-invoices`, { params }
+    ));
+  }
+
+  getSupplierInvoice(id: number): Observable<SupplierInvoice> {
+    return unwrap(this.http.get<ApiResponse<SupplierInvoice>>(
+      `${this.base}/supplier-invoices/${id}`
+    ));
+  }
+
+  createSupplierInvoice(request: CreateSupplierInvoiceRequest): Observable<SupplierInvoice> {
+    return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
+      `${this.base}/supplier-invoices`, request
+    ));
+  }
+
+  postSupplierInvoice(id: number): Observable<SupplierInvoice> {
+    return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
+      `${this.base}/supplier-invoices/${id}/post`, {}
+    ));
+  }
+
+  cancelSupplierInvoice(id: number): Observable<SupplierInvoice> {
+    return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
+      `${this.base}/supplier-invoices/${id}/cancel`, {}
+    ));
   }
 }

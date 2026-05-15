@@ -121,3 +121,48 @@ export interface CreateGrnRequest {
   notes: string | null;
   lines: CreateGrnLine[];
 }
+
+// ---- F3.3: supplier invoice + 3-way match ----------------------------------
+
+export type SupplierInvoiceStatus =
+  'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
+
+export interface SupplierInvoiceAllocation {
+  grnId: number;
+  amount: number;
+}
+
+export interface SupplierInvoice {
+  id: number;
+  number: string;
+  supplierInvoiceNo: string;
+  companyId: number;
+  branchId: number;
+  supplierId: number;
+  invoiceDate: string;
+  dueDate: string;
+  currencyCode: string;
+  subtotalAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  status: SupplierInvoiceStatus;
+  postedAt: string | null;
+  postedBy: number | null;
+  notes: string | null;
+  allocations: SupplierInvoiceAllocation[];
+}
+
+export interface CreateSupplierInvoiceRequest {
+  number: string;
+  supplierInvoiceNo: string;
+  branchId: number;
+  supplierId: number;
+  invoiceDate: string;
+  dueDate: string | null;
+  currencyCode: string;
+  subtotalAmount: number;
+  taxAmount: number;
+  notes: string | null;
+  allocations: SupplierInvoiceAllocation[];
+}
