@@ -81,6 +81,10 @@ orbix:
     # sum of its GRN allocations (0.005 = ±0.5%). Above this the match is
     # rejected — the operator must edit the allocations or the invoice totals.
     invoice-match-tolerance-pct: 0.005
+  sales:
+    # Per-line discount percentage above which an authoriser holding
+    # `SALES.DISCOUNT_APPROVE` is required. Set to 100 to disable.
+    discount-threshold-pct: 10
   flags:
     cache-ttl-seconds: 30
 
