@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `af482a4` — F2.4 web (stock batches view).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `49e1f4a` — F2.5 web (adjust + internal-consumption forms).
 
-**▶ RESUME POINT:** next slice is **F2.5 — stock adjustments + internal consumption** (`POST /api/v1/adjustments` with supervisor-threshold rule + `POST /api/v1/internal-consumption` carrying `consumption_category` + `authorised_by_user_id`; section-tagged moves for section-to-section transfer). All work through F2.4 is committed; working tree clean. Read the F2.5 section below before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** next slice is **F3.1 — LPO lifecycle** — Phase 3 (inbound) opens here. `LpoOrder` / `LpoOrderLine` entities, DRAFT → PENDING_APPROVAL → APPROVED → CANCELLED state machine, threshold-driven auto-approval, PDF / email export on approval. All work through F2.5 is committed; working tree clean. Read the F3.1 section below before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -31,8 +31,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F2.2 — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance` cache via `V11`; moving-average cost on inbound, consume-at-average on outbound; negative-stock guard + `STOCK.OVERSELL` via `V12`; posting requires an open day via `DayGuard`; `StockMoved`/`BalanceUpdated`/`LowStockTriggered.v1`; web `/stock/balances` + `/stock/card/:itemId`)
 - F2.3 — stock counts + transfers (`StockCount`/`StockCountLine` DRAFT→IN_PROGRESS→CLOSED→POSTED with variance→ADJUSTMENT moves; `StockTransfer`/`StockTransferLine` DRAFT→ISSUED→RECEIVED→CLOSED with TRANSFER_OUT/IN moves; `V13`/`V14`; `STOCK.COUNT`/`STOCK.TRANSFER`; web `/stock/counts` + `/stock/transfers`)
 - F2.4 — batch tracking + FEFO consumption (`StockBatch` entity per (branch, item, batch_no) with ACTIVE/EXHAUSTED/EXPIRED/RECALLED lifecycle; `StockBatchService` exposes `createBatch` for inbound flows + `drainFefo` picker + `markExpired` + `recallBatch`; daily `StockBatchExpiryJob` flags ACTIVE rows past expiry; `EXPIRY_WRITE_OFF` move type + recall writes off remaining on-hand; `stock_move.batch_id` nullable column threads through `PostStockMoveRequestDto`; `V15` + `V16` migrations; `STOCK.BATCH` permission; F1.6 archive guard now blocks archive/disable-tracking while active batches exist; web `/stock/batches` expiring-soon + all-batches modes with recall action)
+- F2.5 — stock adjustments + internal consumption (`POST /api/v1/adjustments` posts ADJUSTMENT moves with a configurable monetary threshold — above threshold or for oversells an `authorisedByUserId` must hold `STOCK.ADJUST_APPROVE`; `POST /api/v1/internal-consumption` posts INTERNAL_CONSUMPTION moves with required category + section + authoriser; new `stock_move` columns `section_id` / `consumption_category` / `authorised_by_user_id` via `V17`; new move types `INTERNAL_CONSUMPTION`/`STAFF_PURCHASE`/`EMPLOYEE_GIFT`/`RESERVED`; `V18` seeds `STOCK.ADJUST` / `STOCK.ADJUST_APPROVE` / `STOCK.INTERNAL_CONSUMPTION`; web `/stock/adjust` + `/stock/internal-consumption` forms)
 
-**Next slice (start here):** **F2.5** — stock adjustments + internal consumption. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F3.1** — LPO lifecycle. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -507,22 +508,23 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.5 — Stock adjustments + internal consumption
 
-**Story:** US-STOCK-003, US-STOCK-015, US-STOCK-016 · **Size:** S · **Status:** `[ ]`
+**Story:** US-STOCK-003, US-STOCK-015, US-STOCK-016 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F2.2.
 
 **Backend:**
-- [ ] `POST /api/v1/adjustments` + supervisor-threshold rule.
-- [ ] `POST /api/v1/internal-consumption` with `consumption_category` + `authorised_by_user_id`.
-- [ ] Section-tagged moves for section-to-section transfer.
+- [x] `POST /api/v1/adjustments` (`AdjustmentService` + Impl, gated by `STOCK.ADJUST`) — posts an `ADJUSTMENT` stock move; supervisor-threshold rule: when `|qty × cost|` exceeds `orbix.stock.adjustment-threshold` (default 50000) or `allowOversell = true`, an `authorisedByUserId` is required, must differ from the caller, and must hold `STOCK.ADJUST_APPROVE` (verified via `PermissionResolverService`).
+- [x] `POST /api/v1/internal-consumption` (`InternalConsumptionService` + Impl, gated by `STOCK.INTERNAL_CONSUMPTION`) — outbound `INTERNAL_CONSUMPTION` move with required `consumptionCategory` (CANTEEN / DISPLAY / SAMPLES / DONATION / MAINTENANCE / OTHER), `sectionId`, and `authorisedByUserId` (must hold the same permission and differ from caller).
+- [x] Section-tagged moves: `stock_move` gains nullable `section_id` / `consumption_category` / `authorised_by_user_id` (`V17`); `PostStockMoveRequestDto` threads them so any future section-to-section transfer path can stamp them.
 
 **Web:**
-- [ ] `/stock/adjust` form (manager).
-- [ ] `/stock/internal-consumption` form.
+- [x] `/stock/adjust` form — signed qty + reason + optional section / batch / authoriser + oversell checkbox.
+- [x] `/stock/internal-consumption` form — qty + category dropdown + required section / authoriser / reason.
 
 **Tests:**
-- **System:** `TC-STOCK-007`, `TC-STOCK-008`, `TC-STOCK-023`, `TC-STOCK-024`, `TC-STOCK-025`.
+- **Unit:** `AdjustmentServiceImplTest` (8) — below-threshold solo, above-threshold rejection without authoriser / self-authoriser / authoriser missing permission, above-threshold with approved authoriser, oversell forces authoriser, zero qty rejected, inbound uses unit cost for threshold. `InternalConsumptionServiceImplTest` (3) — happy path stamps category/section/authoriser, self-authoriser rejected, authoriser without `STOCK.INTERNAL_CONSUMPTION` 403.
+- **System:** `TC-STOCK-007`, `TC-STOCK-008`, `TC-STOCK-023`, `TC-STOCK-024`, `TC-STOCK-025`. *(pending)*
 
-**DoD:** Staff canteen draws stock; report shows consumption by category.
+**DoD:** Staff canteen draws stock; report shows consumption by category. *(Reporting view lands with F8.1/F8.2; F2.5 ships the posting path + per-category data on the move row.)*
 
 ---
 
