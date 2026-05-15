@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `4ffa45c` — F6.2 backend (multi-currency cash book + FX-aware ledger). Uncommitted: F6.3 backend slice (cash adjustment + bank deposit audit-docs + paired cash-ledger writes).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `20c107f` — F6.3 backend (cash adjustment + bank deposit). Uncommitted: F7.1 backend slice (gift cards — ledger, issue with cash side, redeem/refund/freeze/expire, scheduled expiry job).
 
-**▶ RESUME POINT:** next slice is **F7.1 — Gift cards** (depends on F5.2 + F6.1; both done) — that also unblocks F5.7 (gift-card tender). Phase 6 cash module is now complete (F6.1 + F6.2 + F6.3 backend). F6.3 backend (`cash_adjustment` + `bank_deposit` audit-doc tables in `V45`; `CashAdjustmentService` writes a single cash entry with `gl_category = ADJUSTMENT` and a mandatory reason on `POST /api/v1/cash-adjustments` (gated by `CASH.ADJUST`); `BankDepositService` writes paired OUT-CASH_BOX + IN-BANK entries on `POST /api/v1/bank-deposits` (gated by `CASH.BANKING`); both require an OPEN business day) is done. Per-currency close variance (F6.2 follow-on) still pending; Z-report PDF + object storage still pending. Working tree dirty until the F6.3 commit.
+**▶ RESUME POINT:** next slice is **F5.7 — Gift card tender at POS** (now unblocked by F7.1). Then F7.2 (layby + pre-order) and the rest of Phase 7. F5.7 wires `pos_payment.method = GIFT_CARD` into `PosSaleServiceImpl.post` so the till can scan a card, call `GiftCardService.redeem`, and record the redemption as a tender row (no cash entry — gift cards are a liability transfer). F7.1 backend (`gift_card` + `gift_card_txn` tables in `V46`, `V46_1` sequences, `V47` permission seed for `GIFTCARD.ISSUE/REDEEM/LOOKUP/FREEZE`; `GiftCardService` with issue (writes LOAD txn + cash entry via `CashLedgerService`), redeem (debit + status flip + idempotent on `(card, refDocType, refDocId, kind)`), refund-credit (re-activates fully-redeemed cards), freeze/unfreeze, and a runExpiryJob hook; scheduled `GiftCardExpiryJob` daily at 00:10 UTC retires due cards and writes EXPIRE txns for breakage; `GiftCardController` exposes the full surface; codes auto-generate as 12-digit numeric with collision-safety net) is done. Per-currency close variance + Z-report PDF + web screens still pending. Working tree dirty until the F7.1 commit.
 
-**Progress:** ~73% of MVP slices complete (38 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F5.9 backend + F5.10 backend + F6.1 backend + F6.2 backend + F6.3 backend done; F5.7 unblocked once F7.1 lands; Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~75% of MVP slices complete (39 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F5.9 backend + F5.10 backend + F6.1 backend + F6.2 backend + F6.3 backend + F7.1 backend done; F5.7 next, F7.2-F7.5 + Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -64,7 +64,10 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F6.2 — Multi-currency cash book (backend). `V44` extends `cash_book` PK from `(branch_id, account, business_date)` to `(branch_id, account, currency_code, business_date)` so the projection splits per tender currency (US-DAY-006); `cash_entry` gains `tender_amount` + `fx_rate_snapshot` columns and the existing `currency_code` is re-interpreted as the tender currency (functional-currency rows backfill cleanly with `fx_rate_snapshot = 1`). `CashLedgerService.post` signature now takes `(tenderAmount, fxRateSnapshot, tenderCurrency, …)` and derives the functional `amount = tenderAmount × fxRateSnapshot`. POS sale/refund/void cash entries now flow the FX info from `pos_payment` straight through (so a USD tender lands in a per-USD `cash_book` bucket with the snapped rate); TillSession open/close, SalesReceipt, SupplierPayment, CashPickup, PettyCash stay functional-only with `fx_rate_snapshot = 1`. `cash_book` amounts are stored in the row's own tender currency so per-currency variance is a direct row read with no FX involved. Per-currency close variance (the cashier declares per currency) is deferred to a follow-on — needs `declaredCashByCurrency` on the close request.
 - F6.3 — End-of-day banking + supervisor adjustment (backend). `V45` adds `cash_adjustment` and `bank_deposit` audit-doc tables so direct-write cash entries have a stable `ref_id`. `CashAdjustmentService` posts a single `cash_entry` with `gl_category = ADJUSTMENT` (mandatory reason carried both on the audit-doc and as the entry's notes); `BankDepositService` posts paired entries — OUT-CASH_BOX (`gl=CASH`) + IN-BANK (`gl=BANK`) — with the deposit row's id as `ref_id` and `ref_type = BankDeposit` (idempotency UNIQUE accepts both legs because direction differs). Both flows `DayGuard.requireOpenDay` so a closed day rejects 422. New endpoints: `POST /api/v1/cash-adjustments` (gated `CASH.ADJUST`, seeded in F6.1) + `POST /api/v1/bank-deposits` (gated `CASH.BANKING`, seeded in F6.1), plus per-branch / per-date `GET` listers. `CashAdjustmentPosted.v1` + `BankDepositPosted.v1` events. Two new `CashRefType` constants — `CashAdjustment`, `BankDeposit`. **Phase 6 cash module is now backend-complete** (modulo per-currency close variance + Z-report PDF + web screens).
 
-**Next slice (start here):** **F7.1** — Gift cards (also unblocks F5.7 gift-card tender). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred; F5.10 PDF + object-storage upload deferred to a follow-on infra slice; F6.2 per-currency close variance deferred (needs `declaredCashByCurrency` on the close request). Phase-0 test debt still outstanding.
+**Done in Phase 7:**
+- F7.1 — Gift cards (backend; Flutter issue-card flow + redeem-tender wiring in F5.7 + admin web screens deferred). `gift_card` (bearer code UNIQUE, lifecycle status ACTIVE/FULLY_REDEEMED/EXPIRED/FROZEN/REFUNDED) + append-only `gift_card_txn` (LOAD/REDEEM/REFUND/EXPIRE, idempotency UNIQUE on `(gift_card_id, ref_doc_type, ref_doc_id, kind)`) — `V46` schema + `V46_1` per-dialect sequences. `V47` seeds `GIFTCARD.ISSUE` / `GIFTCARD.REDEEM` / `GIFTCARD.LOOKUP` / `GIFTCARD.FREEZE` permissions. `GiftCardService.issue` writes the card + LOAD txn AND the cash-side entry via `CashLedgerService` in the same transaction (`ref_type = GiftCardIssue`, `gl_category = GIFT_CARD_ISSUE_PROCEEDS`, CARD-method skips cash side); `redeem` debits balance (rejects FROZEN/EXPIRED/over-balance/expired-at-time, idempotent on the txn ref-doc triple — POS retries can't double-debit); `refundCredit` adds back to balance and re-activates FULLY_REDEEMED cards; `freeze`/`unfreeze` toggle lock state; `lookup`/`listTransactions` are read-only inquiries. Bearer code auto-generates as a 12-digit random numeric with collision-check fallback to the UNIQUE constraint; supplying a pre-printed code from physical-card inventory is also supported. `GiftCardController` exposes `POST /api/v1/gift-cards` + `GET /api/v1/gift-cards/{code}` + `GET /api/v1/gift-cards/{code}/transactions` + `POST /api/v1/gift-cards/{code}/{redeem|refund|freeze|unfreeze}`. Scheduled `GiftCardExpiryJob` runs daily at 00:10 UTC (`orbix.giftcard.expiry-cron`) — finds ACTIVE cards past `expires_at`, posts an EXPIRE txn for the remaining balance, flips status to EXPIRED, emits `GiftCardExpired.v1`. Two new `CashRefType` constants — `GiftCardIssue`. Code is bearer-secret — `GiftCard.toString` excludes it and audit notes mask to last-4 (`****1234`).
+
+**Next slice (start here):** **F5.7** — Gift card tender at POS (now unblocked by F7.1). Then F7.2 (layby + pre-order), F7.3 (production: BOM + batch), F7.4 (production wastage), F7.5 (EOD orchestration). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred; F5.10 PDF + object-storage upload deferred to a follow-on infra slice; F6.2 per-currency close variance deferred (needs `declaredCashByCurrency` on the close request). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -1035,22 +1038,29 @@ Skip until F7.1 lands.
 
 ## F7.1 — Gift cards
 
-**Story:** US-GC-001 .. US-GC-008 · **Size:** L · **Status:** `[ ]`
+**Story:** US-GC-001 .. US-GC-008 · **Size:** L · **Status:** `[~]` (backend done; web + Flutter deferred)
 **Dependencies:** F5.2, F6.1.
 
 **Backend:**
-- [ ] `GiftCard`, `GiftCardTxn` entities.
-- [ ] `GiftCardService` + Impl: issue, redeem, refund, freeze, unfreeze, expire.
-- [ ] Scheduled expiry job.
+- [x] `V46` — `gift_card` (bearer code UNIQUE, lifecycle status ACTIVE/FULLY_REDEEMED/EXPIRED/FROZEN/REFUNDED) + append-only `gift_card_txn` (LOAD/REDEEM/REFUND/EXPIRE, idempotency UNIQUE on `(gift_card_id, ref_doc_type, ref_doc_id, kind)`). `V46_1` per-dialect sequences. `V47` seeds `GIFTCARD.ISSUE` / `GIFTCARD.REDEEM` / `GIFTCARD.LOOKUP` / `GIFTCARD.FREEZE`.
+- [x] `GiftCard` + `GiftCardTxn` entities with `GiftCardStatus` / `GiftCardTxnKind` enums. `GiftCard.toString` excludes the bearer code; audit notes mask to last-4.
+- [x] `GiftCardService` impl with `issue` (writes card + LOAD txn + cash-side entry via `CashLedgerService` in one transaction; `ref_type = GiftCardIssue`, `gl_category = GIFT_CARD_ISSUE_PROCEEDS`; CARD-method skips cash side), `redeem` (debits balance; rejects FROZEN / EXPIRED / over-balance / expired-at-time; idempotent on the txn ref-doc triple so POS retries can't double-debit), `refundCredit` (adds back to balance + re-activates FULLY_REDEEMED cards), `freeze` / `unfreeze`, `lookup` + `listTransactions` (read-only).
+- [x] Bearer code generation — 12-digit random numeric with collision-check + fallback to the UNIQUE constraint; supplying a pre-printed code from physical-card inventory is also supported.
+- [x] `GiftCardController` exposes `POST /api/v1/gift-cards` + `GET /api/v1/gift-cards/{code}` + `GET /api/v1/gift-cards/{code}/transactions` + `POST /api/v1/gift-cards/{code}/{redeem|refund|freeze|unfreeze}`. Permissions split — issuance / lookup / redemption / freeze each have their own grant so the POS device holds `GIFTCARD.REDEEM` without being able to freeze.
+- [x] Scheduled `GiftCardExpiryJob` daily at 00:10 UTC (`orbix.giftcard.expiry-cron`) — finds ACTIVE cards past `expires_at`, posts an EXPIRE txn for the remaining balance (breakage), flips status to EXPIRED, emits `GiftCardExpired.v1`.
+- [x] Outbox events — `GiftCardIssued.v1`, `GiftCardRedeemed.v1`, `GiftCardRefunded.v1`, `GiftCardFrozen.v1`, `GiftCardUnfrozen.v1`, `GiftCardExpired.v1`.
+- [x] New `CashRefType` constant: `GiftCardIssue`.
+- [x] Unit tests — `GiftCardServiceImplTest` (14 cases: issue + cash entry, CASH vs CARD tender, auto-generated code, duplicate code reject, partial redeem, full redeem flip, over-balance reject, frozen reject, redeem idempotency, refund re-activates FULLY_REDEEMED, freeze/unfreeze, expiry job writes EXPIRE txn, cross-company lookup).
+- [ ] **Deferred:** F5.7 POS-side wiring (`pos_payment.method = GIFT_CARD` calls `GiftCardService.redeem` during `PosSaleServiceImpl.post`); customer-return refund of gift-card-tendered sales (US-GC-004 — needs F4.4 + F7.1 wiring); cross-currency gift cards (out of scope for MVP).
 
 **Web:**
-- [ ] `/gift-cards` admin issuance + balance lookup.
+- [ ] `/gift-cards` admin issuance + balance lookup — deferred.
 
 **Flutter POS:**
-- [ ] Issue-card flow.
-- [ ] Redeem-card tender option (in F5.7).
+- [ ] Issue-card flow — deferred to Flutter mini-phase.
+- [ ] Redeem-card tender option — lands with F5.7 wiring.
 
-**Tests:** `TC-GC-001` .. `TC-GC-031`; `TC-E2E-015`, `TC-E2E-016`.
+**Tests:** `TC-GC-001` .. `TC-GC-031`; `TC-E2E-015`, `TC-E2E-016`. Backend unit tests cover the core lifecycle; integration + e2e tests pending.
 
 ---
 

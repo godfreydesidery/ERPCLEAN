@@ -37,4 +37,7 @@ public final class CashRefType {
 
     /** Supervisor cash adjustment — single entry, mandatory reason. */
     public static final String CASH_ADJUSTMENT = "CashAdjustment";
+
+    /** Gift-card issuance — single IN entry for the load proceeds. */
+    public static final String GIFT_CARD_ISSUE = "GiftCardIssue";
 }

@@ -66,6 +66,9 @@ orbix:
     dispatch-interval-ms: 1000
     batch-size: 100
     max-attempts: 10
+  giftcard:
+    # F7.1 — daily auto-expiry of gift cards past expires_at. Default 00:10 UTC.
+    expiry-cron: "0 10 0 * * *"
   stock:
     # FEFO expiry-flag job. Runs daily by default (cron: "0 5 0 * * *" = 00:05 UTC).
     batch-expiry-cron: "0 5 0 * * *"
