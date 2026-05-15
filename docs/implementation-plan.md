@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `6f48339` — F5.2 web (POS sales read-only admin view).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `fd0debb` — F5.3 web (void button + header-discount display).
 
-**▶ RESUME POINT:** next slice is **F5.3 — Discounts, voids, mixed tender** (line/header discount approval threshold, void-on-same-day, mixed-tender finalisation including FX hooks). Mixed-tender already works (multiple `pos_payment` rows); F5.3 layers the discount-approval + void path. All work through F5.2 is committed; working tree clean.
+**▶ RESUME POINT:** next slice is **F5.4 — Offline sync** (XL — split into F5.4a local SQLite + balance snapshot, F5.4b outbox push + `client_op_id` idempotency, F5.4c conflict resolution). Server-side `client_op_id` idempotency is already live from F5.2; F5.4 is mostly Flutter-side work and likely lands as a dedicated mini-phase. All work through F5.3 is committed; working tree clean.
 
-**Progress:** ~52% of MVP slices complete (27 of 52 — Phases 0-4 + F5.1 + F5.2 done; F5.3–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~56% of MVP slices complete (29 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 done; F5.4–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -51,8 +51,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 **Done in Phase 5:**
 - F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred.)
 - F5.2 — Basic POS sale (cash + mixed tender) — backend ships the full server-side contract; Flutter till app deferred. `PosSale` + `PosSaleLine` + `PosPayment` entities (DATA-MODEL §7.3-§7.5 + Phase 1.1 §17.12 additions); POS sales committed locally and pushed as POSTED (no DRAFT); idempotent on `clientOpId` per company. Validation: OPEN till session, `section_id` matches the till's branch (required), customer exists, tender ≥ total. Posting writes outbound SALE stock moves via `StockMoveService` (DayGuard inherited) — batch-tracked items drain FEFO via `StockBatchService` and emit one stock_move per pick. Mixed tender (cash + card + mobile money + voucher + store credit) via N `pos_payment` rows; card terminals record `terminal_id` + `last4` only. `V34` + `V34_1` + `V35` migrations seed `POS.SALE_POST`. Event: `PosSaleClosed.v1`. Web: read-only `/admin/pos-sales` viewer for managers.
+- F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
 
-**Next slice (start here):** **F5.3** — Discounts, voids, mixed tender (the mixed-tender path is already live in F5.2; F5.3 adds the discount-approval-threshold flow + same-day void). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.4** — Offline sync. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -799,10 +800,22 @@ The biggest phase. Strongly recommend doing F5.1 → F5.2 → F5.4 (offline sync
 
 ## F5.3 — Discounts, voids, mixed tender
 
-**Story:** US-POS-005, US-POS-006, US-POS-009 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-005, US-POS-006, US-POS-009 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F5.2.
 
-**Tests:** `TC-POS-012` .. `TC-POS-015`.
+**Backend:**
+- [x] Per-line discount threshold via `orbix.pos.discount-threshold-pct` (default 10%); above-threshold lines require `discountApproverId` (must differ from caller, must hold `POS.DISCOUNT_APPROVE`).
+- [x] Optional header-level `headerDiscountAmount` on the request — applied after per-line tax; rejected when negative or > subtotal.
+- [x] Same-business-day void path: `POST /api/v1/pos-sales/{id}/void` (gated by `POS.SALE_VOID`). Writes RETURN_IN compensating stock moves at the snapped line cost; rejects voids on a different business day or on sales containing batch-tracked lines (use F5.5 refund there).
+- [x] Mixed tender (CASH / CARD / MOBILE_MONEY / VOUCHER / STORE_CREDIT) already live from F5.2 — F5.3 doesn't re-touch it.
+- [x] `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`. Event: `PosSaleVoided.v1`.
+
+**Web:**
+- [x] `/admin/pos-sales` gains a Void button on POSTED sales (prompts for a reason); detail pane shows the header discount.
+
+**Tests:**
+- **Unit:** `PosSaleServiceImplTest` extended (+9 cases) — discount-threshold rejection / self-approver / unauthorised / approved-approver; header discount applied after tax; header discount > subtotal rejected; same-day void writes RETURN_IN + emits Voided event; different-day void rejected; batch-tracked void rejected.
+- **System:** `TC-POS-012` .. `TC-POS-015`. *(pending)*
 
 ---
 
