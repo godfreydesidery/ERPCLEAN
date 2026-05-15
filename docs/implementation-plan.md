@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `65485e2` — F3.1 web (LPO list + create + lifecycle).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `bd86e68` — F3.2 web (GRN list + receive-against-LPO).
 
-**▶ RESUME POINT:** next slice is **F3.2 — GRN posting (+ batch capture)**. `Grn` + `GrnLine` entities (line carries `batch_no` / `expiry_at` for batch-tracked items); validates against LPO line quantities; over-receipt rejected; emits `GrnPosted.v1` which posts `stock_move` rows (and `stock_batch` rows for batch-tracked items via the F2.4 picker). All work through F3.1 is committed; working tree clean. Read the F3.2 section below + DATA-MODEL §5.5/§5.6 before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** next slice is **F3.3 — Supplier invoice match (3-way)**. `SupplierInvoice` + `SupplierInvoiceGrn` entities, match invoice → one or more GRNs with a tolerance check, emit `SupplierInvoiceMatched.v1`, web `/procurement/invoices` match grid. All work through F3.2 is committed; working tree clean. Read the F3.3 section below + DATA-MODEL §5.7/§5.8 before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -35,8 +35,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 **Done in Phase 3:**
 - F3.1 — LPO lifecycle (`LpoOrder` + `LpoOrderLine` entities; DRAFT → PENDING_APPROVAL → APPROVED state machine + DRAFT/PENDING → CANCELLED; submit auto-approves when total ≤ `orbix.procurement.lpo-auto-approval-threshold`; line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line; `LpoOrderCreated/Submitted/Approved/Cancelled.v1` events; `V19` + `V19_1` + `V20` migrations; `PROCUREMENT.MANAGE_LPO` / `PROCUREMENT.APPROVE_LPO` permissions; web `/procurement/lpos` list + draft creation + state-aware action buttons. PDF rendering + email subscriber on `LpoOrderApproved.v1` deferred — the event already fires.)
+- F3.2 — GRN posting + batch capture (`Grn` + `GrnLine` entities with DRAFT → POSTED terminal lifecycle + DRAFT → CANCELLED; LPO-bound flow validates each line against the parent `lpo_order_line` (item match + outstanding-qty over-receipt guard) and on post advances `received_qty` + flips LPO to PARTIALLY_RECEIVED or RECEIVED; direct GRN gated by `GRN.DIRECT`; posting routes through `StockMoveService` so DayGuard + moving-average + F2.4 batch creation are all reused — batch-tracked items create a `stock_batch` first and stamp `batch_id` on the move; `V21` + `V21_1` + `V22` migrations; `GRN.POST`/`GRN.DIRECT` permissions; `GrnCreated/Posted/Cancelled.v1` events; web `/procurement/grns` list + receive-against-LPO form with per-line outstanding + batch_no inputs + state-aware Post/Cancel.)
 
-**Next slice (start here):** **F3.2** — GRN posting (+ batch capture). Phase-0 test debt still outstanding.
+**Next slice (start here):** **F3.3** — Supplier invoice match (3-way). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -560,23 +561,26 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F3.2 — GRN posting (+ batch capture)
 
-**Story:** US-PROC-004, US-PROC-005, US-STOCK-011 · **Size:** L · **Status:** `[ ]`
+**Story:** US-PROC-004, US-PROC-005, US-STOCK-011 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F3.1, F2.2, F2.4.
 
 **Backend:**
-- [ ] `Grn`, `GrnLine` entities (line carries `batch_no`, `expiry_at` for batch-tracked items).
-- [ ] `GrnService` + Impl. Validates against LPO line quantities; over-receipt rejected.
-- [ ] Direct GRN under `GRN.DIRECT` permission.
-- [ ] `GrnPosted.v1` → stock module writes `stock_move` rows (and `stock_batch` rows for batch-tracked items).
+- [x] `Grn` + `GrnLine` entities (`V21` + `V21_1`). Line carries `lpo_order_line_id` (nullable for direct), `batch_no`, `expiry_date`. Per-branch unique GRN number.
+- [x] `GrnService` + Impl. LPO-bound: requires APPROVED or PARTIALLY_RECEIVED LPO; matches supplier + branch; validates each line against `lpo_order_line.outstandingQty()` (over-receipt rejected); on post advances `received_qty` per LPO line and flips the LPO to PARTIALLY_RECEIVED or RECEIVED (all lines fully received). Header subtotal = Σ(received_qty × unit_cost); tax rolled up from `vat_group.rate` per line.
+- [x] Direct GRN: `lpoOrderId = null`. Gated by `GRN.DIRECT` (checked at the controller — the create endpoint inspects the security context).
+- [x] `GrnPosted.v1` event; posting routes through `StockMoveService.post` (DayGuard + moving-average reused). Batch-tracked items create a `stock_batch` via `StockBatchService.createBatch` first, then post the `stock_move` with the new `batch_id`. Validation: batch-tracked items require a non-blank `batchNo`.
+- [x] `V22` seeds `GRN.POST` (everyday receiving) + `GRN.DIRECT` (no-LPO receiving).
 
 **Web:**
-- [ ] `/procurement/grns` flow; "Receive against LPO" workflow.
+- [x] `/procurement/grns` — list (status badges) + "Receive against LPO" form that loads an LPO by id, surfaces per-line `outstandingQty`, and accepts qty / unit cost / batch_no per line. State-aware Post / Cancel buttons.
+- [ ] Direct (no-LPO) GRN form — **deferred**: the backend supports it (`GRN.DIRECT`), but the UI currently only drives receive-against-LPO. Add a separate flow when direct purchases land in pilot use.
 
 **Tests:**
-- **Integration:** GRN post → stock_batch + stock_move + avg_cost recomputed.
-- **System:** `TC-PROC-010` .. `TC-PROC-015`; `TC-E2E-002`, `TC-E2E-009`.
+- **Unit:** `GrnServiceImplTest` (10) — create against LPO rolls up subtotal/tax/total + emits Created; over-receipt rejected; LPO not in APPROVED/PARTIALLY_RECEIVED rejected; batch-tracked item without batch_no rejected; post writes stock moves with the right type + cost + emits Posted; batch-tracked item creates stock_batch and stamps batch_id on the move; partial receipt flips LPO to PARTIALLY_RECEIVED; full receipt flips to RECEIVED; cancel from DRAFT works; duplicate number rejected.
+- **Integration:** GRN post → stock_batch + stock_move + avg_cost recomputed. *(pending — exercised end-to-end once Testcontainers fixtures land)*
+- **System:** `TC-PROC-010` .. `TC-PROC-015`; `TC-E2E-002`, `TC-E2E-009`. *(pending)*
 
-**DoD:** Storekeeper receives goods against LPO; stock balance updates; batch-tracked items get batch rows.
+**DoD:** Storekeeper receives goods against LPO; stock balance updates; batch-tracked items get batch rows. *(Direct-GRN UI deferred; backend ready.)*
 
 ---
 
