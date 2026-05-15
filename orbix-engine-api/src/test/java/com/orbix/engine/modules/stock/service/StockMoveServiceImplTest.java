@@ -80,6 +80,11 @@ class StockMoveServiceImplTest {
             StockMoveType.ADJUSTMENT, "Adjustment", 99L, null, oversell);
     }
 
+    private static PostStockMoveRequestDto reqWithBatch(BigDecimal qty, Long batchId) {
+        return new PostStockMoveRequestDto(ITEM_ID, BRANCH_ID, qty, null,
+            StockMoveType.EXPIRY_WRITE_OFF, "StockBatch", batchId, "test", false, batchId);
+    }
+
     @Test
     void post_firstInbound_setsAvgCostToUnitCost() {
         when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID))).thenReturn(Optional.empty());
@@ -173,5 +178,19 @@ class StockMoveServiceImplTest {
 
         verify(events).publish(eq("StockMoved.v1"), any(), any(), any());
         verify(events).publish(eq("BalanceUpdated.v1"), any(), any(), any());
+    }
+
+    @Test
+    void post_passesBatchIdThroughToStockMoveRow() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
+
+        StockMoveDto result = service.post(reqWithBatch(new BigDecimal("-3"), 4242L));
+
+        assertThat(result.batchId()).isEqualTo(4242L);
+        assertThat(result.moveType()).isEqualTo(StockMoveType.EXPIRY_WRITE_OFF);
+        ArgumentCaptor<StockMove> saved = ArgumentCaptor.forClass(StockMove.class);
+        verify(moves).save(saved.capture());
+        assertThat(saved.getValue().getBatchId()).isEqualTo(4242L);
     }
 }

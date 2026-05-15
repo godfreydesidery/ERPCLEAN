@@ -66,6 +66,9 @@ orbix:
     dispatch-interval-ms: 1000
     batch-size: 100
     max-attempts: 10
+  stock:
+    # FEFO expiry-flag job. Runs daily by default (cron: "0 5 0 * * *" = 00:05 UTC).
+    batch-expiry-cron: "0 5 0 * * *"
   flags:
     cache-ttl-seconds: 30
 

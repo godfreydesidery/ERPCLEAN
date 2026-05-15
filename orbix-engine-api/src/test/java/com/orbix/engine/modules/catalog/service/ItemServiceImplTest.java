@@ -14,6 +14,8 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
+import com.orbix.engine.modules.stock.repository.StockBatchRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,7 @@ class ItemServiceImplTest {
 
     @Mock private ItemRepository repo;
     @Mock private ItemBarcodeRepository barcodes;
+    @Mock private StockBatchRepository stockBatches;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -258,5 +261,46 @@ class ItemServiceImplTest {
         assertThatThrownBy(() -> service.activateItem(1L))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already active");
+    }
+
+    @Test
+    void archiveItem_blockedWhenBatchTrackedAndActiveBatchesExist() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        existing.setBatchTracked(true);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+        when(stockBatches.existsByItemIdAndStatus(1L, StockBatchStatus.ACTIVE)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.archiveItem(1L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("active stock batches");
+        assertThat(existing.getStatus()).isEqualTo(ItemStatus.ACTIVE);
+    }
+
+    @Test
+    void archiveItem_allowedWhenBatchTrackedWithoutActiveBatches() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        existing.setBatchTracked(true);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+        when(stockBatches.existsByItemIdAndStatus(1L, StockBatchStatus.ACTIVE)).thenReturn(false);
+
+        service.archiveItem(1L);
+
+        assertThat(existing.getStatus()).isEqualTo(ItemStatus.ARCHIVED);
+    }
+
+    @Test
+    void updateItem_disablingBatchTracking_blockedWhenActiveBatchesExist() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        existing.setBatchTracked(true);
+        when(repo.findById(1L)).thenReturn(Optional.of(existing));
+        when(stockBatches.existsByItemIdAndStatus(1L, StockBatchStatus.ACTIVE)).thenReturn(true);
+
+        UpdateItemRequestDto request = new UpdateItemRequestDto("Milk", null, ItemType.SELLABLE,
+            11L, 21L, 31L, true, null, false, null, false);
+
+        assertThatThrownBy(() -> service.updateItem(1L, request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("active stock batches");
+        assertThat(existing.isBatchTracked()).isTrue();
     }
 }

@@ -13,6 +13,8 @@ import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
+import com.orbix.engine.modules.stock.repository.StockBatchRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class ItemServiceImpl implements ItemService {
 
     private final ItemRepository repo;
     private final ItemBarcodeRepository barcodes;
+    private final StockBatchRepository stockBatches;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -120,9 +123,17 @@ public class ItemServiceImpl implements ItemService {
         if (was == batchTracked) {
             return;
         }
+        if (was && !batchTracked && hasActiveBatches(item.getId())) {
+            throw new IllegalArgumentException(
+                "Cannot disable batch tracking while item " + item.getId() + " has active stock batches");
+        }
         item.applyBatchTracking(batchTracked, actorId);
         String type = batchTracked ? "ItemBatchTrackingEnabled.v1" : "ItemBatchTrackingDisabled.v1";
         events.publish(type, "Item", String.valueOf(item.getId()), Map.of("itemId", item.getId()));
+    }
+
+    private boolean hasActiveBatches(Long itemId) {
+        return stockBatches.existsByItemIdAndStatus(itemId, StockBatchStatus.ACTIVE);
     }
 
     private boolean hasWeighedCapableBarcode(Long itemId) {
@@ -139,7 +150,10 @@ public class ItemServiceImpl implements ItemService {
         if (item.getStatus() == ItemStatus.ARCHIVED) {
             throw new IllegalArgumentException("Item is already archived: " + itemId);
         }
-        // TODO (F2.4): a batch-tracked item cannot be archived while it has active stock_batch rows.
+        if (item.isBatchTracked() && hasActiveBatches(itemId)) {
+            throw new IllegalArgumentException(
+                "Cannot archive item " + itemId + " while it has active stock batches");
+        }
         item.archive(context.userId());
         events.publish("ItemArchived.v1", "Item", String.valueOf(item.getId()),
             Map.of("itemId", item.getId()));

@@ -13,6 +13,9 @@ import java.math.BigDecimal;
  *                      consume at the current moving-average)
  * @param allowOversell when true, an outbound move may drive on-hand negative
  *                      (caller must hold {@code STOCK.OVERSELL})
+ * @param batchId       optional FK to {@code stock_batch}; for batch-tracked items
+ *                      the caller has already chosen the batch via the FEFO picker
+ *                      (or, on inbound, created the row via {@link com.orbix.engine.modules.stock.service.StockBatchService})
  */
 public record PostStockMoveRequestDto(
     Long itemId,
@@ -23,5 +26,12 @@ public record PostStockMoveRequestDto(
     String refType,
     Long refId,
     String notes,
-    boolean allowOversell
-) {}
+    boolean allowOversell,
+    Long batchId
+) {
+    public PostStockMoveRequestDto(Long itemId, Long branchId, BigDecimal qty, BigDecimal unitCost,
+                                   StockMoveType moveType, String refType, Long refId,
+                                   String notes, boolean allowOversell) {
+        this(itemId, branchId, qty, unitCost, moveType, refType, refId, notes, allowOversell, null);
+    }
+}

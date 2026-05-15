@@ -12,5 +12,6 @@ public enum StockMoveType {
     TRANSFER_IN,
     PROD_CONSUME,
     PROD_OUTPUT,
-    OPENING
+    OPENING,
+    EXPIRY_WRITE_OFF
 }

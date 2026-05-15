@@ -70,10 +70,14 @@ public class StockMove {
     @Column(length = 200)
     private String notes;
 
+    /** Set when the move is attributed to a specific {@code stock_batch} row (batch-tracked items). */
+    @Column(name = "batch_id")
+    private Long batchId;
+
     @SuppressWarnings("java:S107")  // a posting row is inherently wide; a VO would only shuffle the args
     public StockMove(Instant at, Long itemId, Long branchId, Long companyId, BigDecimal qty,
                      BigDecimal costAmount, StockMoveType moveType, String refType, Long refId,
-                     Long actorId, String notes) {
+                     Long actorId, String notes, Long batchId) {
         this.at = at;
         this.itemId = itemId;
         this.branchId = branchId;
@@ -86,5 +90,6 @@ public class StockMove {
         this.refId = refId;
         this.actorId = actorId;
         this.notes = notes;
+        this.batchId = batchId;
     }
 }

@@ -20,7 +20,8 @@ public record StockMoveDto(
     String refType,
     Long refId,
     Long actorId,
-    String notes
+    String notes,
+    Long batchId
 ) {
     public static StockMoveDto from(StockMove move) {
         return new StockMoveDto(
@@ -36,7 +37,8 @@ public record StockMoveDto(
             move.getRefType(),
             move.getRefId(),
             move.getActorId(),
-            move.getNotes()
+            move.getNotes(),
+            move.getBatchId()
         );
     }
 }
