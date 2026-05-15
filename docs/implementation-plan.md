@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `49e1f4a` — F2.5 web (adjust + internal-consumption forms).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `65485e2` — F3.1 web (LPO list + create + lifecycle).
 
-**▶ RESUME POINT:** next slice is **F3.1 — LPO lifecycle** — Phase 3 (inbound) opens here. `LpoOrder` / `LpoOrderLine` entities, DRAFT → PENDING_APPROVAL → APPROVED → CANCELLED state machine, threshold-driven auto-approval, PDF / email export on approval. All work through F2.5 is committed; working tree clean. Read the F3.1 section below before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** next slice is **F3.2 — GRN posting (+ batch capture)**. `Grn` + `GrnLine` entities (line carries `batch_no` / `expiry_at` for batch-tracked items); validates against LPO line quantities; over-receipt rejected; emits `GrnPosted.v1` which posts `stock_move` rows (and `stock_batch` rows for batch-tracked items via the F2.4 picker). All work through F3.1 is committed; working tree clean. Read the F3.2 section below + DATA-MODEL §5.5/§5.6 before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -33,7 +33,10 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F2.4 — batch tracking + FEFO consumption (`StockBatch` entity per (branch, item, batch_no) with ACTIVE/EXHAUSTED/EXPIRED/RECALLED lifecycle; `StockBatchService` exposes `createBatch` for inbound flows + `drainFefo` picker + `markExpired` + `recallBatch`; daily `StockBatchExpiryJob` flags ACTIVE rows past expiry; `EXPIRY_WRITE_OFF` move type + recall writes off remaining on-hand; `stock_move.batch_id` nullable column threads through `PostStockMoveRequestDto`; `V15` + `V16` migrations; `STOCK.BATCH` permission; F1.6 archive guard now blocks archive/disable-tracking while active batches exist; web `/stock/batches` expiring-soon + all-batches modes with recall action)
 - F2.5 — stock adjustments + internal consumption (`POST /api/v1/adjustments` posts ADJUSTMENT moves with a configurable monetary threshold — above threshold or for oversells an `authorisedByUserId` must hold `STOCK.ADJUST_APPROVE`; `POST /api/v1/internal-consumption` posts INTERNAL_CONSUMPTION moves with required category + section + authoriser; new `stock_move` columns `section_id` / `consumption_category` / `authorised_by_user_id` via `V17`; new move types `INTERNAL_CONSUMPTION`/`STAFF_PURCHASE`/`EMPLOYEE_GIFT`/`RESERVED`; `V18` seeds `STOCK.ADJUST` / `STOCK.ADJUST_APPROVE` / `STOCK.INTERNAL_CONSUMPTION`; web `/stock/adjust` + `/stock/internal-consumption` forms)
 
-**Next slice (start here):** **F3.1** — LPO lifecycle. Phase-0 test debt still outstanding.
+**Done in Phase 3:**
+- F3.1 — LPO lifecycle (`LpoOrder` + `LpoOrderLine` entities; DRAFT → PENDING_APPROVAL → APPROVED state machine + DRAFT/PENDING → CANCELLED; submit auto-approves when total ≤ `orbix.procurement.lpo-auto-approval-threshold`; line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line; `LpoOrderCreated/Submitted/Approved/Cancelled.v1` events; `V19` + `V19_1` + `V20` migrations; `PROCUREMENT.MANAGE_LPO` / `PROCUREMENT.APPROVE_LPO` permissions; web `/procurement/lpos` list + draft creation + state-aware action buttons. PDF rendering + email subscriber on `LpoOrderApproved.v1` deferred — the event already fires.)
+
+**Next slice (start here):** **F3.2** — GRN posting (+ batch capture). Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -532,24 +535,26 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F3.1 — LPO lifecycle
 
-**Story:** US-PROC-002, US-PROC-003, US-PROC-011, US-PROC-012 · **Size:** L · **Status:** `[ ]`
-**Dependencies:** F1.7 (suppliers), F1.3 (items), F2.1 (day).
+**Story:** US-PROC-002, US-PROC-003, US-PROC-011, US-PROC-012 · **Size:** L · **Status:** `[x]`
+**Dependencies:** F1.7 (suppliers), F1.3 (items), F2.1 (day — declared but not enforced here; the day-guard kicks in at F3.2 when GRN posts stock).
 
 **Backend:**
-- [ ] `LpoOrder`, `LpoOrderLine` entities.
-- [ ] `LpoOrderService` + Impl. State machine DRAFT → PENDING_APPROVAL → APPROVED → CANCELLED.
-- [ ] Auto-approval below configured threshold; approval flow above.
-- [ ] PDF / email export via `LpoOrderRenderer` + email subscriber on `LpoOrderApproved.v1`.
+- [x] `LpoOrder` + `LpoOrderLine` entities (`V19` + `V19_1`); `LpoOrderRepository` + `LpoOrderLineRepository`. Header carries supplier / order date / expected delivery / currency / totals / status. Per-branch unique LPO number.
+- [x] `LpoOrderService` + Impl with state machine DRAFT → PENDING_APPROVAL → APPROVED; DRAFT/PENDING → CANCELLED. PARTIALLY_RECEIVED / RECEIVED transitions land with F3.2 (GRN). Line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line.
+- [x] Auto-approval: when `total ≤ orbix.procurement.lpo-auto-approval-threshold` (defaults to 0 = always require explicit approval), `submit` skips PENDING_APPROVAL and goes straight to APPROVED. Approval endpoint is gated by `PROCUREMENT.APPROVE_LPO`.
+- [x] Events: `LpoOrderCreated/Submitted/Approved/Cancelled.v1` via the outbox.
+- [ ] PDF / email export via `LpoOrderRenderer` + email subscriber on `LpoOrderApproved.v1` — **deferred**: the event already fires, so a subscriber can land later without touching this service.
 
 **Web:**
-- [ ] `/procurement/lpos` list + new / view.
-- [ ] PDF preview, "send to supplier" action.
+- [x] `/procurement/lpos` — list (with status badges), draft creation (single-line via the form), and state-aware Submit / Approve / Cancel buttons. View pane shows header + lines + approved-by/at + notes.
+- [ ] PDF preview, "send to supplier" action — **deferred** with the renderer/email work above.
 
 **Tests:**
-- **Unit:** State transitions, threshold rule.
-- **System:** `TC-PROC-004` .. `TC-PROC-009`.
+- **Unit:** `LpoOrderServiceImplTest` (12) — create rolls up subtotal/tax/total + emits LpoOrderCreated.v1; line discount applied; duplicate number rejected; submit auto-approves below threshold + emits Approved (not Submitted); submit above threshold goes to PENDING_APPROVAL; submit with threshold=0 always pending; approve from PENDING_APPROVAL sets approvedBy/at + emits Approved; approve direct from DRAFT rejected; cancel from DRAFT works + emits Cancelled; cancel from APPROVED rejected; get-foreign-company 404; updateDraft deletes & replaces lines and re-rolls totals.
+- **Integration:** Multi-line LPO with mixed tax classes; auto-approval boundary. *(pending)*
+- **System:** `TC-PROC-004` .. `TC-PROC-009`. *(pending)*
 
-**DoD:** Merchandiser creates an LPO, sends for approval, manager approves, PDF emails to supplier.
+**DoD:** Merchandiser creates an LPO, sends for approval, manager approves. *(Partial DoD: PDF / email to supplier deferred with the renderer.)*
 
 ---
 
