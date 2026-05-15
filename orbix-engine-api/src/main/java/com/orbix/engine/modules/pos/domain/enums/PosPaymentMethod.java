@@ -6,5 +6,7 @@ public enum PosPaymentMethod {
     CARD,
     MOBILE_MONEY,
     VOUCHER,
-    STORE_CREDIT
+    STORE_CREDIT,
+    /** Gift-card redemption (F5.7). {@code pos_payment.reference} carries the card code. */
+    GIFT_CARD
 }

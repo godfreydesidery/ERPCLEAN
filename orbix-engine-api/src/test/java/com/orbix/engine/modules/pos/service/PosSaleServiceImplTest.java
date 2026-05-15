@@ -86,6 +86,7 @@ class PosSaleServiceImplTest {
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
     @Mock private com.orbix.engine.modules.cash.service.CashLedgerService cashLedger;
+    @Mock private com.orbix.engine.modules.giftcard.service.GiftCardService giftCards;
     @Mock private com.orbix.engine.modules.day.service.DayGuard dayGuard;
     @Mock private com.orbix.engine.modules.iam.service.PermissionResolverService permissions;
     @Mock private EventPublisher events;
@@ -865,5 +866,129 @@ class PosSaleServiceImplTest {
         assertThat(dto.tenderedAmount()).isEqualByComparingTo("236");
         assertThat(dto.changeAmount()).isEqualByComparingTo("0");
         assertThat(dto.payments()).hasSize(2);
+    }
+
+    // ===== F5.7 — Gift card tender =====
+
+    @Test
+    void post_giftCardTender_callsRedeemAndSkipsCashEntry() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        // total 236 paid entirely via gift card → no cash side, redeem called.
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-GC1", "op-gc1", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("2"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.GIFT_CARD,
+                new BigDecimal("236"), null, "GC-CODE-1", null, null)),
+            null
+        );
+
+        service.post(req);
+
+        verify(giftCards).redeem(eq("GC-CODE-1"),
+            org.mockito.ArgumentMatchers.argThat(r ->
+                r.amount().compareTo(new BigDecimal("236")) == 0
+                && "PosPayment".equals(r.refDocType())
+                && r.refDocId() != null));
+        // No cash entry for GIFT_CARD tender.
+        verify(cashLedger, never()).post(any(), any(), any(), any(), any(), any(),
+            any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void post_mixedCashAndGiftCard_postsCashEntryAndRedeem() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        // total 236; pay 100 cash + 136 gift card.
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-GC2", "op-gc2", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("2"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            List.of(
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                    new BigDecimal("100"), null, null, null, null),
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.GIFT_CARD,
+                    new BigDecimal("136"), null, "GC-CODE-2", null, null)
+            ),
+            null
+        );
+
+        service.post(req);
+
+        verify(giftCards).redeem(eq("GC-CODE-2"),
+            org.mockito.ArgumentMatchers.argThat(r ->
+                r.amount().compareTo(new BigDecimal("136")) == 0));
+        // Exactly one cash entry — for the cash leg only.
+        verify(cashLedger).post(any(), any(), any(), any(),
+            eq(com.orbix.engine.modules.cash.domain.enums.CashAccount.TILL),
+            eq(com.orbix.engine.modules.cash.domain.enums.CashDirection.IN),
+            eq(new BigDecimal("100")), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void post_giftCardWithoutReference_isRejected() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-GC3", "op-gc3", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("2"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            // GIFT_CARD tender with no reference → reject.
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.GIFT_CARD,
+                new BigDecimal("236"), null, null, null, null)),
+            null
+        );
+
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("card code");
+        verify(giftCards, never()).redeem(any(), any());
+    }
+
+    @Test
+    void voidSale_creditsBackOriginalGiftCardPayments() {
+        // Set up an existing POSTED sale with a GIFT_CARD payment.
+        PosSale sale = new PosSale(
+            "TILL-1-GC-V", "op-gc-v", SESSION_ID, TILL_ID, BRANCH_ID, COMPANY_ID,
+            SECTION_ID, CUSTOMER_ID, ACTOR_ID, null,
+            com.orbix.engine.modules.pos.domain.enums.PosSaleKind.SALE,
+            Instant.parse("2026-05-13T10:00:00Z"), LocalDate.of(2026, 5, 13),
+            new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO,
+            new BigDecimal("236"), new BigDecimal("236"), BigDecimal.ZERO, null);
+        sale.setId(7777L);
+        PosSaleLine line = new PosSaleLine(7777L, 1, ITEM_ID, UOM_ID,
+            new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
+            VAT_GROUP_ID, new BigDecimal("36"), new BigDecimal("236"));
+        line.setCostAmount(new BigDecimal("50"));
+        PosPayment gcPayment = new PosPayment(7777L, PosPaymentMethod.GIFT_CARD,
+            new BigDecimal("236"), "TZS", new BigDecimal("236"), BigDecimal.ONE,
+            "GC-CODE-V", null, null);
+        gcPayment.setId(7780L);
+
+        when(sales.findById(7777L)).thenReturn(Optional.of(sale));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(7777L)).thenReturn(List.of(line));
+        when(payments.findByPosSaleIdOrderByIdAsc(7777L)).thenReturn(List.of(gcPayment));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new com.orbix.engine.modules.day.domain.entity.BusinessDay(
+                BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+
+        service.voidSale(7777L,
+            new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("Customer changed mind"));
+
+        verify(giftCards).refundCredit(eq("GC-CODE-V"),
+            org.mockito.ArgumentMatchers.argThat(r ->
+                r.amount().compareTo(new BigDecimal("236")) == 0
+                && "PosVoidPayment".equals(r.refDocType())
+                && r.refDocId().equals(7780L)));
+        // No cash refund — the original tender wasn't cash.
+        verify(cashLedger, never()).post(any(), any(), any(), any(), any(), any(),
+            any(), any(), any(), any(), any(), any(), any(), any());
     }
 }
