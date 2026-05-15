@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `cb731be` — F5.5 backend (refund-at-till flow + supervisor-threshold rule + RETURN_IN compensating stock moves).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `11ccc45` — F5.6 backend (FX tender at till). Uncommitted: F5.8 backend slice (barcode resolver + EMBEDDED_WEIGHT add-time validation).
 
-**▶ RESUME POINT:** next slice is **F5.8 — Weighed items + barcode parser** (F5.7 gift-card tender is blocked on F7.1). Per US-CAT-016 + US-POS-003 — extend the till's barcode parser to decode embedded-weight EAN-13 codes (prefix `2`). Backend item flags are already in place from V6. F5.6 backend (FX tender + till_currency CRUD + V39 schema additions) is done; Flutter tender-screen UI deferred to the dedicated Flutter mini-phase. Working tree clean.
+**▶ RESUME POINT:** next slice is **F5.9 — Cash pickup + petty cash** (depends on F5.1 + F6.1; F6.1 not yet done, so F5.9 is effectively blocked until cash module lands). F5.7 gift-card tender is blocked on F7.1; F5.10 X/Z reports depends on F5.9. **Practical next:** start Phase 6 — **F6.1** (cash entries + cash book) so F5.9 / F5.10 unblock. F5.8 backend (EmbeddedWeightDecoder + BarcodeResolverService + `GET /api/v1/pos/barcode-lookup` + EMBEDDED_WEIGHT add-time validation) is done; Flutter scale integration + on-device decoder deferred to the dedicated Flutter mini-phase. Working tree dirty until the F5.8 commit.
 
-**Progress:** ~62% of MVP slices complete (32 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend done; F5.7 blocked, F5.8–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~63% of MVP slices complete (33 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend done; F5.7 blocked, F5.9–F5.10 blocked on F6.1, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -53,8 +53,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.2 — Basic POS sale (cash + mixed tender) — backend ships the full server-side contract; Flutter till app deferred. `PosSale` + `PosSaleLine` + `PosPayment` entities (DATA-MODEL §7.3-§7.5 + Phase 1.1 §17.12 additions); POS sales committed locally and pushed as POSTED (no DRAFT); idempotent on `clientOpId` per company. Validation: OPEN till session, `section_id` matches the till's branch (required), customer exists, tender ≥ total. Posting writes outbound SALE stock moves via `StockMoveService` (DayGuard inherited) — batch-tracked items drain FEFO via `StockBatchService` and emit one stock_move per pick. Mixed tender (cash + card + mobile money + voucher + store credit) via N `pos_payment` rows; card terminals record `terminal_id` + `last4` only. `V34` + `V34_1` + `V35` migrations seed `POS.SALE_POST`. Event: `PosSaleClosed.v1`. Web: read-only `/admin/pos-sales` viewer for managers.
 - F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
 - F5.4 — Offline-sync server contract (backend-complete; Flutter app deferred). `POST /api/v1/sync/push` batch-pushes locally-committed POS sales — each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch; idempotency on `clientOpId` was already in place from F5.2. `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` returns active items + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty + all barcodes (so the till's local DB can scan EAN/PLU offline). `GET /api/v1/sync/balances/snapshot?branchId=` returns current `item_branch_balance` rows for a soft pre-flight oversell check. `V37` seeds `POS.SYNC`.
+- F5.5 — Refund at till (backend). Same-business-day refund flow rejecting batch-tracked items and writing RETURN_IN compensating stock moves at the original snapped line cost; `orbix.pos.refund-threshold` (default 10000) requires a `supervisorId` holding `POS.REFUND_APPROVE` (different from the cashier); `PosSaleKind.REFUND` rows reuse `pos_sale` / `pos_sale_line` / `pos_payment` with `refunded_from_sale_id` linking back to the original; `V38` seeds `POS.REFUND_POST` + `POS.REFUND_APPROVE`; `PosSaleRefunded.v1` event.
+- F5.6 — FX tender at till (backend). `pos_payment` can now snap a non-functional `tender_currency` + `fx_rate` per row (functional-currency `amount` is still the audit value used for totals/variance); till must accept the currency via `till_currency` (managed under `POS.TILL_CURRENCY_MANAGE` at `/api/v1/tills/{id}/currencies`); FX rate resolved most-recent-on-or-before the sale `at` from `fx_rate`; `V39` adds the `till_currency` table + the `pos_payment.tender_currency`/`tender_amount`/`fx_rate` columns + seeds `POS.TILL_CURRENCY_MANAGE`. Flutter tender-screen UI deferred.
+- F5.8 — Weighed items + barcode parser (backend; Flutter scale integration deferred). `BarcodeResolverService` + `GET /api/v1/pos/barcode-lookup?code=…` resolve a scanned code → `ResolvedBarcodeDto { itemId, code, name, uomId, vatGroupId, weighed, batchTracked, weighingUnit, minSellPrice, qty, barcodeType }`. Plain symbologies (UPC/EAN13/EAN8/PLU) match `item_barcode.barcode` exactly with `qty = packQty`; scale-printed EAN-13 (13 digits, leading `2`) falls back to a 7-char prefix lookup against `EMBEDDED_WEIGHT` barcodes and decodes weight bytes 8..12 as `int / 1000` in the item's `WeighingUnit` (per the README §11 layout `2 + 6-digit PLU + 5-digit weight + check digit`). Archived / cross-company items rejected; zero-weight scans rejected. `ItemBarcodeServiceImpl.addBarcode` now shape-checks each symbology (EAN13=13 digits, EAN8=8, UPC=12) and enforces EMBEDDED_WEIGHT = 7 digits leading with `2` against a weighed item.
 
-**Next slice (start here):** **F5.8** — Weighed items + barcode parser (F5.7 gift cards blocked on F7.1). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F6.1** — Cash entries + cash book (single currency). F5.9 / F5.10 unblock once F6.1 lands; F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -893,14 +896,21 @@ Skip until F7.1 lands.
 
 ## F5.8 — Weighed items + barcode parser
 
-**Story:** US-CAT-016, US-POS-003 (extended) · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-016, US-POS-003 (extended) · **Size:** M · **Status:** `[~]` (backend done, Flutter deferred)
 **Dependencies:** F1.6, F5.2.
 
+**Backend:**
+- [x] `EmbeddedWeightDecoder` (server-side) parses EAN-13 starting with `2` (7-char prefix `'2' + 6-digit PLU` + 5-digit weight + EAN check digit; weight/1000 in the item's WeighingUnit).
+- [x] `BarcodeResolverService` resolves a raw scan to `ResolvedBarcodeDto` — exact-match first against `item_barcode.barcode`, then 7-char prefix fallback restricted to `barcode_type = EMBEDDED_WEIGHT`. Rejects zero-weight scans, archived items, and cross-company items.
+- [x] `GET /api/v1/pos/barcode-lookup?code=...` gated by `POS.SALE_POST` or `POS.MANAGE_TILL` (held by the till app already).
+- [x] `ItemBarcodeServiceImpl.addBarcode` shape-checks each symbology — EAN13=13 digits, EAN8=8, UPC=12, EMBEDDED_WEIGHT=7 leading-`2` digits and requires the item to be `is_weighed`.
+- [x] Unit tests — `EmbeddedWeightDecoder` covered via `BarcodeResolverServiceImplTest` (8 cases: exact / prefix / zero-weight / unknown PLU / unknown plain / archived / cross-company / blank); `ItemBarcodeServiceImplTest` extended with EAN13-length + EMBEDDED_WEIGHT happy / non-weighed / bad-prefix.
+
 **Flutter POS:**
-- [ ] `EmbeddedWeightDecoder` parses EAN-13 starting with `2`.
+- [ ] On-device `EmbeddedWeightDecoder` so offline scans resolve from the catalog snapshot.
 - [ ] Scale integration via platform channel (USB / serial).
 
-**Tests:** `TC-CAT-013`; `TC-POS-039`; `TC-E2E-008`.
+**Tests:** `TC-CAT-013`; `TC-POS-039`; `TC-E2E-008` (backend halves covered; e2e + Flutter halves pending the Flutter mini-phase).
 
 ---
 

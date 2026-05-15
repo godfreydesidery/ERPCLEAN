@@ -6,6 +6,7 @@ import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.ItemBarcode;
 import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
 import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
@@ -56,6 +57,12 @@ class ItemBarcodeServiceImplTest {
         return item;
     }
 
+    private static Item weighedItem(Long id, Long companyId) {
+        Item item = item(id, companyId);
+        item.applyWeighing(true, WeighingUnit.KG, ACTOR_ID);
+        return item;
+    }
+
     @Test
     void addBarcode_savesAndPublishesEvent() {
         when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
@@ -78,12 +85,62 @@ class ItemBarcodeServiceImplTest {
     @Test
     void addBarcode_rejectsDuplicateBarcode() {
         when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
-        when(barcodes.existsByBarcode("DUP")).thenReturn(true);
+        when(barcodes.existsByBarcode("5901234123457")).thenReturn(true);
 
         assertThatThrownBy(() -> service.addBarcode(1L,
-            new CreateItemBarcodeRequestDto("DUP", BarcodeType.EAN13, null, null)))
+            new CreateItemBarcodeRequestDto("5901234123457", BarcodeType.EAN13, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already in use");
+        verify(barcodes, never()).save(any());
+    }
+
+    @Test
+    void addBarcode_rejectsBadEan13Length() {
+        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+
+        assertThatThrownBy(() -> service.addBarcode(1L,
+            new CreateItemBarcodeRequestDto("12345", BarcodeType.EAN13, null, null)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("EAN13 barcode must be 13 digits");
+        verify(barcodes, never()).save(any());
+    }
+
+    @Test
+    void addBarcode_embeddedWeight_savesPrefixForWeighedItem() {
+        when(items.findById(1L)).thenReturn(Optional.of(weighedItem(1L, COMPANY_ID)));
+        when(barcodes.existsByBarcode("2012345")).thenReturn(false);
+        when(barcodes.save(any(ItemBarcode.class))).thenAnswer(inv -> {
+            ItemBarcode b = inv.getArgument(0);
+            b.setId(20L);
+            return b;
+        });
+
+        ItemBarcodeDto result = service.addBarcode(1L,
+            new CreateItemBarcodeRequestDto("2012345", BarcodeType.EMBEDDED_WEIGHT, null, null));
+
+        assertThat(result.barcode()).isEqualTo("2012345");
+        assertThat(result.barcodeType()).isEqualTo(BarcodeType.EMBEDDED_WEIGHT);
+    }
+
+    @Test
+    void addBarcode_embeddedWeight_rejectsNonWeighedItem() {
+        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+
+        assertThatThrownBy(() -> service.addBarcode(1L,
+            new CreateItemBarcodeRequestDto("2012345", BarcodeType.EMBEDDED_WEIGHT, null, null)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("requires a weighed item");
+        verify(barcodes, never()).save(any());
+    }
+
+    @Test
+    void addBarcode_embeddedWeight_rejectsBadPrefix() {
+        when(items.findById(1L)).thenReturn(Optional.of(weighedItem(1L, COMPANY_ID)));
+
+        assertThatThrownBy(() -> service.addBarcode(1L,
+            new CreateItemBarcodeRequestDto("3012345", BarcodeType.EMBEDDED_WEIGHT, null, null)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("7 digits with leading '2'");
         verify(barcodes, never()).save(any());
     }
 
