@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `93e20a4` — F3.3 web (supplier invoice list + match grid).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `f015f5d` — F3.4 web (supplier payment list + allocation grid).
 
-**▶ RESUME POINT:** next slice is **F3.4 — Supplier payment**. `SupplierPayment` + `SupplierPaymentAllocation` entities (lives in the `cash` module — empty today, F3.4 lays the first floor); when posted, allocates payment across one or more `supplier_invoice` rows, advances `supplier_invoice.paid_amount`, and flips the invoice to PARTIALLY_PAID / PAID. All work through F3.3 is committed; working tree clean. Read the F3.4 section + DATA-MODEL §6 (cash) before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** Phase 3 inbound is complete (F3.5 vendor-return deferred to Phase 8 per plan). Next slice is **F4.2 — Sales invoice posting (cash + credit)** — F4.1 quotation is skippable per plan ("Skip if pilot doesn't need quotations; jump to F4.2"). `SalesInvoice` + `SalesInvoiceLine` entities, credit-limit + discount-threshold + `min_sell_price` rules, void on same business day only. All work through F3.4 is committed; working tree clean. Read the F4.2 section + DATA-MODEL §6 (sales) before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -37,8 +37,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F3.1 — LPO lifecycle (`LpoOrder` + `LpoOrderLine` entities; DRAFT → PENDING_APPROVAL → APPROVED state machine + DRAFT/PENDING → CANCELLED; submit auto-approves when total ≤ `orbix.procurement.lpo-auto-approval-threshold`; line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line; `LpoOrderCreated/Submitted/Approved/Cancelled.v1` events; `V19` + `V19_1` + `V20` migrations; `PROCUREMENT.MANAGE_LPO` / `PROCUREMENT.APPROVE_LPO` permissions; web `/procurement/lpos` list + draft creation + state-aware action buttons. PDF rendering + email subscriber on `LpoOrderApproved.v1` deferred — the event already fires.)
 - F3.2 — GRN posting + batch capture (`Grn` + `GrnLine` entities with DRAFT → POSTED terminal lifecycle + DRAFT → CANCELLED; LPO-bound flow validates each line against the parent `lpo_order_line` (item match + outstanding-qty over-receipt guard) and on post advances `received_qty` + flips LPO to PARTIALLY_RECEIVED or RECEIVED; direct GRN gated by `GRN.DIRECT`; posting routes through `StockMoveService` so DayGuard + moving-average + F2.4 batch creation are all reused — batch-tracked items create a `stock_batch` first and stamp `batch_id` on the move; `V21` + `V21_1` + `V22` migrations; `GRN.POST`/`GRN.DIRECT` permissions; `GrnCreated/Posted/Cancelled.v1` events; web `/procurement/grns` list + receive-against-LPO form with per-line outstanding + batch_no inputs + state-aware Post/Cancel.)
 - F3.3 — Supplier invoice + 3-way match (`SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities with DRAFT → POSTED lifecycle; DRAFT/POSTED → CANCELLED; per-branch unique invoice number + per-supplier unique `supplier_invoice_no`; allocations validated against each referenced GRN — POSTED + same supplier + cumulative amount ≤ `grn.total_amount` (over-allocation rejected; cancelled invoices excluded); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005); due date defaults to `invoice_date + supplier.payment_terms_days`; `V23` + `V23_1` + `V24` migrations; `PROCUREMENT.MANAGE_INVOICE` permission; `SupplierInvoiceCreated/Matched/Cancelled.v1` events; web `/procurement/invoices` list + per-supplier GRN picker + live tolerance hint + state-aware Post/Cancel.)
+- F3.4 — Supplier payment + invoice settlement (first floor of the cash module; `SupplierPayment` + `SupplierPaymentAllocation` entities with DRAFT → POSTED → terminal lifecycle + DRAFT → CANCELLED; per-branch unique payment number; `PaymentMethod` enum (CASH/BANK_TRANSFER/CHEQUE/MOBILE_MONEY); allocation guards — same-supplier + in-company + amount ≤ invoice outstanding + no-duplicate-invoice + Σ allocations ≤ payment total; posting requires `DayGuard.requireOpenDay`; `SupplierInvoice.applyPayment` advances `paid_amount` and flips to PARTIALLY_PAID until total → PAID; `V25` + `V25_1` + `V26` migrations seed `CASH.MANAGE_SUPPLIER_PAYMENT`; `SupplierPaymentCreated/Posted/Cancelled.v1` events for the F6.1 cash-side subscriber; web `/procurement/payments` list + supplier-scoped open-invoice picker + outstanding hint + state-aware Post/Cancel.)
 
-**Next slice (start here):** **F3.4** — Supplier payment. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F4.2** — Sales invoice posting. F3.5 (vendor return) deferred to Phase 8 per plan; F4.1 (quotation) skippable. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -608,14 +609,23 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F3.4 — Supplier payment
 
-**Story:** US-PROC-007 · **Size:** M · **Status:** `[ ]`
-**Dependencies:** F3.3, F6.1 (cash entries).
+**Story:** US-PROC-007 · **Size:** M · **Status:** `[x]`
+**Dependencies:** F3.3 (invoices). F6.1 (cash entries / cash_book mirror) listens via event subscriber; F3.4 ships the payable side ahead of it.
 
 **Backend:**
-- [ ] `SupplierPayment`, `SupplierPaymentAllocation` entities (lives in `cash` module).
-- [ ] `SupplierPaymentService` + Impl.
+- [x] `SupplierPayment` + `SupplierPaymentAllocation` entities (lives in `cash` module, `V25` + `V25_1`). Per-branch unique payment number. DRAFT → POSTED → terminal lifecycle (POSTED writes settlement); DRAFT → CANCELLED. `PaymentMethod` enum: CASH / BANK_TRANSFER / CHEQUE / MOBILE_MONEY. `SupplierPaymentStatus` enum.
+- [x] `SupplierPaymentService` + Impl. Allocation guards: each invoice in-company + same supplier + no-duplicate-in-payment + `amount ≤ invoice.outstandingAmount()` + Σ allocations ≤ payment total. Posting requires `DayGuard.requireOpenDay(branchId)`. `SupplierInvoice` gained `outstandingAmount()` + `applyPayment(amount, actorId)` — flips to PARTIALLY_PAID until fully paid → PAID.
+- [x] Events: `SupplierPaymentCreated/Posted/Cancelled.v1`. The cash-side mirror (cash_entry OUT + cash_book delta) is owned by F6.1 and subscribes to `SupplierPaymentPosted.v1`.
+- [x] `V26` seeds `CASH.MANAGE_SUPPLIER_PAYMENT`; controller gates all paths.
 
-**Tests:** `TC-PROC-022` .. `TC-PROC-025`; `TC-E2E-002`.
+**Web:**
+- [x] `/procurement/payments` — supplier-scoped open-invoice picker (loads POSTED + PARTIALLY_PAID invoices for the chosen supplier); each allocation row shows the invoice's outstanding amount and pre-fills the input; live Total / Allocated / Remaining hint; state-aware Post / Cancel. (Mounted under `/procurement` for now; gets its own top-level `/cash` menu when F6.1 lands.)
+
+**Tests:**
+- **Unit:** `SupplierPaymentServiceImplTest` (10) — createDraft captures allocations + emits Created without touching invoices; allocation > outstanding rejected; Σ allocations > payment total rejected; foreign-supplier invoice rejected; duplicate-invoice allocation rejected; post advances paid_amount + flips PARTIALLY_PAID; full settlement flips to PAID; post requires DayGuard.requireOpenDay; cancel from DRAFT works; duplicate branch number rejected.
+- **System:** `TC-PROC-022` .. `TC-PROC-025`; `TC-E2E-002`. *(pending)*
+
+**DoD:** Accountant records a payment to a supplier; matched invoices flip to PARTIALLY_PAID / PAID; the `SupplierPaymentPosted.v1` event is queued for the F6.1 cash-side mirror.
 
 ---
 
