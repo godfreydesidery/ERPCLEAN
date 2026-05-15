@@ -77,6 +77,10 @@ orbix:
     # LPO total at or below this value auto-approves on submit (skips
     # PENDING_APPROVAL). Set to 0 to require approval for every LPO.
     lpo-auto-approval-threshold: 0
+    # Allowable fractional difference between an invoice's total_amount and the
+    # sum of its GRN allocations (0.005 = ±0.5%). Above this the match is
+    # rejected — the operator must edit the allocations or the invoice totals.
+    invoice-match-tolerance-pct: 0.005
   flags:
     cache-ttl-seconds: 30
 
