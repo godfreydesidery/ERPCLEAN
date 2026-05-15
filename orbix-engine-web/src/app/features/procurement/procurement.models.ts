@@ -166,3 +166,54 @@ export interface CreateSupplierInvoiceRequest {
   notes: string | null;
   allocations: SupplierInvoiceAllocation[];
 }
+
+// ---- F3.4: supplier payment + settlement -----------------------------------
+
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'MOBILE_MONEY';
+export const PAYMENT_METHODS: PaymentMethod[] =
+  ['CASH', 'BANK_TRANSFER', 'CHEQUE', 'MOBILE_MONEY'];
+
+export type SupplierPaymentStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+export interface SupplierPaymentAllocation {
+  id: number;
+  supplierInvoiceId: number;
+  amount: number;
+}
+
+export interface SupplierPayment {
+  id: number;
+  number: string;
+  companyId: number;
+  branchId: number;
+  supplierId: number;
+  paymentDate: string;
+  method: PaymentMethod;
+  reference: string | null;
+  currencyCode: string;
+  totalAmount: number;
+  allocatedAmount: number;
+  status: SupplierPaymentStatus;
+  postedAt: string | null;
+  postedBy: number | null;
+  notes: string | null;
+  allocations: SupplierPaymentAllocation[];
+}
+
+export interface CreateSupplierPaymentAllocation {
+  supplierInvoiceId: number;
+  amount: number;
+}
+
+export interface CreateSupplierPaymentRequest {
+  number: string;
+  branchId: number;
+  supplierId: number;
+  paymentDate: string;
+  method: PaymentMethod;
+  reference: string | null;
+  currencyCode: string;
+  totalAmount: number;
+  notes: string | null;
+  allocations: CreateSupplierPaymentAllocation[];
+}

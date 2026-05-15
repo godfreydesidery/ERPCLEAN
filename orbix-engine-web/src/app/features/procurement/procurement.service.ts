@@ -7,9 +7,11 @@ import {
   CreateGrnRequest,
   CreateLpoOrderRequest,
   CreateSupplierInvoiceRequest,
+  CreateSupplierPaymentRequest,
   Grn,
   LpoOrder,
   SupplierInvoice,
+  SupplierPayment,
   UpdateLpoOrderRequest
 } from './procurement.models';
 
@@ -103,6 +105,40 @@ export class ProcurementService {
   cancelSupplierInvoice(id: number): Observable<SupplierInvoice> {
     return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
       `${this.base}/supplier-invoices/${id}/cancel`, {}
+    ));
+  }
+
+  // ---- supplier payments (F3.4) -------------------------------------------
+
+  listSupplierPayments(branchId: number | null): Observable<SupplierPayment[]> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<SupplierPayment[]>>(
+      `${this.base}/supplier-payments`, { params }
+    ));
+  }
+
+  getSupplierPayment(id: number): Observable<SupplierPayment> {
+    return unwrap(this.http.get<ApiResponse<SupplierPayment>>(
+      `${this.base}/supplier-payments/${id}`
+    ));
+  }
+
+  createSupplierPayment(request: CreateSupplierPaymentRequest): Observable<SupplierPayment> {
+    return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
+      `${this.base}/supplier-payments`, request
+    ));
+  }
+
+  postSupplierPayment(id: number): Observable<SupplierPayment> {
+    return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
+      `${this.base}/supplier-payments/${id}/post`, {}
+    ));
+  }
+
+  cancelSupplierPayment(id: number): Observable<SupplierPayment> {
+    return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
+      `${this.base}/supplier-payments/${id}/cancel`, {}
     ));
   }
 }
