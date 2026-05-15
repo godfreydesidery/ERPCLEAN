@@ -17,5 +17,9 @@ export const routes: Routes = [
   {
     path: 'transfers',
     loadComponent: () => import('./transfers.component').then(m => m.TransfersComponent)
+  },
+  {
+    path: 'batches',
+    loadComponent: () => import('./batches.component').then(m => m.BatchesComponent)
   }
 ];

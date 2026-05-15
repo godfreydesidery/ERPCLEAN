@@ -9,7 +9,10 @@ import {
   ItemBranchBalance,
   Page,
   ReceiveTransferRequest,
+  RecallStockBatchRequest,
   RecordCountsRequest,
+  StockBatch,
+  StockBatchStatus,
   StockCount,
   StockMove,
   StockTransfer
@@ -88,6 +91,33 @@ export class StockService {
   closeTransfer(id: number): Observable<StockTransfer> {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(
       `${this.base}/stock-transfers/${id}/close`, {}
+    ));
+  }
+
+  // ---- stock batches (F2.4) -------------------------------------------------
+
+  listBatches(filter: { branchId?: number; itemId?: number; status?: StockBatchStatus } = {}):
+      Observable<StockBatch[]> {
+    let params = new HttpParams();
+    if (filter.branchId != null) params = params.set('branchId', filter.branchId);
+    if (filter.itemId != null) params = params.set('itemId', filter.itemId);
+    if (filter.status) params = params.set('status', filter.status);
+    return unwrap(this.http.get<ApiResponse<StockBatch[]>>(
+      `${this.base}/stock-batches`, { params }
+    ));
+  }
+
+  listExpiringSoon(branchId: number | null, daysAhead: number): Observable<StockBatch[]> {
+    let params = new HttpParams().set('daysAhead', daysAhead);
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<StockBatch[]>>(
+      `${this.base}/stock-batches/expiring-soon`, { params }
+    ));
+  }
+
+  recallBatch(id: number, request: RecallStockBatchRequest): Observable<StockBatch> {
+    return unwrap(this.http.post<ApiResponse<StockBatch>>(
+      `${this.base}/stock-batches/${id}/recall`, request
     ));
   }
 }

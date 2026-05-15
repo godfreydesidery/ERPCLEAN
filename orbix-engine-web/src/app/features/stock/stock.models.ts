@@ -24,6 +24,7 @@ export interface StockMove {
   refId: number;
   actorId: number;
   notes: string | null;
+  batchId: number | null;
 }
 
 export interface ItemBranchBalance {
@@ -112,4 +113,29 @@ export interface CreateStockTransferRequest {
 
 export interface ReceiveTransferRequest {
   lines: { lineId: number; receivedQty: number }[];
+}
+
+// ---- F2.4: stock batches + FEFO --------------------------------------------
+
+export type StockBatchStatus = 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'RECALLED';
+export const STOCK_BATCH_STATUSES: StockBatchStatus[] = ['ACTIVE', 'EXHAUSTED', 'EXPIRED', 'RECALLED'];
+
+export interface StockBatch {
+  id: number;
+  itemId: number;
+  branchId: number;
+  companyId: number;
+  batchNo: string;
+  manufacturedAt: string | null;
+  expiryAt: string | null;
+  qtyReceived: number;
+  qtyOnHand: number;
+  cost: number;
+  sourceDocType: string;
+  sourceDocId: number;
+  status: StockBatchStatus;
+}
+
+export interface RecallStockBatchRequest {
+  reason: string;
 }
