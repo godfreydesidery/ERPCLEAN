@@ -67,4 +67,21 @@ public class LpoOrderLine {
         this.discountPct = discountPct != null ? discountPct : BigDecimal.ZERO;
         this.lineTotal = lineTotal;
     }
+
+    /** True when the remaining-to-receive quantity is zero (or negative, which we treat as fully received). */
+    public boolean isFullyReceived() {
+        return outstandingQty().signum() <= 0;
+    }
+
+    public BigDecimal outstandingQty() {
+        return orderedQty.subtract(receivedQty);
+    }
+
+    /** Adds {@code qty} (positive) to {@code received_qty}. Caller has already validated the over-receipt guard. */
+    public void addReceived(BigDecimal qty) {
+        if (qty.signum() <= 0) {
+            throw new IllegalArgumentException("Received qty must be positive: " + qty);
+        }
+        this.receivedQty = this.receivedQty.add(qty);
+    }
 }

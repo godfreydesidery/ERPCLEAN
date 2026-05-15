@@ -146,6 +146,20 @@ public class LpoOrder {
         touch(actorId);
     }
 
+    /**
+     * Called by GRN posting. {@code fullyReceived} = every line has
+     * received_qty == ordered_qty. Allowed transitions:
+     * APPROVED / PARTIALLY_RECEIVED → PARTIALLY_RECEIVED / RECEIVED.
+     */
+    public void markReceiveProgress(boolean fullyReceived, Long actorId) {
+        if (status != LpoOrderStatus.APPROVED && status != LpoOrderStatus.PARTIALLY_RECEIVED) {
+            throw new IllegalStateException(
+                "Cannot record receipt on an LPO in status " + status);
+        }
+        this.status = fullyReceived ? LpoOrderStatus.RECEIVED : LpoOrderStatus.PARTIALLY_RECEIVED;
+        touch(actorId);
+    }
+
     private void requireStatus(LpoOrderStatus expected) {
         if (status != expected) {
             throw new IllegalStateException("LPO is " + status + ", expected " + expected);
