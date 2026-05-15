@@ -15,10 +15,19 @@ import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
+import com.orbix.engine.modules.pos.domain.entity.PosPayment;
+import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.Till;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
+import com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod;
+import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
+import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillStatus;
+import com.orbix.engine.modules.pos.repository.CashPickupRepository;
+import com.orbix.engine.modules.pos.repository.PettyCashRepository;
+import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
+import com.orbix.engine.modules.pos.repository.PosSaleRepository;
 import com.orbix.engine.modules.pos.repository.TillRepository;
 import com.orbix.engine.modules.pos.repository.TillSessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +56,10 @@ public class TillSessionServiceImpl implements TillSessionService {
 
     private final TillSessionRepository sessions;
     private final TillRepository tills;
+    private final PosSaleRepository sales;
+    private final PosPaymentRepository payments;
+    private final CashPickupRepository pickups;
+    private final PettyCashRepository pettyCash;
     private final CompanyRepository companies;
     private final DayGuard dayGuard;
     private final CashLedgerService cashLedger;
@@ -199,12 +212,43 @@ public class TillSessionServiceImpl implements TillSessionService {
     }
 
     /**
-     * Expected cash = opening_float + cash sales + cash refunds in − cash refunds out
-     * + cash pickups − petty cash out. POS-sale flows ship in F5.2+; until then,
-     * only the float contributes.
+     * Expected drawer cash = opening_float + cash sales − cash refunds
+     *                       − cash pickups (moved to safe) − petty-cash payouts.
+     * Voided sales contribute 0 — the original cash IN is in cash_book but the
+     * cashier handed the money back, so the drawer is unchanged. POSTED refunds
+     * contribute a negative because the cashier paid out cash.
      */
     private BigDecimal computeExpectedCash(TillSession session) {
-        return session.getOpeningFloatAmount();
+        BigDecimal expected = session.getOpeningFloatAmount();
+        for (PosSale sale : sales.findByTillSessionIdOrderByIdAsc(session.getId())) {
+            expected = expected.add(cashContributionFor(sale));
+        }
+        expected = expected.subtract(pickups.sumForSession(session.getId()));
+        expected = expected.subtract(pettyCash.sumForSession(session.getId()));
+        return expected;
+    }
+
+    /**
+     * Signed cash contribution of a single sale to the drawer:
+     * POSTED + SALE   → +cash payments, POSTED + REFUND → -cash payments,
+     * VOIDED → 0 (cashier already handed the cash back).
+     */
+    private BigDecimal cashContributionFor(PosSale sale) {
+        if (sale.getStatus() != PosSaleStatus.POSTED) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal cash = sumCashFunctional(sale.getId());
+        return sale.getKind() == PosSaleKind.REFUND ? cash.negate() : cash;
+    }
+
+    private BigDecimal sumCashFunctional(Long saleId) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (PosPayment p : payments.findByPosSaleIdOrderByIdAsc(saleId)) {
+            if (p.getMethod() == PosPaymentMethod.CASH) {
+                sum = sum.add(p.getAmount());
+            }
+        }
+        return sum;
     }
 
     private void validateSupervisor(Long supervisorId, Long actorId) {

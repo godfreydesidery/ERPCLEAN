@@ -25,4 +25,10 @@ public final class CashRefType {
 
     /** Outbound supplier payment. */
     public static final String SUPPLIER_PAYMENT = "SupplierPayment";
+
+    /** Mid-shift pickup — paired OUT-TILL / IN-CASH_BOX. */
+    public static final String CASH_PICKUP = "CashPickup";
+
+    /** Petty-cash payout — single OUT-TILL. */
+    public static final String PETTY_CASH = "PettyCash";
 }

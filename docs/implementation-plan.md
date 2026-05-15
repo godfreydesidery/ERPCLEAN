@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `c11d285` — F5.8 backend (barcode resolver + EMBEDDED_WEIGHT add-time validation). Uncommitted: F6.1 backend slice (cash ledger + cash book + producer wiring across pos/sales/procurement).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `df121ec` — F6.1 backend (cash ledger + cash book + producer wiring). Uncommitted: F5.9 backend slice (cash pickup + petty cash + close-till variance math now folds in cash sales/refunds/pickups/petty).
 
-**▶ RESUME POINT:** next slice is **F5.9 — Cash pickup + petty cash** (now unblocked — F6.1 backend ships the `CashLedgerService` port + idempotency the F5.9 events will hook into). F5.7 gift-card tender still blocked on F7.1. F6.1 backend (cash_entry + cash_book + write-through projection + idempotency on `(refType, refId, direction)` + read endpoints + producer wiring in POS sale/refund/void, TillSession open/close, SalesReceipt, SupplierPayment) is done; direct supervisor-adjustment + bank-deposit endpoints deferred to a follow-on slice (need their own audit-doc tables); cash pickup / petty cash event consumers will land with F5.9; web `/cash/ledger` + `/cash/cash-book` screens deferred. Working tree dirty until the F6.1 commit.
+**▶ RESUME POINT:** next slice is **F5.10 — X / Z reports** (depends on F5.2 + F5.9; both done). F5.7 gift-card tender still blocked on F7.1; F6.2 (multi-currency cash book) + F6.3 (banking + supervisor adjustment) are good follow-ons. F5.9 backend (`cash_pickup` + `petty_cash` tables + `CashPickupService` / `PettyCashService` with supervisor authorisation + DayGuard + paired cash-ledger writes for pickups (TILL→CASH_BOX) + single OUT-TILL for petty cash; `TillSessionService.computeExpectedCash` now folds in cash sales/refunds/voids + pickups + petty cash) is done. Web cashier-side flow deferred to the dedicated Flutter mini-phase. Working tree dirty until the F5.9 commit.
 
-**Progress:** ~65% of MVP slices complete (34 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F6.1 backend done; F5.7 blocked, F5.9 / F5.10 / F6.2 / F6.3 next, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~67% of MVP slices complete (35 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F5.9 backend + F6.1 backend done; F5.7 blocked, F5.10 / F6.2 / F6.3 next, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -56,11 +56,12 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.5 — Refund at till (backend). Same-business-day refund flow rejecting batch-tracked items and writing RETURN_IN compensating stock moves at the original snapped line cost; `orbix.pos.refund-threshold` (default 10000) requires a `supervisorId` holding `POS.REFUND_APPROVE` (different from the cashier); `PosSaleKind.REFUND` rows reuse `pos_sale` / `pos_sale_line` / `pos_payment` with `refunded_from_sale_id` linking back to the original; `V38` seeds `POS.REFUND_POST` + `POS.REFUND_APPROVE`; `PosSaleRefunded.v1` event.
 - F5.6 — FX tender at till (backend). `pos_payment` can now snap a non-functional `tender_currency` + `fx_rate` per row (functional-currency `amount` is still the audit value used for totals/variance); till must accept the currency via `till_currency` (managed under `POS.TILL_CURRENCY_MANAGE` at `/api/v1/tills/{id}/currencies`); FX rate resolved most-recent-on-or-before the sale `at` from `fx_rate`; `V39` adds the `till_currency` table + the `pos_payment.tender_currency`/`tender_amount`/`fx_rate` columns + seeds `POS.TILL_CURRENCY_MANAGE`. Flutter tender-screen UI deferred.
 - F5.8 — Weighed items + barcode parser (backend; Flutter scale integration deferred). `BarcodeResolverService` + `GET /api/v1/pos/barcode-lookup?code=…` resolve a scanned code → `ResolvedBarcodeDto { itemId, code, name, uomId, vatGroupId, weighed, batchTracked, weighingUnit, minSellPrice, qty, barcodeType }`. Plain symbologies (UPC/EAN13/EAN8/PLU) match `item_barcode.barcode` exactly with `qty = packQty`; scale-printed EAN-13 (13 digits, leading `2`) falls back to a 7-char prefix lookup against `EMBEDDED_WEIGHT` barcodes and decodes weight bytes 8..12 as `int / 1000` in the item's `WeighingUnit` (per the README §11 layout `2 + 6-digit PLU + 5-digit weight + check digit`). Archived / cross-company items rejected; zero-weight scans rejected. `ItemBarcodeServiceImpl.addBarcode` now shape-checks each symbology (EAN13=13 digits, EAN8=8, UPC=12) and enforces EMBEDDED_WEIGHT = 7 digits leading with `2` against a weighed item.
+- F5.9 — Cash pickup + petty cash (backend; Flutter cashier flow deferred). `cash_pickup` + `petty_cash` tables (DATA-MODEL §7.6 / §7.7); `V42` schema + `V42_1` sequences (per dialect) + `V43` seeds `POS.CASH_PICKUP` / `POS.PETTY_CASH`. `CashPickupService` writes paired cash-ledger entries (OUT-TILL + IN-CASH_BOX, same `refType=CashPickup`/`refId`, idempotent by direction) on `POST /api/v1/cash-pickups`; `PettyCashService` writes a single OUT-TILL with `gl_category = PETTY` on `POST /api/v1/petty-cash` (no paired IN — petty cash leaves the system). Both require an OPEN till session + OPEN business day + a different-user authoriser holding the matching permission. `PettyCashCategory` enum: TRANSPORT/OFFICE/MAINTENANCE/OTHER. `CashPickupRecorded.v1` + `PettyCashPaid.v1` events. `TillSessionServiceImpl.computeExpectedCash` now folds in cash sales (POSTED + SALE +cash, POSTED + REFUND −cash, VOIDED 0) minus pickups minus petty cash, so close-till variance is meaningful end-to-end.
 
 **Done in Phase 6:**
 - F6.1 — Cash entries + cash book (backend; web `/cash/ledger` + `/cash/cash-book` screens deferred). `cash_entry` append-only ledger + `cash_book` write-through projection (per-branch / per-account / per-business-date opening + in + out + closing); idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call is a no-op; CashLedgerService is the posting port — all source modules call it in the same transaction so a rolled-back source doc rolls back the cash entry too; `V40` schema + `V40_1` sequence (per dialect) + `V41` seeds `CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`; `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1` events. Producer wiring landed in this slice: POS sale closes write IN-TILL per CASH `pos_payment` (`ref_type = PosSalePayment`); POS refunds write OUT-TILL per CASH refund payment (`PosRefundPayment`, `gl_category = CASH_REFUND`); same-day voids reverse the original CASH rows (`PosVoidPayment`); TillSession open writes the opening-float IN-TILL (`TillFloat` / `TILL_FLOAT`); TillSession close writes a variance entry on non-zero variance (surplus = IN, shortage = OUT, `TillVariance` / `VARIANCE`); SalesReceipt posts an IN entry on the method-mapped account (`CASH_BOX` / `BANK` / `MOBILE_MONEY`; CARD + STORE_CREDIT settle off-ledger); SupplierPayment posts an OUT entry on the method-mapped account. Read API at `GET /api/v1/cash-entries` + `GET /api/v1/cash-book` (gated by `CASH.READ`). Direct supervisor-adjustment + bank-deposit endpoints + cash pickup / petty cash consumers + multi-currency book deferred to follow-on slices.
 
-**Next slice (start here):** **F5.9** — Cash pickup + petty cash (now unblocked by F6.1). Then F5.10 (X/Z reports), F6.2 (multi-currency cash book), F6.3 (end-of-day banking + supervisor adjustment). F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.10** — X / Z reports (depends on F5.2 + F5.9; both now done). Then F6.2 (multi-currency cash book), F6.3 (end-of-day banking + supervisor adjustment). F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -919,10 +920,22 @@ Skip until F7.1 lands.
 
 ## F5.9 — Cash pickup + petty cash
 
-**Story:** US-POS-013, US-POS-014 · **Size:** S · **Status:** `[ ]`
+**Story:** US-POS-013, US-POS-014 · **Size:** S · **Status:** `[~]` (backend done; Flutter cashier flow deferred)
 **Dependencies:** F5.1, F6.1.
 
-**Tests:** `TC-POS-016` .. `TC-POS-018`.
+**Backend:**
+- [x] `cash_pickup` + `petty_cash` tables (DATA-MODEL §7.6 / §7.7) — `V42` schema + `V42_1` sequences (per dialect) + `V43` seeds `POS.CASH_PICKUP` / `POS.PETTY_CASH`.
+- [x] `CashPickup` + `PettyCash` immutable entities + repos (with `sumForSession` helpers); `PettyCashCategory` enum (TRANSPORT/OFFICE/MAINTENANCE/OTHER); request + response DTOs.
+- [x] `CashPickupServiceImpl` validates OPEN till session + OPEN business day + non-self authoriser holding `POS.CASH_PICKUP`; writes paired cash-ledger entries (OUT-TILL + IN-CASH_BOX, same `refType=CashPickup`/`refId`, different direction → both pass the idempotency UNIQUE); emits `CashPickupRecorded.v1`. Endpoint: `POST /api/v1/cash-pickups` gated by `POS.CASH_PICKUP`.
+- [x] `PettyCashServiceImpl` validates OPEN till session + OPEN business day + non-self authoriser holding `POS.PETTY_CASH`; writes a single OUT-TILL cash entry with `gl_category = PETTY` (no paired IN — petty cash leaves the system); emits `PettyCashPaid.v1`. Endpoint: `POST /api/v1/petty-cash` gated by `POS.PETTY_CASH`.
+- [x] `TillSessionServiceImpl.computeExpectedCash` extended: opening float + Σ POSTED-SALE cash payments − Σ POSTED-REFUND cash payments − Σ pickups − Σ petty cash; VOIDED sales contribute 0 (cashier handed the cash back already). Close-till variance is now end-to-end meaningful.
+- [x] Unit tests — `CashPickupServiceImplTest` (5 cases), `PettyCashServiceImplTest` (3 cases), `TillSessionServiceImplTest` extended with `close_expectedCashFoldsInSalesRefundsPickupsAndPettyCash` + `close_voidedSaleContributesZeroToExpectedCash`.
+
+**Flutter POS:**
+- [ ] Cash-pickup screen (supervisor PIN-authorised) — deferred to Flutter mini-phase.
+- [ ] Petty-cash screen with category + paid-to + receipt photo upload — deferred to Flutter mini-phase.
+
+**Tests:** `TC-POS-016` .. `TC-POS-018` — backend halves covered; e2e + Flutter halves pending.
 
 ---
 
