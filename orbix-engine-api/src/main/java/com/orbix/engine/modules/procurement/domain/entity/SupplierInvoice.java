@@ -137,6 +137,38 @@ public class SupplierInvoice {
         touch(actorId);
     }
 
+    /** Outstanding amount: {@code total - paid}. Never negative under normal flow. */
+    public BigDecimal outstandingAmount() {
+        return totalAmount.subtract(paidAmount);
+    }
+
+    /**
+     * Advances {@code paid_amount} by the (positive) allocation amount and
+     * flips the status: paid &lt; total → PARTIALLY_PAID; paid == total → PAID.
+     * Only callable on POSTED or PARTIALLY_PAID invoices.
+     */
+    public void applyPayment(BigDecimal amount, Long actorId) {
+        if (status != SupplierInvoiceStatus.POSTED
+                && status != SupplierInvoiceStatus.PARTIALLY_PAID) {
+            throw new IllegalStateException(
+                "Cannot apply a payment to an invoice in status " + status);
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive: " + amount);
+        }
+        BigDecimal newPaid = paidAmount.add(amount);
+        if (newPaid.compareTo(totalAmount) > 0) {
+            throw new IllegalArgumentException(
+                "Allocation " + amount + " would over-pay invoice " + number
+                    + " (paid would be " + newPaid + " of total " + totalAmount + ")");
+        }
+        this.paidAmount = newPaid;
+        this.status = paidAmount.compareTo(totalAmount) == 0
+            ? SupplierInvoiceStatus.PAID
+            : SupplierInvoiceStatus.PARTIALLY_PAID;
+        touch(actorId);
+    }
+
     private void requireStatus(SupplierInvoiceStatus expected) {
         if (status != expected) {
             throw new IllegalStateException("Supplier invoice is " + status + ", expected " + expected);
