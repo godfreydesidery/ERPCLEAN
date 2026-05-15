@@ -1,5 +1,11 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -22,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -40,7 +47,9 @@ public class TillSessionServiceImpl implements TillSessionService {
 
     private final TillSessionRepository sessions;
     private final TillRepository tills;
+    private final CompanyRepository companies;
     private final DayGuard dayGuard;
+    private final CashLedgerService cashLedger;
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
@@ -69,6 +78,28 @@ public class TillSessionServiceImpl implements TillSessionService {
             till.getId(), till.getBranchId(), companyId,
             day.getBusinessDate(), actorId, request.openingFloatAmount()
         ));
+
+        // F6.1: opening float — IN on TILL (the cash-box → till transfer is
+        // recorded as a single IN since the cash box ledger row is owned by
+        // the float assignment doc, not by the till session).
+        if (request.openingFloatAmount().signum() > 0) {
+            cashLedger.post(
+                Instant.now(),
+                companyId,
+                till.getBranchId(),
+                day.getBusinessDate(),
+                CashAccount.TILL,
+                CashDirection.IN,
+                request.openingFloatAmount(),
+                requireCompanyCurrency(companyId),
+                CashRefType.TILL_FLOAT,
+                session.getId(),
+                GlCategory.TILL_FLOAT,
+                null,
+                actorId
+            );
+        }
+
         events.publish("TillSessionOpened.v1", AGG, String.valueOf(session.getId()),
             Map.of(F_ID, session.getId(),
                 F_TILL_ID, till.getId(),
@@ -76,6 +107,12 @@ public class TillSessionServiceImpl implements TillSessionService {
                 "businessDate", session.getBusinessDate().toString(),
                 "openingFloat", session.getOpeningFloatAmount()));
         return TillSessionDto.from(session);
+    }
+
+    private String requireCompanyCurrency(Long companyId) {
+        return companies.findById(companyId)
+            .orElseThrow(() -> new NoSuchElementException("Company not found: " + companyId))
+            .getCurrencyCode();
     }
 
     @Override
@@ -89,11 +126,32 @@ public class TillSessionServiceImpl implements TillSessionService {
         }
         BigDecimal expectedCash = computeExpectedCash(session);
         BigDecimal variance = request.declaredCashAmount().subtract(expectedCash);
+        Long actorId = context.userId();
         if (variance.abs().compareTo(varianceThreshold) > 0) {
-            validateSupervisor(request.supervisorId(), context.userId());
+            validateSupervisor(request.supervisorId(), actorId);
         }
-        session.close(expectedCash, request.declaredCashAmount(), context.userId(),
+        session.close(expectedCash, request.declaredCashAmount(), actorId,
             request.supervisorId(), request.notes());
+
+        // F6.1: variance entry on TILL. surplus (declared > expected) → IN,
+        // shortage → OUT. Zero variance posts nothing.
+        if (variance.signum() != 0) {
+            cashLedger.post(
+                Instant.now(),
+                session.getCompanyId(),
+                session.getBranchId(),
+                session.getBusinessDate(),
+                CashAccount.TILL,
+                variance.signum() > 0 ? CashDirection.IN : CashDirection.OUT,
+                variance.abs(),
+                requireCompanyCurrency(session.getCompanyId()),
+                CashRefType.TILL_VARIANCE,
+                session.getId(),
+                GlCategory.VARIANCE,
+                null,
+                actorId
+            );
+        }
 
         events.publish("TillSessionClosed.v1", AGG, String.valueOf(session.getId()),
             Map.of(F_ID, session.getId(),

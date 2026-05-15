@@ -5,6 +5,11 @@ import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
@@ -83,6 +88,7 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
+    private final CashLedgerService cashLedger;
     private final DayGuard dayGuard;
     private final PermissionResolverService permissions;
     private final EventPublisher events;
@@ -153,6 +159,9 @@ public class PosSaleServiceImpl implements PosSaleService {
         List<PosSaleLine> savedLines = saveLines(sale, request.lines(), companyId, totals);
         List<PosPayment> savedPayments = savePayments(sale, tenders);
 
+        postCashEntriesForPayments(sale, savedPayments, CashDirection.IN,
+            CashRefType.POS_SALE_PAYMENT, GlCategory.CASH);
+
         events.publish("PosSaleClosed.v1", AGG, String.valueOf(sale.getId()),
             Map.of(F_ID, sale.getId(),
                 F_NUMBER, sale.getNumber(),
@@ -216,6 +225,12 @@ public class PosSaleServiceImpl implements PosSaleService {
             ));
         }
         sale.voidSale(request.reason(), context.userId());
+
+        // F6.1: same-day void reverses every CASH tender row on the original.
+        List<PosPayment> originalPayments = payments.findByPosSaleIdOrderByIdAsc(sale.getId());
+        postCashEntriesForPayments(sale, originalPayments, CashDirection.OUT,
+            CashRefType.POS_VOID_PAYMENT, GlCategory.CASH_REFUND);
+
         events.publish("PosSaleVoided.v1", AGG, String.valueOf(sale.getId()),
             Map.of(F_ID, sale.getId(),
                 F_NUMBER, sale.getNumber(),
@@ -293,6 +308,9 @@ public class PosSaleServiceImpl implements PosSaleService {
 
         List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts);
         List<PosPayment> savedPayments = saveRefundPayments(refund, tenders);
+
+        postCashEntriesForPayments(refund, savedPayments, CashDirection.OUT,
+            CashRefType.POS_REFUND_PAYMENT, GlCategory.CASH_REFUND);
 
         events.publish("PosSaleRefunded.v1", AGG, String.valueOf(refund.getId()),
             Map.of(F_ID, refund.getId(),
@@ -454,6 +472,36 @@ public class PosSaleServiceImpl implements PosSaleService {
             )));
         }
         return saved;
+    }
+
+    /**
+     * F6.1: post one {@code cash_entry} per CASH payment row. Card / mobile-money /
+     * voucher / store-credit tenders settle on their own rails and don't hit the
+     * cash module. FX tenders post the functional-currency-converted amount.
+     */
+    private void postCashEntriesForPayments(PosSale sale, List<PosPayment> rows,
+                                            CashDirection direction, String refType, GlCategory gl) {
+        String functional = requireCompanyCurrency(sale.getCompanyId());
+        for (PosPayment payment : rows) {
+            if (payment.getMethod() != PosPaymentMethod.CASH) {
+                continue;
+            }
+            cashLedger.post(
+                Instant.now(),
+                sale.getCompanyId(),
+                sale.getBranchId(),
+                sale.getBusinessDate(),
+                CashAccount.TILL,
+                direction,
+                payment.getAmount(),
+                functional,
+                refType,
+                payment.getId(),
+                gl,
+                sale.getNumber(),
+                sale.getCashierId()
+            );
+        }
     }
 
     private PosSale requireSale(Long id) {

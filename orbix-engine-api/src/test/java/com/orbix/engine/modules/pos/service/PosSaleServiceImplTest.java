@@ -85,6 +85,7 @@ class PosSaleServiceImplTest {
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
+    @Mock private com.orbix.engine.modules.cash.service.CashLedgerService cashLedger;
     @Mock private com.orbix.engine.modules.day.service.DayGuard dayGuard;
     @Mock private com.orbix.engine.modules.iam.service.PermissionResolverService permissions;
     @Mock private EventPublisher events;

@@ -1,5 +1,8 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.domain.entity.Company;
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
@@ -50,7 +53,9 @@ class TillSessionServiceImplTest {
 
     @Mock private TillSessionRepository sessions;
     @Mock private TillRepository tills;
+    @Mock private CompanyRepository companies;
     @Mock private DayGuard dayGuard;
+    @Mock private CashLedgerService cashLedger;
     @Mock private PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
@@ -68,6 +73,10 @@ class TillSessionServiceImplTest {
         Till till = new Till(COMPANY_ID, BRANCH_ID, "TILL-1", "Main till", PRICE_LIST_ID, ACTOR_ID);
         till.setId(TILL_ID);
         lenient().when(tills.findById(TILL_ID)).thenReturn(Optional.of(till));
+
+        Company company = new Company(1L, "C", "Co.", "TZS", "TZ", "Africa/Dar_es_Salaam", ACTOR_ID);
+        company.setId(COMPANY_ID);
+        lenient().when(companies.findById(COMPANY_ID)).thenReturn(Optional.of(company));
 
         lenient().when(sessions.save(any(TillSession.class))).thenAnswer(inv -> {
             TillSession s = inv.getArgument(0);

@@ -10,6 +10,7 @@ import com.orbix.engine.modules.cash.repository.SupplierPaymentAllocationReposit
 import com.orbix.engine.modules.cash.repository.SupplierPaymentRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
 import com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus;
@@ -50,6 +51,7 @@ class SupplierPaymentServiceImplTest {
     @Mock private SupplierPaymentAllocationRepository allocations;
     @Mock private SupplierInvoiceRepository invoices;
     @Mock private DayGuard dayGuard;
+    @Mock private CashLedgerService cashLedger;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -61,6 +63,8 @@ class SupplierPaymentServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
+        lenient().when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 15), ACTOR_ID));
 
         lenient().when(payments.save(any(SupplierPayment.class))).thenAnswer(inv -> {
             SupplierPayment p = inv.getArgument(0);

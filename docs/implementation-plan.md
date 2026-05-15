@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `11ccc45` — F5.6 backend (FX tender at till). Uncommitted: F5.8 backend slice (barcode resolver + EMBEDDED_WEIGHT add-time validation).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `c11d285` — F5.8 backend (barcode resolver + EMBEDDED_WEIGHT add-time validation). Uncommitted: F6.1 backend slice (cash ledger + cash book + producer wiring across pos/sales/procurement).
 
-**▶ RESUME POINT:** next slice is **F5.9 — Cash pickup + petty cash** (depends on F5.1 + F6.1; F6.1 not yet done, so F5.9 is effectively blocked until cash module lands). F5.7 gift-card tender is blocked on F7.1; F5.10 X/Z reports depends on F5.9. **Practical next:** start Phase 6 — **F6.1** (cash entries + cash book) so F5.9 / F5.10 unblock. F5.8 backend (EmbeddedWeightDecoder + BarcodeResolverService + `GET /api/v1/pos/barcode-lookup` + EMBEDDED_WEIGHT add-time validation) is done; Flutter scale integration + on-device decoder deferred to the dedicated Flutter mini-phase. Working tree dirty until the F5.8 commit.
+**▶ RESUME POINT:** next slice is **F5.9 — Cash pickup + petty cash** (now unblocked — F6.1 backend ships the `CashLedgerService` port + idempotency the F5.9 events will hook into). F5.7 gift-card tender still blocked on F7.1. F6.1 backend (cash_entry + cash_book + write-through projection + idempotency on `(refType, refId, direction)` + read endpoints + producer wiring in POS sale/refund/void, TillSession open/close, SalesReceipt, SupplierPayment) is done; direct supervisor-adjustment + bank-deposit endpoints deferred to a follow-on slice (need their own audit-doc tables); cash pickup / petty cash event consumers will land with F5.9; web `/cash/ledger` + `/cash/cash-book` screens deferred. Working tree dirty until the F6.1 commit.
 
-**Progress:** ~63% of MVP slices complete (33 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend done; F5.7 blocked, F5.9–F5.10 blocked on F6.1, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~65% of MVP slices complete (34 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend + F5.8 backend + F6.1 backend done; F5.7 blocked, F5.9 / F5.10 / F6.2 / F6.3 next, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -57,7 +57,10 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.6 — FX tender at till (backend). `pos_payment` can now snap a non-functional `tender_currency` + `fx_rate` per row (functional-currency `amount` is still the audit value used for totals/variance); till must accept the currency via `till_currency` (managed under `POS.TILL_CURRENCY_MANAGE` at `/api/v1/tills/{id}/currencies`); FX rate resolved most-recent-on-or-before the sale `at` from `fx_rate`; `V39` adds the `till_currency` table + the `pos_payment.tender_currency`/`tender_amount`/`fx_rate` columns + seeds `POS.TILL_CURRENCY_MANAGE`. Flutter tender-screen UI deferred.
 - F5.8 — Weighed items + barcode parser (backend; Flutter scale integration deferred). `BarcodeResolverService` + `GET /api/v1/pos/barcode-lookup?code=…` resolve a scanned code → `ResolvedBarcodeDto { itemId, code, name, uomId, vatGroupId, weighed, batchTracked, weighingUnit, minSellPrice, qty, barcodeType }`. Plain symbologies (UPC/EAN13/EAN8/PLU) match `item_barcode.barcode` exactly with `qty = packQty`; scale-printed EAN-13 (13 digits, leading `2`) falls back to a 7-char prefix lookup against `EMBEDDED_WEIGHT` barcodes and decodes weight bytes 8..12 as `int / 1000` in the item's `WeighingUnit` (per the README §11 layout `2 + 6-digit PLU + 5-digit weight + check digit`). Archived / cross-company items rejected; zero-weight scans rejected. `ItemBarcodeServiceImpl.addBarcode` now shape-checks each symbology (EAN13=13 digits, EAN8=8, UPC=12) and enforces EMBEDDED_WEIGHT = 7 digits leading with `2` against a weighed item.
 
-**Next slice (start here):** **F6.1** — Cash entries + cash book (single currency). F5.9 / F5.10 unblock once F6.1 lands; F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
+**Done in Phase 6:**
+- F6.1 — Cash entries + cash book (backend; web `/cash/ledger` + `/cash/cash-book` screens deferred). `cash_entry` append-only ledger + `cash_book` write-through projection (per-branch / per-account / per-business-date opening + in + out + closing); idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call is a no-op; CashLedgerService is the posting port — all source modules call it in the same transaction so a rolled-back source doc rolls back the cash entry too; `V40` schema + `V40_1` sequence (per dialect) + `V41` seeds `CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`; `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1` events. Producer wiring landed in this slice: POS sale closes write IN-TILL per CASH `pos_payment` (`ref_type = PosSalePayment`); POS refunds write OUT-TILL per CASH refund payment (`PosRefundPayment`, `gl_category = CASH_REFUND`); same-day voids reverse the original CASH rows (`PosVoidPayment`); TillSession open writes the opening-float IN-TILL (`TillFloat` / `TILL_FLOAT`); TillSession close writes a variance entry on non-zero variance (surplus = IN, shortage = OUT, `TillVariance` / `VARIANCE`); SalesReceipt posts an IN entry on the method-mapped account (`CASH_BOX` / `BANK` / `MOBILE_MONEY`; CARD + STORE_CREDIT settle off-ledger); SupplierPayment posts an OUT entry on the method-mapped account. Read API at `GET /api/v1/cash-entries` + `GET /api/v1/cash-book` (gated by `CASH.READ`). Direct supervisor-adjustment + bank-deposit endpoints + cash pickup / petty cash consumers + multi-currency book deferred to follow-on slices.
+
+**Next slice (start here):** **F5.9** — Cash pickup + petty cash (now unblocked by F6.1). Then F5.10 (X/Z reports), F6.2 (multi-currency cash book), F6.3 (end-of-day banking + supervisor adjustment). F5.7 still blocked on F7.1; F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -938,18 +941,31 @@ PDF generation, object-store upload on Z.
 
 ## F6.1 — Cash entries + cash book (single currency)
 
-**Story:** scattered across procurement, sales, pos · **Size:** L · **Status:** `[ ]`
+**Story:** scattered across procurement, sales, pos · **Size:** L · **Status:** `[~]` (backend done, Flutter / web / direct-write endpoints deferred)
 **Dependencies:** F2.1.
 
 **Backend:**
-- [ ] `CashEntry`, `CashBook` entities; append-only ledger.
-- [ ] Event consumers: `TillSessionOpened.v1`, `CashPickupRecorded.v1`, `PettyCashPaid.v1`, `TillSessionClosed.v1`, `SalesReceiptCaptured.v1`, `SupplierPaymentRecorded.v1`, `BusinessDayClosed.v1`.
-- [ ] Idempotent on `(source_doc_type, source_doc_id, direction)`.
+- [x] `CashEntry` append-only entity (DATA-MODEL §10.2) + `CashBook` projection entity (§10.3) + repos; `CashAccount` / `CashDirection` / `GlCategory` enums; `CashRefType` string constants.
+- [x] `V40` schema + `V40_1` per-dialect sequence + `V41` permission seed (`CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`).
+- [x] `CashLedgerService.post(...)` is the posting port — caller-side typed entry; idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call returns the existing row without re-inserting; `CashBook` projection updated write-through in the same transaction; emits `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1`.
+- [x] **Direct-call producer wiring** (synchronous, same-tx — replacing the planned event-consumer pattern, which would need outbox-poll infra we don't yet have):
+  - `PosSaleServiceImpl.post` → IN-TILL per CASH `pos_payment` row (`PosSalePayment` / `CASH`).
+  - `PosSaleServiceImpl.refund` → OUT-TILL per CASH refund payment row (`PosRefundPayment` / `CASH_REFUND`).
+  - `PosSaleServiceImpl.voidSale` → OUT-TILL reversing the original CASH rows (`PosVoidPayment` / `CASH_REFUND`).
+  - `TillSessionServiceImpl.open` → IN-TILL opening float (`TillFloat` / `TILL_FLOAT`).
+  - `TillSessionServiceImpl.close` → variance entry on non-zero variance (surplus = IN, shortage = OUT; `TillVariance` / `VARIANCE`).
+  - `SalesReceiptServiceImpl.post` → IN on the method-mapped account (CASH→CASH_BOX, MOBILE_MONEY→MOBILE_MONEY, BANK_TRANSFER/CHEQUE→BANK; CARD + STORE_CREDIT settle off-ledger) (`SalesReceipt` / `RECEIPT`).
+  - `SupplierPaymentServiceImpl.post` → OUT on the method-mapped account (`SupplierPayment` / `SUPPLIER_SETTLEMENT`).
+- [x] Read endpoints: `GET /api/v1/cash-entries?branchId&account&businessDate` + `GET /api/v1/cash-book?branchId&businessDate` (gated by `CASH.READ`).
+- [x] Unit tests — `CashLedgerServiceImplTest` (6: save+events, idempotency no-op, OUT decrements book, zero-amount rejected, second-IN appends to existing book, findByRef-empty); existing pos/sales/procurement tests updated to mock the new `CashLedgerService` (+ `CompanyRepository` for TillSession).
+- [ ] **Deferred to a follow-on slice:** direct write endpoints `POST /api/v1/cash-adjustments` (gated `CASH.ADJUST`) + `POST /api/v1/bank-deposits` (gated `CASH.BANKING`) — they need their own audit-doc tables (`cash_adjustment`, `bank_deposit`) before a stable `ref_id` is available.
+- [ ] **Deferred to F5.9 / F6.3:** cash pickup + petty cash consumers (need the F5.9 events first); banking + supervisor adjustment (F6.3).
+- [ ] **Deferred to F6.2:** multi-currency cash book (composite-PK extension on `cash_book`).
 
 **Web:**
-- [ ] `/cash/ledger`, `/cash/cash-book`.
+- [ ] `/cash/ledger`, `/cash/cash-book` — deferred.
 
-**Tests:** `TC-CASH-001` .. `TC-CASH-016`.
+**Tests:** `TC-CASH-001` .. `TC-CASH-016`. Backend covered by `CashLedgerServiceImplTest`; integration / e2e tests pending.
 
 ---
 
