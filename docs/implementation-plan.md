@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `2d37ace` — F5.5 backend (refund-at-till flow + supervisor-threshold rule + RETURN_IN compensating stock moves).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `cb731be` — F5.5 backend (refund-at-till flow + supervisor-threshold rule + RETURN_IN compensating stock moves).
 
-**▶ RESUME POINT:** next slice is **F5.6 — FX tender**. Per US-POS-021 — accept tender in a non-functional currency at a snapped daily FX rate, with the difference booked as exchange gain/loss when the cash module clears the entry in F6.2. F5.5 cash-out is deferred to F6.1's event subscriber on `PosSaleRefunded.v1`. Working tree clean.
+**▶ RESUME POINT:** next slice is **F5.8 — Weighed items + barcode parser** (F5.7 gift-card tender is blocked on F7.1). Per US-CAT-016 + US-POS-003 — extend the till's barcode parser to decode embedded-weight EAN-13 codes (prefix `2`). Backend item flags are already in place from V6. F5.6 backend (FX tender + till_currency CRUD + V39 schema additions) is done; Flutter tender-screen UI deferred to the dedicated Flutter mini-phase. Working tree clean.
 
-**Progress:** ~60% of MVP slices complete (31 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend done; F5.6–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~62% of MVP slices complete (32 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend + F5.5 backend + F5.6 backend done; F5.7 blocked, F5.8–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -54,7 +54,7 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
 - F5.4 — Offline-sync server contract (backend-complete; Flutter app deferred). `POST /api/v1/sync/push` batch-pushes locally-committed POS sales — each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch; idempotency on `clientOpId` was already in place from F5.2. `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` returns active items + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty + all barcodes (so the till's local DB can scan EAN/PLU offline). `GET /api/v1/sync/balances/snapshot?branchId=` returns current `item_branch_balance` rows for a soft pre-flight oversell check. `V37` seeds `POS.SYNC`.
 
-**Next slice (start here):** **F5.6** — FX tender. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.8** — Weighed items + barcode parser (F5.7 gift cards blocked on F7.1). F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -869,17 +869,19 @@ Split into:
 
 ## F5.6 — FX tender
 
-**Story:** US-POS-021 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-021 · **Size:** M · **Status:** `[x]` backend (Flutter tender screen deferred)
 **Dependencies:** F5.2, F1.2 (currencies).
 
 **Backend:**
-- [ ] `pos_payment.tender_currency / tender_amount / fx_rate_snapshot`.
-- [ ] Validation: till accepts currency; FX rate exists; functional total == sum(tender × rate).
+- [x] `pos_payment.tender_currency / tender_amount / fx_rate_snapshot` (V39). `pos_payment.amount` re-interpreted as the functional-currency-converted value. `till_currency` table (composite PK `(till_id, currency_code)`) records which foreign currencies a till accepts; functional currency is implicit.
+- [x] Service-side validation: foreign tender currency must exist on the till (`till_currency` row); most-recent `fx_rate` quote with `effective_at ≤ saleAt` must exist (else reject); `amount = tenderAmount × fxRateSnapshot`; functional total ≥ sum(amount) for sales, == for refunds. Functional-currency tender (or omitted `tenderCurrency`) bypasses both the till-accepts check and the FX-rate lookup at rate 1.
+- [x] `TillCurrencyService` CRUD: `GET/POST/DELETE /api/v1/tills/{tillId}/currencies[/{code}]` gated by `POS.TILL_CURRENCY_MANAGE` (V39 seeds permission 47). Rejects re-adding the functional currency (implicit-only).
+- [x] PosPaymentDto, PostPosSaleRequestDto.Payment, PostPosRefundRequestDto.Payment all carry `tenderCurrency` (optional — defaults to functional).
 
 **Flutter POS:**
-- [ ] Tender screen accepts multiple currencies.
+- [ ] Tender screen accepts multiple currencies — deferred to the Flutter mini-phase.
 
-**Tests:** `TC-POS-031` .. `TC-POS-035`; `TC-E2E-006`, `TC-E2E-007`.
+**Tests:** `TC-POS-031` .. `TC-POS-035`; `TC-E2E-006`, `TC-E2E-007`. Unit-test coverage: 5 new cases in `PosSaleServiceImplTest` (USD→TZS happy path with snapshot, currency-not-accepted rejection, no-rate rejection, explicit functional-currency tender skips FX, mixed FX + functional sums correctly) + 7 in `TillCurrencyServiceImplTest`.
 
 ---
 

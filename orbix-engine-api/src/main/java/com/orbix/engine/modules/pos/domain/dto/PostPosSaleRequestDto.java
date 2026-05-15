@@ -45,9 +45,17 @@ public record PostPosSaleRequestDto(
         Long vatGroupId
     ) {}
 
+    /**
+     * Tender row. {@code amount} is the tender amount in {@code tenderCurrency};
+     * the server snaps the FX rate at sale time and stores both the original
+     * and the functional-currency-converted value. When {@code tenderCurrency}
+     * is omitted (or equals the company's functional currency) the rate is 1
+     * and no FX lookup is performed.
+     */
     public record Payment(
         @NotNull PosPaymentMethod method,
         @NotNull @Positive BigDecimal amount,
+        String tenderCurrency,
         String reference,
         String terminalId,
         String last4

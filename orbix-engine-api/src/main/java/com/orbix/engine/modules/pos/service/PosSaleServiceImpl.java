@@ -1,6 +1,9 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.domain.entity.FxRate;
 import com.orbix.engine.modules.admin.domain.entity.Section;
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
@@ -21,12 +24,14 @@ import com.orbix.engine.modules.pos.domain.entity.PosPayment;
 import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.PosSaleLine;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
+import com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
 import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleRepository;
+import com.orbix.engine.modules.pos.repository.TillCurrencyRepository;
 import com.orbix.engine.modules.pos.repository.TillSessionRepository;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -42,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -67,10 +73,13 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final PosSaleLineRepository lines;
     private final PosPaymentRepository payments;
     private final TillSessionRepository tillSessions;
+    private final TillCurrencyRepository tillCurrencies;
     private final SectionRepository sections;
     private final ItemRepository items;
     private final VatGroupRepository vatGroups;
     private final CustomerRepository customers;
+    private final CompanyRepository companies;
+    private final FxRateRepository fxRates;
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
@@ -112,8 +121,15 @@ public class PosSaleServiceImpl implements PosSaleService {
 
         // Compute line totals + tax, then apply optional header-level discount before tender check.
         Totals totals = computeTotals(request, companyId);
-        validateTender(request, totals.total);
-        BigDecimal changeAmount = totals.tenderSum.subtract(totals.total);
+        String functional = requireCompanyCurrency(companyId);
+        List<TenderResolution> tenders = resolveTenders(request.payments(),
+            session.getTillId(), functional, request.saleAt());
+        BigDecimal tenderSum = sumFunctional(tenders);
+        if (tenderSum.compareTo(totals.total) < 0) {
+            throw new IllegalArgumentException(
+                "Tender sum " + tenderSum + " is less than total " + totals.total);
+        }
+        BigDecimal changeAmount = tenderSum.subtract(totals.total);
 
         PosSale sale = sales.save(new PosSale(
             request.number().trim(),
@@ -130,12 +146,12 @@ public class PosSaleServiceImpl implements PosSaleService {
             request.saleAt(),
             session.getBusinessDate(),
             totals.subtotal, totals.headerDiscount, totals.tax, totals.total,
-            totals.tenderSum, changeAmount,
+            tenderSum, changeAmount,
             request.notes()
         ));
 
         List<PosSaleLine> savedLines = saveLines(sale, request.lines(), companyId, totals);
-        List<PosPayment> savedPayments = savePayments(sale, request.payments());
+        List<PosPayment> savedPayments = savePayments(sale, tenders);
 
         events.publish("PosSaleClosed.v1", AGG, String.valueOf(sale.getId()),
             Map.of(F_ID, sale.getId(),
@@ -244,7 +260,15 @@ public class PosSaleServiceImpl implements PosSaleService {
 
         Map<Long, BigDecimal> snapCosts = snapOriginalCosts(original.getId());
         RefundTotals totals = computeRefundTotals(request, companyId, snapCosts);
-        validateRefundTender(totals.tenderSum, totals.total);
+        String functional = requireCompanyCurrency(companyId);
+        List<TenderResolution> tenders = resolveRefundTenders(request.payments(),
+            session.getTillId(), functional, request.saleAt());
+        BigDecimal tenderSum = sumFunctional(tenders);
+        if (tenderSum.compareTo(totals.total) != 0) {
+            throw new IllegalArgumentException(
+                "Refund tender sum " + tenderSum + " must equal refund total " + totals.total
+                    + " (no change is paid on a refund)");
+        }
         validateRefundApprover(totals.total, request.supervisorId(), actorId, companyId);
 
         PosSale refund = sales.save(new PosSale(
@@ -262,13 +286,13 @@ public class PosSaleServiceImpl implements PosSaleService {
             request.saleAt(),
             session.getBusinessDate(),
             totals.subtotal, BigDecimal.ZERO, totals.tax, totals.total,
-            totals.tenderSum, BigDecimal.ZERO,
+            tenderSum, BigDecimal.ZERO,
             request.notes()
         ));
         refund.setRefundedFromSaleId(original.getId());
 
         List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts);
-        List<PosPayment> savedPayments = saveRefundPayments(refund, request.payments());
+        List<PosPayment> savedPayments = saveRefundPayments(refund, tenders);
 
         events.publish("PosSaleRefunded.v1", AGG, String.valueOf(refund.getId()),
             Map.of(F_ID, refund.getId(),
@@ -324,10 +348,7 @@ public class PosSaleServiceImpl implements PosSaleService {
                 "headerDiscountAmount " + headerDiscount + " exceeds subtotal " + subtotal);
         }
         BigDecimal total = subtotal.subtract(headerDiscount).add(tax);
-        BigDecimal tenderSum = request.payments().stream()
-            .map(PostPosSaleRequestDto.Payment::amount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new Totals(subtotal, headerDiscount, tax, total, tenderSum);
+        return new Totals(subtotal, headerDiscount, tax, total);
     }
 
     private void validateDiscountApprover(PostPosSaleRequestDto request, Long actorId, Long companyId) {
@@ -353,16 +374,6 @@ public class PosSaleServiceImpl implements PosSaleService {
         if (!ok) {
             throw new org.springframework.security.access.AccessDeniedException(
                 "Authoriser " + approverId + " does not hold " + DISCOUNT_APPROVE_PERMISSION);
-        }
-    }
-
-    private void validateTender(PostPosSaleRequestDto request, BigDecimal total) {
-        BigDecimal sum = request.payments().stream()
-            .map(PostPosSaleRequestDto.Payment::amount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (sum.compareTo(total) < 0) {
-            throw new IllegalArgumentException(
-                "Tender sum " + sum + " is less than total " + total);
         }
     }
 
@@ -433,13 +444,13 @@ public class PosSaleServiceImpl implements PosSaleService {
         }
     }
 
-    private List<PosPayment> savePayments(PosSale sale,
-                                          List<PostPosSaleRequestDto.Payment> requestPayments) {
-        List<PosPayment> saved = new ArrayList<>(requestPayments.size());
-        for (PostPosSaleRequestDto.Payment input : requestPayments) {
+    private List<PosPayment> savePayments(PosSale sale, List<TenderResolution> tenders) {
+        List<PosPayment> saved = new ArrayList<>(tenders.size());
+        for (TenderResolution tr : tenders) {
             saved.add(payments.save(new PosPayment(
-                sale.getId(), input.method(), input.amount(),
-                input.reference(), input.terminalId(), input.last4()
+                sale.getId(), tr.method(), tr.functionalAmount(),
+                tr.currency(), tr.tenderAmount(), tr.fxRate(),
+                tr.reference(), tr.terminalId(), tr.last4()
             )));
         }
         return saved;
@@ -501,11 +512,87 @@ public class PosSaleServiceImpl implements PosSaleService {
     }
 
     private record Totals(BigDecimal subtotal, BigDecimal headerDiscount, BigDecimal tax,
-                          BigDecimal total, BigDecimal tenderSum) {}
+                          BigDecimal total) {}
 
     /** Refund totals — no header discount applies, tender must match total exactly. */
-    private record RefundTotals(BigDecimal subtotal, BigDecimal tax,
-                                BigDecimal total, BigDecimal tenderSum) {}
+    private record RefundTotals(BigDecimal subtotal, BigDecimal tax, BigDecimal total) {}
+
+    /**
+     * Per-payment resolution: snapped currency + tender amount + FX rate, plus
+     * the functional-currency-converted value used to validate against the total
+     * and persisted as {@code pos_payment.amount}.
+     */
+    @SuppressWarnings("java:S107")  // tender row fields are inherently wide
+    private record TenderResolution(
+        PosPaymentMethod method,
+        String currency,
+        BigDecimal tenderAmount,
+        BigDecimal fxRate,
+        BigDecimal functionalAmount,
+        String reference,
+        String terminalId,
+        String last4
+    ) {}
+
+    private String requireCompanyCurrency(Long companyId) {
+        return companies.findById(companyId)
+            .orElseThrow(() -> new NoSuchElementException("Company not found: " + companyId))
+            .getCurrencyCode();
+    }
+
+    private TenderResolution resolveTender(Long tillId, String functional, Instant at,
+                                           PosPaymentMethod method, BigDecimal tenderAmount,
+                                           String requestedCurrency, String reference,
+                                           String terminalId, String last4) {
+        String code = requestedCurrency == null || requestedCurrency.isBlank()
+            ? functional
+            : requestedCurrency.trim().toUpperCase();
+        BigDecimal rate;
+        BigDecimal functionalAmount;
+        if (code.equals(functional)) {
+            rate = BigDecimal.ONE;
+            functionalAmount = tenderAmount.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        } else {
+            if (!tillCurrencies.existsByIdTillIdAndIdCurrencyCode(tillId, code)) {
+                throw new IllegalArgumentException(
+                    "Till " + tillId + " does not accept tender currency " + code);
+            }
+            FxRate fx = fxRates.findMostRecent(code, functional, at)
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "No FX rate quoted for " + code + " -> " + functional + " at or before " + at));
+            rate = fx.getRate();
+            functionalAmount = tenderAmount.multiply(rate)
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        }
+        return new TenderResolution(method, code, tenderAmount, rate, functionalAmount,
+            reference, terminalId, last4);
+    }
+
+    private List<TenderResolution> resolveTenders(List<PostPosSaleRequestDto.Payment> payments,
+                                                  Long tillId, String functional, Instant at) {
+        List<TenderResolution> out = new ArrayList<>(payments.size());
+        for (PostPosSaleRequestDto.Payment p : payments) {
+            out.add(resolveTender(tillId, functional, at, p.method(), p.amount(),
+                p.tenderCurrency(), p.reference(), p.terminalId(), p.last4()));
+        }
+        return out;
+    }
+
+    private List<TenderResolution> resolveRefundTenders(List<PostPosRefundRequestDto.Payment> payments,
+                                                        Long tillId, String functional, Instant at) {
+        List<TenderResolution> out = new ArrayList<>(payments.size());
+        for (PostPosRefundRequestDto.Payment p : payments) {
+            out.add(resolveTender(tillId, functional, at, p.method(), p.amount(),
+                p.tenderCurrency(), p.reference(), p.terminalId(), p.last4()));
+        }
+        return out;
+    }
+
+    private BigDecimal sumFunctional(List<TenderResolution> tenders) {
+        return tenders.stream()
+            .map(TenderResolution::functionalAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 
     private PosSale requireRefundableOriginal(Long originalSaleId, Long sessionBranchId) {
         PosSale original = requireSale(originalSaleId);
@@ -568,18 +655,7 @@ public class PosSaleServiceImpl implements PosSaleService {
             tax = tax.add(lineTax);
         }
         BigDecimal total = subtotal.add(tax);
-        BigDecimal tenderSum = request.payments().stream()
-            .map(PostPosRefundRequestDto.Payment::amount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new RefundTotals(subtotal, tax, total, tenderSum);
-    }
-
-    private void validateRefundTender(BigDecimal tenderSum, BigDecimal total) {
-        if (tenderSum.compareTo(total) != 0) {
-            throw new IllegalArgumentException(
-                "Refund tender sum " + tenderSum + " must equal refund total " + total
-                    + " (no change is paid on a refund)");
-        }
+        return new RefundTotals(subtotal, tax, total);
     }
 
     private void validateRefundApprover(BigDecimal total, Long supervisorId, Long actorId, Long companyId) {
@@ -643,13 +719,13 @@ public class PosSaleServiceImpl implements PosSaleService {
         return savedLines;
     }
 
-    private List<PosPayment> saveRefundPayments(PosSale refund,
-                                                List<PostPosRefundRequestDto.Payment> requestPayments) {
-        List<PosPayment> saved = new ArrayList<>(requestPayments.size());
-        for (PostPosRefundRequestDto.Payment input : requestPayments) {
+    private List<PosPayment> saveRefundPayments(PosSale refund, List<TenderResolution> tenders) {
+        List<PosPayment> saved = new ArrayList<>(tenders.size());
+        for (TenderResolution tr : tenders) {
             saved.add(payments.save(new PosPayment(
-                refund.getId(), input.method(), input.amount(),
-                input.reference(), input.terminalId(), input.last4()
+                refund.getId(), tr.method(), tr.functionalAmount(),
+                tr.currency(), tr.tenderAmount(), tr.fxRate(),
+                tr.reference(), tr.terminalId(), tr.last4()
             )));
         }
         return saved;

@@ -75,10 +75,13 @@ class PosSaleServiceImplTest {
     @Mock private PosSaleLineRepository lines;
     @Mock private PosPaymentRepository payments;
     @Mock private TillSessionRepository tillSessions;
+    @Mock private com.orbix.engine.modules.pos.repository.TillCurrencyRepository tillCurrencies;
     @Mock private SectionRepository sections;
     @Mock private ItemRepository items;
     @Mock private VatGroupRepository vatGroups;
     @Mock private CustomerRepository customers;
+    @Mock private com.orbix.engine.modules.admin.repository.CompanyRepository companies;
+    @Mock private com.orbix.engine.modules.admin.repository.FxRateRepository fxRates;
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
@@ -119,6 +122,15 @@ class PosSaleServiceImplTest {
         vat.setId(VAT_GROUP_ID);
         lenient().when(vatGroups.findById(VAT_GROUP_ID)).thenReturn(Optional.of(vat));
 
+        // F5.6: company functional currency = TZS; no FX currencies registered on the till by default.
+        com.orbix.engine.modules.admin.domain.entity.Company company =
+            new com.orbix.engine.modules.admin.domain.entity.Company(
+                1L, "ACME", "Acme", "TZS", "TZ", "Africa/Dar_es_Salaam", ACTOR_ID);
+        company.setId(COMPANY_ID);
+        lenient().when(companies.findById(COMPANY_ID)).thenReturn(Optional.of(company));
+        lenient().when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(any(), any()))
+            .thenReturn(false);
+
         lenient().when(sales.findByCompanyIdAndClientOpId(any(), any())).thenReturn(Optional.empty());
         lenient().when(sales.existsByCompanyIdAndNumber(any(), any())).thenReturn(false);
         lenient().when(sales.save(any(PosSale.class))).thenAnswer(inv -> {
@@ -151,7 +163,7 @@ class PosSaleServiceImplTest {
             number, clientOpId, SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
             Instant.parse("2026-05-13T10:00:00Z"), null,
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID, qty, price, null, VAT_GROUP_ID)),
-            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, tender, null, null, null)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, tender, null, null, null, null)),
             null
         );
     }
@@ -205,8 +217,8 @@ class PosSaleServiceImplTest {
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             // total 118; cash 50 + card 68 = 118
             List.of(
-                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, new BigDecimal("50"), null, null, null),
-                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CARD, new BigDecimal("68"), "AUTH-1", "T1", "1234")
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, new BigDecimal("50"), null, null, null, null),
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CARD, new BigDecimal("68"), null, "AUTH-1", "T1", "1234")
             ),
             null
         );
@@ -324,7 +336,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CARD,
-                new BigDecimal("118"), "AUTH-9", "POS-T", "9999")),
+                new BigDecimal("118"), null, "AUTH-9", "POS-T", "9999")),
             null
         );
 
@@ -368,7 +380,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("100.30"), null, null, null)),
+                new BigDecimal("100.30"), null, null, null, null)),
             null
         );
         assertThatThrownBy(() -> service.post(req))
@@ -384,7 +396,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("100.30"), null, null, null)),
+                new BigDecimal("100.30"), null, null, null, null)),
             null
         );
         assertThatThrownBy(() -> service.post(req))
@@ -403,7 +415,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("100.30"), null, null, null)),
+                new BigDecimal("100.30"), null, null, null, null)),
             null
         );
         assertThatThrownBy(() -> service.post(req))
@@ -425,7 +437,7 @@ class PosSaleServiceImplTest {
                 new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
             // net 85, tax 15.30, total 100.30
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("100.30"), null, null, null)),
+                new BigDecimal("100.30"), null, null, null, null)),
             null
         );
         PosSaleDto dto = service.post(req);
@@ -446,7 +458,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("108"), null, null, null)),
+                new BigDecimal("108"), null, null, null, null)),
             null
         );
         PosSaleDto dto = service.post(req);
@@ -462,7 +474,7 @@ class PosSaleServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("100"), null, null, null)),
+                new BigDecimal("100"), null, null, null, null)),
             null
         );
         assertThatThrownBy(() -> service.post(req))
@@ -525,7 +537,7 @@ class PosSaleServiceImplTest {
             List.of(new com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto.Line(
                 ITEM_ID, UOM_ID, qty, price, null, VAT_GROUP_ID)),
             List.of(new com.orbix.engine.modules.pos.domain.dto.PostPosRefundRequestDto.Payment(
-                PosPaymentMethod.CASH, tender, null, null, null)),
+                PosPaymentMethod.CASH, tender, null, null, null, null)),
             null
         );
     }
@@ -737,5 +749,120 @@ class PosSaleServiceImplTest {
         assertThatThrownBy(() -> service.voidSale(id, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("batch-tracked");
+    }
+
+    // ---- F5.6: FX tender ----------------------------------------------------
+
+    private com.orbix.engine.modules.admin.domain.entity.FxRate fxRateUsdToTzs(BigDecimal rate) {
+        com.orbix.engine.modules.admin.domain.entity.FxRate fx =
+            new com.orbix.engine.modules.admin.domain.entity.FxRate(
+                "USD", "TZS", rate, Instant.parse("2026-05-13T08:00:00Z"), ACTOR_ID);
+        fx.setId(9001L);
+        return fx;
+    }
+
+    private PostPosSaleRequestDto fxSaleRequest(String number, String opId, BigDecimal qty,
+                                                BigDecimal price, BigDecimal tender, String currency) {
+        return new PostPosSaleRequestDto(
+            number, opId, SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID, qty, price, null, VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, tender, currency,
+                null, null, null)),
+            null
+        );
+    }
+
+    @Test
+    void post_fxTender_convertsToFunctionalAndStoresSnapshot() {
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+        when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(TILL_ID, "USD")).thenReturn(true);
+        when(fxRates.findMostRecent(eq("USD"), eq("TZS"), any(Instant.class)))
+            .thenReturn(Optional.of(fxRateUsdToTzs(new BigDecimal("2500"))));
+
+        // Total in TZS: qty 1 * price 100000 + 18% VAT = 118000.
+        // Tender 47.20 USD * 2500 = 118000.
+        PosSaleDto dto = service.post(fxSaleRequest("TILL-1-FX", "op-fx",
+            new BigDecimal("1"), new BigDecimal("100000"), new BigDecimal("47.20"), "USD"));
+
+        assertThat(dto.totalAmount()).isEqualByComparingTo("118000");
+        assertThat(dto.tenderedAmount()).isEqualByComparingTo("118000");
+        assertThat(dto.changeAmount()).isEqualByComparingTo("0");
+        assertThat(dto.payments()).hasSize(1);
+        var pay = dto.payments().get(0);
+        assertThat(pay.tenderCurrency()).isEqualTo("USD");
+        assertThat(pay.tenderAmount()).isEqualByComparingTo("47.20");
+        assertThat(pay.fxRateSnapshot()).isEqualByComparingTo("2500");
+        assertThat(pay.amount()).isEqualByComparingTo("118000");
+    }
+
+    @Test
+    void post_fxTender_currencyNotAcceptedByTill_isRejected() {
+        when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(TILL_ID, "USD")).thenReturn(false);
+
+        PostPosSaleRequestDto req = fxSaleRequest("TILL-1-FX-N", "op-fx-n",
+            new BigDecimal("1"), new BigDecimal("100000"), new BigDecimal("47.20"), "USD");
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("does not accept tender currency USD");
+        verify(sales, never()).save(any());
+    }
+
+    @Test
+    void post_fxTender_noRateQuoted_isRejected() {
+        when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(TILL_ID, "USD")).thenReturn(true);
+        when(fxRates.findMostRecent(eq("USD"), eq("TZS"), any(Instant.class)))
+            .thenReturn(Optional.empty());
+
+        PostPosSaleRequestDto req = fxSaleRequest("TILL-1-FX-R", "op-fx-r",
+            new BigDecimal("1"), new BigDecimal("100000"), new BigDecimal("47.20"), "USD");
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("No FX rate quoted for USD");
+        verify(sales, never()).save(any());
+    }
+
+    @Test
+    void post_functionalCurrencyExplicit_skipsFxLookup() {
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        // Explicitly send tenderCurrency = TZS — service uses rate 1, no FxRate lookup.
+        PostPosSaleRequestDto req = fxSaleRequest("TILL-1-FX-F", "op-fx-f",
+            new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("118"), "TZS");
+        PosSaleDto dto = service.post(req);
+        assertThat(dto.payments().get(0).tenderCurrency()).isEqualTo("TZS");
+        assertThat(dto.payments().get(0).fxRateSnapshot()).isEqualByComparingTo("1");
+        assertThat(dto.payments().get(0).tenderAmount()).isEqualByComparingTo("118");
+        verify(fxRates, never()).findMostRecent(any(), any(), any());
+    }
+
+    @Test
+    void post_mixedFxAndFunctional_sumsBothAfterConversion() {
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+        when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(TILL_ID, "USD")).thenReturn(true);
+        when(fxRates.findMostRecent(eq("USD"), eq("TZS"), any(Instant.class)))
+            .thenReturn(Optional.of(fxRateUsdToTzs(new BigDecimal("2500"))));
+
+        // Total TZS 236; pay 100 TZS cash + 0.0544 USD * 2500 = 136 TZS — sums to 236.
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-FX-MIX", "op-fx-mix", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("2"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            List.of(
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, new BigDecimal("100"),
+                    null, null, null, null),
+                new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, new BigDecimal("0.0544"),
+                    "USD", null, null, null)
+            ),
+            null
+        );
+        PosSaleDto dto = service.post(req);
+        assertThat(dto.tenderedAmount()).isEqualByComparingTo("236");
+        assertThat(dto.changeAmount()).isEqualByComparingTo("0");
+        assertThat(dto.payments()).hasSize(2);
     }
 }

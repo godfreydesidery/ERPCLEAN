@@ -75,7 +75,7 @@ class SyncServiceImplTest {
             List.of(new PostPosSaleRequestDto.Line(ITEM_A, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
-                new BigDecimal("118"), null, null, null)),
+                new BigDecimal("118"), null, null, null, null)),
             null
         );
     }

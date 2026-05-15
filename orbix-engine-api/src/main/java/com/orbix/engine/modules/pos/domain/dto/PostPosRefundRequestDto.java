@@ -45,9 +45,11 @@ public record PostPosRefundRequestDto(
         Long vatGroupId
     ) {}
 
+    /** Tender amount {@code amount} is in {@code tenderCurrency}; FX rate snapped at refund time. */
     public record Payment(
         @NotNull PosPaymentMethod method,
         @NotNull @Positive BigDecimal amount,
+        String tenderCurrency,
         String reference,
         String terminalId,
         String last4
