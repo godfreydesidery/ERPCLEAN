@@ -73,6 +73,10 @@ orbix:
     # (`authorised_by_user_id`, must hold `STOCK.ADJUST_APPROVE`) is required.
     # Currency-agnostic — denominated in the company's functional currency.
     adjustment-threshold: 50000
+  procurement:
+    # LPO total at or below this value auto-approves on submit (skips
+    # PENDING_APPROVAL). Set to 0 to require approval for every LPO.
+    lpo-auto-approval-threshold: 0
   flags:
     cache-ttl-seconds: 30
 
