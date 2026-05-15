@@ -9,9 +9,13 @@ import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
+import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPosSaleRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto;
 import com.orbix.engine.modules.pos.domain.entity.PosPayment;
 import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.PosSaleLine;
@@ -36,7 +40,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private static final String F_NUMBER = "number";
     private static final String F_BRANCH_ID = "branchId";
 
+    static final String DISCOUNT_APPROVE_PERMISSION = "POS.DISCOUNT_APPROVE";
+
     private final PosSaleRepository sales;
     private final PosSaleLineRepository lines;
     private final PosPaymentRepository payments;
@@ -66,8 +71,13 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
+    private final DayGuard dayGuard;
+    private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
+
+    @org.springframework.beans.factory.annotation.Value("${orbix.pos.discount-threshold-pct}")
+    private BigDecimal discountThresholdPct;
 
     @Override
     @Transactional
@@ -88,13 +98,13 @@ public class PosSaleServiceImpl implements PosSaleService {
         TillSession session = requireOpenSession(request.tillSessionId(), companyId);
         Section section = requireSection(request.sectionId(), session.getBranchId());
         requireCustomer(request.customerId());
+        validateDiscountApprover(request, actorId, companyId);
         if (sales.existsByCompanyIdAndNumber(companyId, request.number())) {
             throw new IllegalArgumentException(
                 "POS-sale number already exists: " + request.number());
         }
 
-        // Compute line totals + tax. POS sale prices include line discount but
-        // header-level discount is unused in F5.2 (matches the typical till UI).
+        // Compute line totals + tax, then apply optional header-level discount before tender check.
         Totals totals = computeTotals(request, companyId);
         validateTender(request, totals.total);
         BigDecimal changeAmount = totals.tenderSum.subtract(totals.total);
@@ -113,7 +123,7 @@ public class PosSaleServiceImpl implements PosSaleService {
             PosSaleKind.SALE,
             request.saleAt(),
             session.getBusinessDate(),
-            totals.subtotal, BigDecimal.ZERO, totals.tax, totals.total,
+            totals.subtotal, totals.headerDiscount, totals.tax, totals.total,
             totals.tenderSum, changeAmount,
             request.notes()
         ));
@@ -156,6 +166,46 @@ public class PosSaleServiceImpl implements PosSaleService {
     }
 
     @Override
+    @Transactional
+    @Auditable(action = "VOID", entityType = AGG)
+    public PosSaleDto voidSale(Long saleId, VoidPosSaleRequestDto request) {
+        PosSale sale = requireSale(saleId);
+        BusinessDay day = dayGuard.requireOpenDay(sale.getBranchId());
+        if (!Objects.equals(day.getBusinessDate(), sale.getBusinessDate())) {
+            throw new IllegalArgumentException(
+                "POS sales can only be voided on the same business day they were posted ("
+                    + sale.getBusinessDate() + ")");
+        }
+        List<PosSaleLine> saleLines = lines.findByPosSaleIdOrderByLineNoAsc(sale.getId());
+        Long companyId = context.companyId();
+        for (PosSaleLine line : saleLines) {
+            Item item = requireItem(line.getItemId(), companyId);
+            if (item.isBatchTracked()) {
+                throw new IllegalArgumentException(
+                    "Cannot same-day-void a POS sale containing batch-tracked items (item "
+                        + item.getCode() + "); use the F5.5 refund flow once it lands");
+            }
+            // Compensating inbound at the snapped line cost — keeps avg cost unchanged.
+            stockMoveService.post(new PostStockMoveRequestDto(
+                line.getItemId(), sale.getBranchId(),
+                line.getQty(), line.getCostAmount(),
+                StockMoveType.RETURN_IN, "PosSaleVoid", sale.getId(),
+                request.reason(), false, null
+            ));
+        }
+        sale.voidSale(request.reason(), context.userId());
+        events.publish("PosSaleVoided.v1", AGG, String.valueOf(sale.getId()),
+            Map.of(F_ID, sale.getId(),
+                F_NUMBER, sale.getNumber(),
+                "tillSessionId", sale.getTillSessionId(),
+                F_BRANCH_ID, sale.getBranchId(),
+                "totalAmount", sale.getTotalAmount(),
+                "reason", request.reason()));
+        return PosSaleDto.from(sale, saleLines,
+            payments.findByPosSaleIdOrderByIdAsc(sale.getId()));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<PosSaleDto> listForSession(Long tillSessionId) {
         return sales.findByTillSessionIdOrderByIdAsc(tillSessionId).stream()
@@ -187,11 +237,47 @@ public class PosSaleServiceImpl implements PosSaleService {
             subtotal = subtotal.add(netLine);
             tax = tax.add(lineTax);
         }
-        BigDecimal total = subtotal.add(tax);
+        BigDecimal headerDiscount = request.headerDiscountAmount() != null
+            ? request.headerDiscountAmount()
+            : BigDecimal.ZERO;
+        if (headerDiscount.signum() < 0) {
+            throw new IllegalArgumentException("headerDiscountAmount must be >= 0");
+        }
+        if (headerDiscount.compareTo(subtotal) > 0) {
+            throw new IllegalArgumentException(
+                "headerDiscountAmount " + headerDiscount + " exceeds subtotal " + subtotal);
+        }
+        BigDecimal total = subtotal.subtract(headerDiscount).add(tax);
         BigDecimal tenderSum = request.payments().stream()
             .map(PostPosSaleRequestDto.Payment::amount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new Totals(subtotal, tax, total, tenderSum);
+        return new Totals(subtotal, headerDiscount, tax, total, tenderSum);
+    }
+
+    private void validateDiscountApprover(PostPosSaleRequestDto request, Long actorId, Long companyId) {
+        BigDecimal threshold = discountThresholdPct;
+        boolean needsApproval = request.lines().stream()
+            .map(PostPosSaleRequestDto.Line::discountPct)
+            .filter(java.util.Objects::nonNull)
+            .anyMatch(pct -> pct.compareTo(threshold) > 0);
+        if (!needsApproval) {
+            return;
+        }
+        Long approverId = request.discountApproverId();
+        if (approverId == null) {
+            throw new IllegalArgumentException(
+                "Discount above " + threshold + "% requires an authoriser holding "
+                    + DISCOUNT_APPROVE_PERMISSION);
+        }
+        if (Objects.equals(approverId, actorId)) {
+            throw new IllegalArgumentException("You cannot authorise your own line discount");
+        }
+        boolean ok = permissions.resolve(approverId, companyId, null)
+            .contains(DISCOUNT_APPROVE_PERMISSION);
+        if (!ok) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "Authoriser " + approverId + " does not hold " + DISCOUNT_APPROVE_PERMISSION);
+        }
     }
 
     private void validateTender(PostPosSaleRequestDto request, BigDecimal total) {
@@ -338,5 +424,6 @@ public class PosSaleServiceImpl implements PosSaleService {
         return vat;
     }
 
-    private record Totals(BigDecimal subtotal, BigDecimal tax, BigDecimal total, BigDecimal tenderSum) {}
+    private record Totals(BigDecimal subtotal, BigDecimal headerDiscount, BigDecimal tax,
+                          BigDecimal total, BigDecimal tenderSum) {}
 }

@@ -10,6 +10,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -20,7 +21,6 @@ import com.orbix.engine.modules.pos.domain.entity.PosSaleLine;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
 import com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
-import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
 import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleRepository;
@@ -82,6 +82,8 @@ class PosSaleServiceImplTest {
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
+    @Mock private com.orbix.engine.modules.day.service.DayGuard dayGuard;
+    @Mock private com.orbix.engine.modules.iam.service.PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -93,6 +95,8 @@ class PosSaleServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,
+            "discountThresholdPct", new BigDecimal("10"));
 
         TillSession session = openSession();
         lenient().when(tillSessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
@@ -142,8 +146,8 @@ class PosSaleServiceImplTest {
     private PostPosSaleRequestDto request(String number, String clientOpId, BigDecimal qty,
                                           BigDecimal price, BigDecimal tender) {
         return new PostPosSaleRequestDto(
-            number, clientOpId, SESSION_ID, SECTION_ID, CUSTOMER_ID, null,
-            Instant.parse("2026-05-13T10:00:00Z"),
+            number, clientOpId, SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T10:00:00Z"), null,
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID, qty, price, null, VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH, tender, null, null, null)),
             null
@@ -193,8 +197,8 @@ class PosSaleServiceImplTest {
             .thenReturn(Optional.of(balance(new BigDecimal("80"))));
 
         PostPosSaleRequestDto req = new PostPosSaleRequestDto(
-            "TILL-1-M", "op-mix", SESSION_ID, SECTION_ID, CUSTOMER_ID, null,
-            Instant.parse("2026-05-13T11:00:00Z"),
+            "TILL-1-M", "op-mix", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T11:00:00Z"), null,
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             // total 118; cash 50 + card 68 = 118
@@ -313,8 +317,8 @@ class PosSaleServiceImplTest {
             .thenReturn(Optional.of(balance(new BigDecimal("80"))));
 
         PostPosSaleRequestDto req = new PostPosSaleRequestDto(
-            "TILL-1-P", "op-pay", SESSION_ID, SECTION_ID, CUSTOMER_ID, null,
-            Instant.parse("2026-05-13T12:00:00Z"),
+            "TILL-1-P", "op-pay", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T12:00:00Z"), null,
             List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
                 new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
             List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CARD,
@@ -349,5 +353,187 @@ class PosSaleServiceImplTest {
         b.setQtyOnHand(new BigDecimal("100"));
         b.setAvgCost(avgCost);
         return b;
+    }
+
+    // ---- F5.3: discount-approval + void ------------------------------------
+
+    @Test
+    void post_lineDiscountAboveThreshold_requiresApprover() {
+        // No balance stub — validation fires before stock-move post.
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-DSC", "op-disc", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T13:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("100.30"), null, null, null)),
+            null
+        );
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("authoriser");
+    }
+
+    @Test
+    void post_lineDiscountAboveThreshold_selfApprover_rejected() {
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-DSC2", "op-disc2", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, ACTOR_ID,
+            Instant.parse("2026-05-13T13:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("100.30"), null, null, null)),
+            null
+        );
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("your own");
+    }
+
+    @Test
+    void post_lineDiscountAboveThreshold_approverMissingPermission_403() {
+        when(permissions.resolve(99L, COMPANY_ID, null))
+            .thenReturn(java.util.Set.of());
+
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-DSC3", "op-disc3", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, 99L,
+            Instant.parse("2026-05-13T13:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("100.30"), null, null, null)),
+            null
+        );
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+            .hasMessageContaining(PosSaleServiceImpl.DISCOUNT_APPROVE_PERMISSION);
+    }
+
+    @Test
+    void post_lineDiscountAboveThreshold_approvedSupervisor_succeeds() {
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+        when(permissions.resolve(99L, COMPANY_ID, null))
+            .thenReturn(java.util.Set.of(PosSaleServiceImpl.DISCOUNT_APPROVE_PERMISSION));
+
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-DSC4", "op-disc4", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, 99L,
+            Instant.parse("2026-05-13T13:00:00Z"), null,
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), new BigDecimal("15"), VAT_GROUP_ID)),
+            // net 85, tax 15.30, total 100.30
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("100.30"), null, null, null)),
+            null
+        );
+        PosSaleDto dto = service.post(req);
+        assertThat(dto.totalAmount()).isEqualByComparingTo("100.30");
+    }
+
+    @Test
+    void post_headerDiscount_appliedAfterTax() {
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        // Subtotal 100; line tax 18; header discount 10 applied after tax → total 108.
+        // (Line tax in F5.3 is computed on pre-header-discount net to keep per-line
+        // VAT independent of header-level adjustments.)
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-HD", "op-hd", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T14:00:00Z"), new BigDecimal("10"),
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("108"), null, null, null)),
+            null
+        );
+        PosSaleDto dto = service.post(req);
+        assertThat(dto.discountAmount()).isEqualByComparingTo("10");
+        assertThat(dto.totalAmount()).isEqualByComparingTo("108");
+    }
+
+    @Test
+    void post_headerDiscount_exceedingSubtotal_isRejected() {
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-HDX", "op-hdx", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T14:00:00Z"), new BigDecimal("999"),
+            List.of(new PostPosSaleRequestDto.Line(ITEM_ID, UOM_ID,
+                new BigDecimal("1"), new BigDecimal("100"), null, VAT_GROUP_ID)),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("100"), null, null, null)),
+            null
+        );
+        assertThatThrownBy(() -> service.post(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("exceeds subtotal");
+    }
+
+    @Test
+    void voidSale_sameDay_writesCompensatingMovesAndFlipsToVoided() {
+        PosSale sale = persistedSale("TILL-1-V", "op-void");
+        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        PosSaleLine line = new PosSaleLine(sale.getId(), 1, ITEM_ID, UOM_ID,
+            new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
+            VAT_GROUP_ID, new BigDecimal("36"), new BigDecimal("236"));
+        line.setId(nextId.getAndIncrement());
+        line.setCostAmount(new BigDecimal("75"));
+        when(lines.findByPosSaleIdOrderByLineNoAsc(sale.getId())).thenReturn(List.of(line));
+        when(payments.findByPosSaleIdOrderByIdAsc(sale.getId())).thenReturn(List.of());
+
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        PosSaleDto dto = service.voidSale(sale.getId(),
+            new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("operator error"));
+
+        assertThat(dto.status()).isEqualTo(com.orbix.engine.modules.pos.domain.enums.PosSaleStatus.VOIDED);
+        ArgumentCaptor<PostStockMoveRequestDto> captor =
+            ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
+        verify(stockMoveService).post(captor.capture());
+        PostStockMoveRequestDto move = captor.getValue();
+        assertThat(move.moveType()).isEqualTo(StockMoveType.RETURN_IN);
+        assertThat(move.qty()).isEqualByComparingTo("2");
+        assertThat(move.unitCost()).isEqualByComparingTo("75");
+        verify(events).publish(eq("PosSaleVoided.v1"), any(), any(), any());
+    }
+
+    @Test
+    void voidSale_differentBusinessDay_isRejected() {
+        PosSale sale = persistedSale("TILL-1-VD", "op-vd");
+        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 14), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        Long id = sale.getId();
+        var req = new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("late");
+        assertThatThrownBy(() -> service.voidSale(id, req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("same business day");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void voidSale_batchTrackedItem_rejected() {
+        Item batched = new Item(COMPANY_ID, "MILK", "Milk", ItemType.SELLABLE, 10L, UOM_ID, VAT_GROUP_ID, ACTOR_ID);
+        batched.setId(ITEM_ID);
+        batched.setBatchTracked(true);
+        when(items.findById(ITEM_ID)).thenReturn(Optional.of(batched));
+
+        PosSale sale = persistedSale("TILL-1-VB", "op-vb");
+        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        PosSaleLine line = new PosSaleLine(sale.getId(), 1, ITEM_ID, UOM_ID,
+            new BigDecimal("1"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
+            VAT_GROUP_ID, BigDecimal.ZERO, new BigDecimal("100"));
+        line.setId(nextId.getAndIncrement());
+        when(lines.findByPosSaleIdOrderByLineNoAsc(sale.getId())).thenReturn(List.of(line));
+
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        Long id = sale.getId();
+        var req = new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("damaged");
+        assertThatThrownBy(() -> service.voidSale(id, req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("batch-tracked");
     }
 }

@@ -25,8 +25,13 @@ public record PostPosSaleRequestDto(
     @NotNull Long tillSessionId,
     @NotNull Long sectionId,
     @NotNull Long customerId,
+    /** Supervisor user id stamped on the sale (e.g. for general supervisor PIN flows). */
     Long supervisorId,
+    /** Required when any line's discountPct exceeds {@code orbix.pos.discount-threshold-pct}; must hold {@code POS.DISCOUNT_APPROVE}. */
+    Long discountApproverId,
     @NotNull Instant saleAt,
+    /** Optional header-level discount (after line discounts). Applied before tax in F5.3. */
+    BigDecimal headerDiscountAmount,
     @NotEmpty @Valid List<Line> lines,
     @NotEmpty @Valid List<Payment> payments,
     String notes

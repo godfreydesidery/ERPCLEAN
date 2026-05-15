@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPosSaleRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto;
 import com.orbix.engine.modules.pos.service.PosSaleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,5 +42,12 @@ public class PosSaleController {
     public ResponseEntity<PosSaleDto> post(@Valid @RequestBody PostPosSaleRequestDto request) {
         PosSaleDto sale = service.post(request);
         return ResponseEntity.created(URI.create("/api/v1/pos-sales/" + sale.id())).body(sale);
+    }
+
+    @PostMapping("/{id}/void")
+    @PreAuthorize("hasAuthority('POS.SALE_VOID')")
+    public PosSaleDto voidSale(@PathVariable Long id,
+                               @Valid @RequestBody VoidPosSaleRequestDto request) {
+        return service.voidSale(id, request);
     }
 }

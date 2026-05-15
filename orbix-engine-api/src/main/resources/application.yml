@@ -89,6 +89,9 @@ orbix:
     # Absolute till-session variance (|declared - expected|) above which a
     # supervisor holding POS.SESSION_VARIANCE_APPROVE must authorise the close.
     session-variance-threshold: 1000
+    # Per-line discount percentage above which a supervisor holding
+    # POS.DISCOUNT_APPROVE must authorise the sale. Set to 100 to disable.
+    discount-threshold-pct: 10
   flags:
     cache-ttl-seconds: 30
 
