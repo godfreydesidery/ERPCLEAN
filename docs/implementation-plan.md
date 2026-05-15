@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `ffaa34d` — F2.3 (stock counts + transfers).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `af482a4` — F2.4 web (stock batches view).
 
-**▶ RESUME POINT:** next slice is **F2.4 — batch tracking + FEFO consumption** (`StockBatch` entity + FEFO picker; also unblocks the deferred F1.6 batch-archive guard). All work through F2.3 is committed; working tree clean. Read the F2.4 section below + DATA-MODEL §17.5 / catalog README before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** next slice is **F2.5 — stock adjustments + internal consumption** (`POST /api/v1/adjustments` with supervisor-threshold rule + `POST /api/v1/internal-consumption` carrying `consumption_category` + `authorised_by_user_id`; section-tagged moves for section-to-section transfer). All work through F2.4 is committed; working tree clean. Read the F2.5 section below before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -30,8 +30,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F2.1 — business day open/close/override (`BusinessDay` OPEN→CLOSING→CLOSED state machine + monotonic-date / single-non-closed-day invariants; `business_day_override` audit table via `V9`; `DayGuard` synchronous port; `DAY.*` permissions via `V10`; `BusinessDayController`; web `/day` dashboard)
 - F2.2 — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance` cache via `V11`; moving-average cost on inbound, consume-at-average on outbound; negative-stock guard + `STOCK.OVERSELL` via `V12`; posting requires an open day via `DayGuard`; `StockMoved`/`BalanceUpdated`/`LowStockTriggered.v1`; web `/stock/balances` + `/stock/card/:itemId`)
 - F2.3 — stock counts + transfers (`StockCount`/`StockCountLine` DRAFT→IN_PROGRESS→CLOSED→POSTED with variance→ADJUSTMENT moves; `StockTransfer`/`StockTransferLine` DRAFT→ISSUED→RECEIVED→CLOSED with TRANSFER_OUT/IN moves; `V13`/`V14`; `STOCK.COUNT`/`STOCK.TRANSFER`; web `/stock/counts` + `/stock/transfers`)
+- F2.4 — batch tracking + FEFO consumption (`StockBatch` entity per (branch, item, batch_no) with ACTIVE/EXHAUSTED/EXPIRED/RECALLED lifecycle; `StockBatchService` exposes `createBatch` for inbound flows + `drainFefo` picker + `markExpired` + `recallBatch`; daily `StockBatchExpiryJob` flags ACTIVE rows past expiry; `EXPIRY_WRITE_OFF` move type + recall writes off remaining on-hand; `stock_move.batch_id` nullable column threads through `PostStockMoveRequestDto`; `V15` + `V16` migrations; `STOCK.BATCH` permission; F1.6 archive guard now blocks archive/disable-tracking while active batches exist; web `/stock/batches` expiring-soon + all-batches modes with recall action)
 
-**Next slice (start here):** **F2.4** — batch tracking + FEFO consumption. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F2.5** — stock adjustments + internal consumption. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -357,7 +358,7 @@ Update the plan as you go; commit the change alongside the feature.
 **Backend:**
 - [x] Migration `V6` adds `item.is_weighed` + `item.weighing_unit` and `item_barcode.barcode_type`. *(`item.is_batch_tracked` already existed from the V2 baseline — it is now mapped on the entity as `batchTracked`; the plan's `tracks_batches` name resolves to that column.)*
 - [x] Validation in `ItemServiceImpl.updateItem`: `weighing_unit` set iff `weighed`; a weighed item needs ≥1 PLU / EMBEDDED_WEIGHT barcode. Emits `ItemWeighingChanged.v1`, `ItemBatchTrackingEnabled/Disabled.v1`.
-- [ ] Un-set `batch_tracked` / archive blocked when active batches exist — **deferred to F2.4** (`stock_batch` entity doesn't exist yet; TODO markers in place).
+- [x] Un-set `batch_tracked` / archive blocked when active batches exist (F2.4 wired the `StockBatchRepository` lookup; covered by `ItemServiceImplTest`).
 
 **Web:**
 - [x] Weighed + batch-tracked toggles and a weighing-unit dropdown on the item edit form; barcode-type dropdown in the barcodes panel.
@@ -481,24 +482,26 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.4 — Batch tracking + FEFO consumption
 
-**Story:** US-STOCK-011, US-STOCK-012, US-STOCK-013, US-STOCK-014 · **Size:** L · **Status:** `[ ]`
+**Story:** US-STOCK-011, US-STOCK-012, US-STOCK-013, US-STOCK-014 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F2.2, F1.6.
 
 **Backend:**
-- [ ] `StockBatch` entity, `StockBatchRepository`, `StockBatchService` + Impl.
-- [ ] On GRN of batch-tracked items: create `stock_batch` row.
-- [ ] On consumption: FEFO picker — earliest-expiry ACTIVE batch wins.
-- [ ] Scheduled expiry-flag job; `EXPIRY_WRITE_OFF` move type; `BatchRecalled.v1`.
+- [x] `StockBatch` entity (per (branch, item, batch_no), `ACTIVE`/`EXHAUSTED`/`EXPIRED`/`RECALLED`), `StockBatchRepository`, `StockBatchService` + Impl. `stock_move` gains a nullable `batch_id`; `PostStockMoveRequestDto` threads it through so callers can attribute a move to a specific batch.
+- [x] `StockBatchService.createBatch` — used by inbound flows (GRN / production output / opening) once they land. The actual call sites land with F3.2 / F7.3; for now F2.4 ships the service surface + the recall write-off path that already exercises it.
+- [x] `StockBatchService.drainFefo(itemId, branchId, qty)` — earliest-expiry first; drains each batch, flips it to `EXHAUSTED` when on-hand hits zero, emits `StockBatchExhausted.v1`, returns per-batch picks. Callers split outbound moves accordingly (POS / production wire it in F5.2 / F7.3).
+- [x] `StockBatchExpiryJob` `@Scheduled(cron = ...)` — flips ACTIVE rows whose `expiry_at` is before today to `EXPIRED`, emits `StockBatchExpired.v1` per row. Doesn't write `stock_move` rows itself; the matching write-off is an operator action (recall endpoint).
+- [x] `EXPIRY_WRITE_OFF` move type. `recallBatch(batchId, reason)` writes off remaining on-hand as an `EXPIRY_WRITE_OFF` move (with the right `batch_id` stamped) and emits `BatchRecalled.v1`.
+- [x] `V15` / `V15_1` migrations create `stock_batch` + add `stock_move.batch_id`; `V16` seeds `STOCK.BATCH` permission. `StockBatchController` gated by it.
 
 **Web:**
-- [ ] `/stock/batches` filter view + expiring-soon report.
+- [x] `/stock/batches` — "Expiring soon" (default; days-ahead configurable) and "All batches" (status / item / branch filters) modes; recall button on ACTIVE rows prompts for a reason.
 
 **Tests:**
-- **Unit:** FEFO picker; cost flows from chosen batch.
-- **Integration:** Mixed-batch consumption; expiry job marks batches.
-- **System:** `TC-STOCK-014` .. `TC-STOCK-019`; `TC-E2E-009`, `TC-E2E-010`.
+- **Unit:** `StockBatchServiceImplTest` (10) — create + dup rejection, FEFO order + exhaustion + insufficient-batches throw, mark-expired emits event, recall writes off remaining + emits event, recall on zero on-hand skips the move, foreign-company recall 404, expiring-soon filter. `StockMoveServiceImplTest` extended to cover `batchId` pass-through. `ItemServiceImplTest` extended with archive-guard + disable-tracking guard against active batches.
+- **Integration:** Mixed-batch consumption; expiry job marks batches. *(pending — slots in with F3.2 GRN integration)*
+- **System:** `TC-STOCK-014` .. `TC-STOCK-019`; `TC-E2E-009`, `TC-E2E-010`. *(pending)*
 
-**DoD:** Batch-tracked item's stock card shows per-batch breakdown; POS pulls earliest expiry first.
+**DoD:** Batch-tracked item's stock card shows per-batch breakdown; POS pulls earliest expiry first. *(POS wiring lands with F5.2; stock card per-batch view lands when callers start stamping `batch_id` on moves.)*
 
 ---
 
