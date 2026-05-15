@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `bd86e68` — F3.2 web (GRN list + receive-against-LPO).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `93e20a4` — F3.3 web (supplier invoice list + match grid).
 
-**▶ RESUME POINT:** next slice is **F3.3 — Supplier invoice match (3-way)**. `SupplierInvoice` + `SupplierInvoiceGrn` entities, match invoice → one or more GRNs with a tolerance check, emit `SupplierInvoiceMatched.v1`, web `/procurement/invoices` match grid. All work through F3.2 is committed; working tree clean. Read the F3.3 section below + DATA-MODEL §5.7/§5.8 before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** next slice is **F3.4 — Supplier payment**. `SupplierPayment` + `SupplierPaymentAllocation` entities (lives in the `cash` module — empty today, F3.4 lays the first floor); when posted, allocates payment across one or more `supplier_invoice` rows, advances `supplier_invoice.paid_amount`, and flips the invoice to PARTIALLY_PAID / PAID. All work through F3.3 is committed; working tree clean. Read the F3.4 section + DATA-MODEL §6 (cash) before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -36,8 +36,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 **Done in Phase 3:**
 - F3.1 — LPO lifecycle (`LpoOrder` + `LpoOrderLine` entities; DRAFT → PENDING_APPROVAL → APPROVED state machine + DRAFT/PENDING → CANCELLED; submit auto-approves when total ≤ `orbix.procurement.lpo-auto-approval-threshold`; line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line; `LpoOrderCreated/Submitted/Approved/Cancelled.v1` events; `V19` + `V19_1` + `V20` migrations; `PROCUREMENT.MANAGE_LPO` / `PROCUREMENT.APPROVE_LPO` permissions; web `/procurement/lpos` list + draft creation + state-aware action buttons. PDF rendering + email subscriber on `LpoOrderApproved.v1` deferred — the event already fires.)
 - F3.2 — GRN posting + batch capture (`Grn` + `GrnLine` entities with DRAFT → POSTED terminal lifecycle + DRAFT → CANCELLED; LPO-bound flow validates each line against the parent `lpo_order_line` (item match + outstanding-qty over-receipt guard) and on post advances `received_qty` + flips LPO to PARTIALLY_RECEIVED or RECEIVED; direct GRN gated by `GRN.DIRECT`; posting routes through `StockMoveService` so DayGuard + moving-average + F2.4 batch creation are all reused — batch-tracked items create a `stock_batch` first and stamp `batch_id` on the move; `V21` + `V21_1` + `V22` migrations; `GRN.POST`/`GRN.DIRECT` permissions; `GrnCreated/Posted/Cancelled.v1` events; web `/procurement/grns` list + receive-against-LPO form with per-line outstanding + batch_no inputs + state-aware Post/Cancel.)
+- F3.3 — Supplier invoice + 3-way match (`SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities with DRAFT → POSTED lifecycle; DRAFT/POSTED → CANCELLED; per-branch unique invoice number + per-supplier unique `supplier_invoice_no`; allocations validated against each referenced GRN — POSTED + same supplier + cumulative amount ≤ `grn.total_amount` (over-allocation rejected; cancelled invoices excluded); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005); due date defaults to `invoice_date + supplier.payment_terms_days`; `V23` + `V23_1` + `V24` migrations; `PROCUREMENT.MANAGE_INVOICE` permission; `SupplierInvoiceCreated/Matched/Cancelled.v1` events; web `/procurement/invoices` list + per-supplier GRN picker + live tolerance hint + state-aware Post/Cancel.)
 
-**Next slice (start here):** **F3.3** — Supplier invoice match (3-way). Phase-0 test debt still outstanding.
+**Next slice (start here):** **F3.4** — Supplier payment. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -586,20 +587,22 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F3.3 — Supplier invoice match (3-way)
 
-**Story:** US-PROC-006 · **Size:** M · **Status:** `[ ]`
+**Story:** US-PROC-006 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F3.2.
 
 **Backend:**
-- [ ] `SupplierInvoice`, `SupplierInvoiceGrn` entities.
-- [ ] `SupplierInvoiceService` + Impl. Match invoice to one or more GRNs; tolerance check; `SupplierInvoiceMatched.v1`.
+- [x] `SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities (`V23` + `V23_1`). DRAFT → POSTED lifecycle; DRAFT or POSTED → CANCELLED; settlement transitions (PARTIALLY_PAID / PAID) land with F3.4. Per-branch unique `number`, per-supplier unique `supplier_invoice_no`.
+- [x] `SupplierInvoiceService` + Impl. Match validation: every referenced GRN must be POSTED and from the same supplier; cumulative allocations to a GRN may not exceed `grn.total_amount` (over-allocation rejected; cancelled invoices excluded from the running total); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005 = ±0.5%). Due date defaults to `invoice_date + supplier.payment_terms_days`; can be overridden in the request. `SupplierInvoiceCreated/Matched/Cancelled.v1` events.
+- [x] `V24` seeds `PROCUREMENT.MANAGE_INVOICE` — controller gates all paths.
 
 **Web:**
-- [ ] `/procurement/invoices` match grid (drag GRN lines).
+- [x] `/procurement/invoices` — list with status-coloured badges; new-invoice form loads the chosen supplier's POSTED GRNs into a dropdown, each row adds one `(grnId, amount)` allocation, a live "Total / Allocated / Diff" banner warns when the match is outside tolerance; state-aware Post / Cancel buttons.
 
 **Tests:**
-- **System:** `TC-PROC-017` .. `TC-PROC-021`.
+- **Unit:** `SupplierInvoiceServiceImplTest` (13) — single-GRN full match + due-date from supplier terms; multi-GRN match within tolerance; outside-tolerance rejected; over-allocation rejected; foreign-supplier GRN rejected; unposted GRN rejected; explicit dueDate overrides supplier terms; post emits Matched event; post re-checks tolerance with current allocations; cancel from DRAFT works; duplicate branch number + duplicate supplier_invoice_no rejected; foreign-company 404.
+- **System:** `TC-PROC-017` .. `TC-PROC-021`. *(pending)*
 
-**DoD:** Accountant matches an invoice covering 2 GRNs; supplier debt opens correctly.
+**DoD:** Accountant matches an invoice covering 2 GRNs; supplier debt opens correctly. *(Payable status changes land with F3.4; F3.3 ships the matched invoice + its allocations + the events the cash module will consume.)*
 
 ---
 
