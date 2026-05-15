@@ -1,14 +1,21 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
 import com.orbix.engine.modules.sales.domain.entity.ReceiptAllocation;
 import com.orbix.engine.modules.sales.domain.entity.SalesInvoice;
 import com.orbix.engine.modules.sales.domain.entity.SalesReceipt;
+import com.orbix.engine.modules.sales.domain.enums.ReceiptMethod;
 import com.orbix.engine.modules.sales.repository.ReceiptAllocationRepository;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceRepository;
 import com.orbix.engine.modules.sales.repository.SalesReceiptRepository;
@@ -17,12 +24,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +45,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     private final ReceiptAllocationRepository allocations;
     private final SalesInvoiceRepository invoices;
     private final DayGuard dayGuard;
+    private final CashLedgerService cashLedger;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -86,7 +96,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     @Auditable(action = "POST", entityType = AGG)
     public SalesReceiptDto post(Long receiptId) {
         SalesReceipt receipt = requireReceipt(receiptId);
-        dayGuard.requireOpenDay(receipt.getBranchId());
+        BusinessDay day = dayGuard.requireOpenDay(receipt.getBranchId());
         Long actorId = context.userId();
         List<ReceiptAllocation> rows = allocations.findBySalesReceiptId(receipt.getId());
 
@@ -98,6 +108,31 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
         }
 
         receipt.post(actorId);
+
+        // F6.1: cash side. CARD / STORE_CREDIT don't move physical cash; the
+        // other methods land an IN entry on their matching account.
+        Optional<CashAccount> account = accountFor(receipt.getMethod());
+        if (account.isPresent()) {
+            // Sales receipts are single-currency per receipt; F6.2 multi-currency
+            // book stores the tender amount as-is with fx_rate_snapshot = 1.
+            cashLedger.post(
+                Instant.now(),
+                receipt.getCompanyId(),
+                receipt.getBranchId(),
+                day.getBusinessDate(),
+                account.get(),
+                CashDirection.IN,
+                receipt.getTotalAmount(),
+                java.math.BigDecimal.ONE,
+                receipt.getCurrencyCode(),
+                CashRefType.SALES_RECEIPT,
+                receipt.getId(),
+                GlCategory.RECEIPT,
+                receipt.getNumber(),
+                actorId
+            );
+        }
+
         events.publish("SalesReceiptPosted.v1", AGG, String.valueOf(receipt.getId()),
             Map.of(F_ID, receipt.getId(), F_NUMBER, receipt.getNumber(),
                 "customerId", receipt.getCustomerId(),
@@ -106,6 +141,21 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
                 "method", receipt.getMethod().name(),
                 "currencyCode", receipt.getCurrencyCode()));
         return SalesReceiptDto.from(receipt, rows);
+    }
+
+    /**
+     * Maps the receipt method to the cash account it lands in.
+     * {@code CARD} settles via the card rail and {@code STORE_CREDIT} draws on
+     * the customer-credit ledger — neither moves physical cash, so they have
+     * no cash-entry side.
+     */
+    private static Optional<CashAccount> accountFor(ReceiptMethod method) {
+        return switch (method) {
+            case CASH -> Optional.of(CashAccount.CASH_BOX);
+            case MOBILE_MONEY -> Optional.of(CashAccount.MOBILE_MONEY);
+            case BANK_TRANSFER, CHEQUE -> Optional.of(CashAccount.BANK);
+            case CARD, STORE_CREDIT -> Optional.empty();
+        };
     }
 
     @Override

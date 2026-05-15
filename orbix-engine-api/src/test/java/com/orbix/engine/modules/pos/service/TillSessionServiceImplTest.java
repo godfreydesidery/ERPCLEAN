@@ -1,5 +1,8 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.domain.entity.Company;
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
@@ -50,7 +53,13 @@ class TillSessionServiceImplTest {
 
     @Mock private TillSessionRepository sessions;
     @Mock private TillRepository tills;
+    @Mock private com.orbix.engine.modules.pos.repository.PosSaleRepository sales;
+    @Mock private com.orbix.engine.modules.pos.repository.PosPaymentRepository payments;
+    @Mock private com.orbix.engine.modules.pos.repository.CashPickupRepository pickups;
+    @Mock private com.orbix.engine.modules.pos.repository.PettyCashRepository pettyCash;
+    @Mock private CompanyRepository companies;
     @Mock private DayGuard dayGuard;
+    @Mock private CashLedgerService cashLedger;
     @Mock private PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
@@ -69,11 +78,20 @@ class TillSessionServiceImplTest {
         till.setId(TILL_ID);
         lenient().when(tills.findById(TILL_ID)).thenReturn(Optional.of(till));
 
+        Company company = new Company(1L, "C", "Co.", "TZS", "TZ", "Africa/Dar_es_Salaam", ACTOR_ID);
+        company.setId(COMPANY_ID);
+        lenient().when(companies.findById(COMPANY_ID)).thenReturn(Optional.of(company));
+
         lenient().when(sessions.save(any(TillSession.class))).thenAnswer(inv -> {
             TillSession s = inv.getArgument(0);
             if (s.getId() == null) s.setId(nextId.getAndIncrement());
             return s;
         });
+
+        // No sales / pickups / petty cash by default — close uses opening_float only.
+        lenient().when(sales.findByTillSessionIdOrderByIdAsc(any())).thenReturn(java.util.List.of());
+        lenient().when(pickups.sumForSession(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(pettyCash.sumForSession(any())).thenReturn(BigDecimal.ZERO);
     }
 
     @Test
@@ -219,6 +237,82 @@ class TillSessionServiceImplTest {
         assertThatThrownBy(() -> service.reconcile(id))
             .isInstanceOf(IllegalStateException.class);
         verify(events, never()).publish(eq("TillSessionReconciled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void close_expectedCashFoldsInSalesRefundsPickupsAndPettyCash() {
+        // opening 50,000
+        // + cash sale 30,000
+        // − cash refund 5,000
+        // − pickup 10,000
+        // − petty cash 2,000
+        // = expected 63,000. Declared 63,200 → variance +200 (within threshold 1000).
+        TillSession session = openSession(new BigDecimal("50000"));
+        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+
+        com.orbix.engine.modules.pos.domain.entity.PosSale sale = new com.orbix.engine.modules.pos.domain.entity.PosSale(
+            "POS-1", "op-1", session.getId(), TILL_ID, BRANCH_ID, COMPANY_ID,
+            33L, 540L, ACTOR_ID, null,
+            com.orbix.engine.modules.pos.domain.enums.PosSaleKind.SALE,
+            java.time.Instant.now(), LocalDate.of(2026, 5, 13),
+            new BigDecimal("30000"), BigDecimal.ZERO, BigDecimal.ZERO,
+            new BigDecimal("30000"), new BigDecimal("30000"), BigDecimal.ZERO, null);
+        sale.setId(900L);
+        com.orbix.engine.modules.pos.domain.entity.PosSale refund = new com.orbix.engine.modules.pos.domain.entity.PosSale(
+            "POS-2", "op-2", session.getId(), TILL_ID, BRANCH_ID, COMPANY_ID,
+            33L, 540L, ACTOR_ID, null,
+            com.orbix.engine.modules.pos.domain.enums.PosSaleKind.REFUND,
+            java.time.Instant.now(), LocalDate.of(2026, 5, 13),
+            new BigDecimal("5000"), BigDecimal.ZERO, BigDecimal.ZERO,
+            new BigDecimal("5000"), new BigDecimal("5000"), BigDecimal.ZERO, null);
+        refund.setId(901L);
+
+        when(sales.findByTillSessionIdOrderByIdAsc(session.getId()))
+            .thenReturn(java.util.List.of(sale, refund));
+        when(payments.findByPosSaleIdOrderByIdAsc(900L)).thenReturn(java.util.List.of(
+            new com.orbix.engine.modules.pos.domain.entity.PosPayment(
+                900L, com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod.CASH,
+                new BigDecimal("30000"), "TZS", new BigDecimal("30000"), BigDecimal.ONE,
+                null, null, null)));
+        when(payments.findByPosSaleIdOrderByIdAsc(901L)).thenReturn(java.util.List.of(
+            new com.orbix.engine.modules.pos.domain.entity.PosPayment(
+                901L, com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod.CASH,
+                new BigDecimal("5000"), "TZS", new BigDecimal("5000"), BigDecimal.ONE,
+                null, null, null)));
+        when(pickups.sumForSession(session.getId())).thenReturn(new BigDecimal("10000"));
+        when(pettyCash.sumForSession(session.getId())).thenReturn(new BigDecimal("2000"));
+
+        TillSessionDto dto = service.close(session.getId(),
+            new CloseTillSessionRequestDto(new BigDecimal("63200"), null, "ok"));
+
+        assertThat(dto.expectedCashAmount()).isEqualByComparingTo("63000");
+        assertThat(dto.declaredCashAmount()).isEqualByComparingTo("63200");
+        assertThat(dto.varianceAmount()).isEqualByComparingTo("200");
+    }
+
+    @Test
+    void close_voidedSaleContributesZeroToExpectedCash() {
+        TillSession session = openSession(new BigDecimal("50000"));
+        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+
+        com.orbix.engine.modules.pos.domain.entity.PosSale voided = new com.orbix.engine.modules.pos.domain.entity.PosSale(
+            "POS-V", "op-v", session.getId(), TILL_ID, BRANCH_ID, COMPANY_ID,
+            33L, 540L, ACTOR_ID, null,
+            com.orbix.engine.modules.pos.domain.enums.PosSaleKind.SALE,
+            java.time.Instant.now(), LocalDate.of(2026, 5, 13),
+            new BigDecimal("20000"), BigDecimal.ZERO, BigDecimal.ZERO,
+            new BigDecimal("20000"), new BigDecimal("20000"), BigDecimal.ZERO, null);
+        voided.setId(902L);
+        voided.voidSale("test", ACTOR_ID);  // → status = VOIDED
+
+        when(sales.findByTillSessionIdOrderByIdAsc(session.getId()))
+            .thenReturn(java.util.List.of(voided));
+
+        TillSessionDto dto = service.close(session.getId(),
+            new CloseTillSessionRequestDto(new BigDecimal("50000"), null, "ok"));
+
+        assertThat(dto.expectedCashAmount()).isEqualByComparingTo("50000");
+        assertThat(dto.varianceAmount()).isEqualByComparingTo("0");
     }
 
     private TillSession openSession(BigDecimal openingFloat) {

@@ -5,6 +5,11 @@ import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
@@ -14,6 +19,9 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.giftcard.domain.dto.RedeemGiftCardRequestDto;
+import com.orbix.engine.modules.giftcard.domain.dto.RefundGiftCardRequestDto;
+import com.orbix.engine.modules.giftcard.service.GiftCardService;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -83,6 +91,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
+    private final CashLedgerService cashLedger;
+    private final GiftCardService giftCards;
     private final DayGuard dayGuard;
     private final PermissionResolverService permissions;
     private final EventPublisher events;
@@ -153,6 +163,10 @@ public class PosSaleServiceImpl implements PosSaleService {
         List<PosSaleLine> savedLines = saveLines(sale, request.lines(), companyId, totals);
         List<PosPayment> savedPayments = savePayments(sale, tenders);
 
+        postCashEntriesForPayments(sale, savedPayments, CashDirection.IN,
+            CashRefType.POS_SALE_PAYMENT, GlCategory.CASH);
+        redeemGiftCardPayments(savedPayments);
+
         events.publish("PosSaleClosed.v1", AGG, String.valueOf(sale.getId()),
             Map.of(F_ID, sale.getId(),
                 F_NUMBER, sale.getNumber(),
@@ -216,6 +230,14 @@ public class PosSaleServiceImpl implements PosSaleService {
             ));
         }
         sale.voidSale(request.reason(), context.userId());
+
+        // F6.1: same-day void reverses every CASH tender row on the original.
+        // F5.7: gift-card-tendered rows are credited back to the originating card.
+        List<PosPayment> originalPayments = payments.findByPosSaleIdOrderByIdAsc(sale.getId());
+        postCashEntriesForPayments(sale, originalPayments, CashDirection.OUT,
+            CashRefType.POS_VOID_PAYMENT, GlCategory.CASH_REFUND);
+        creditGiftCardPayments(originalPayments, "PosVoidPayment");
+
         events.publish("PosSaleVoided.v1", AGG, String.valueOf(sale.getId()),
             Map.of(F_ID, sale.getId(),
                 F_NUMBER, sale.getNumber(),
@@ -293,6 +315,10 @@ public class PosSaleServiceImpl implements PosSaleService {
 
         List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts);
         List<PosPayment> savedPayments = saveRefundPayments(refund, tenders);
+
+        postCashEntriesForPayments(refund, savedPayments, CashDirection.OUT,
+            CashRefType.POS_REFUND_PAYMENT, GlCategory.CASH_REFUND);
+        creditGiftCardPayments(savedPayments, "PosRefundPayment");
 
         events.publish("PosSaleRefunded.v1", AGG, String.valueOf(refund.getId()),
             Map.of(F_ID, refund.getId(),
@@ -454,6 +480,80 @@ public class PosSaleServiceImpl implements PosSaleService {
             )));
         }
         return saved;
+    }
+
+    /**
+     * F6.1 + F6.2: post one {@code cash_entry} per CASH payment row. Card /
+     * mobile-money / voucher / store-credit tenders settle on their own rails
+     * and don't hit the cash module. FX-aware: the entry stores
+     * {@code tender_currency} + {@code tender_amount} + {@code fx_rate_snapshot}
+     * straight from the {@code pos_payment} row, so the multi-currency cash
+     * book splits per tender currency (US-DAY-006).
+     */
+    private void postCashEntriesForPayments(PosSale sale, List<PosPayment> rows,
+                                            CashDirection direction, String refType, GlCategory gl) {
+        for (PosPayment payment : rows) {
+            if (payment.getMethod() != PosPaymentMethod.CASH) {
+                continue;
+            }
+            cashLedger.post(
+                Instant.now(),
+                sale.getCompanyId(),
+                sale.getBranchId(),
+                sale.getBusinessDate(),
+                CashAccount.TILL,
+                direction,
+                payment.getTenderAmount(),
+                payment.getFxRateSnapshot(),
+                payment.getTenderCurrency(),
+                refType,
+                payment.getId(),
+                gl,
+                sale.getNumber(),
+                sale.getCashierId()
+            );
+        }
+    }
+
+    /**
+     * F5.7: redeem each GIFT_CARD tender row against its card. Idempotency
+     * key is the {@code pos_payment.id}, so the same card scanned twice on
+     * the same sale produces two independent {@code REDEEM} txns and a
+     * client retry resolves to the same triple without double-debiting.
+     * Functional amount, since gift cards are functional-currency-only at MVP.
+     */
+    private void redeemGiftCardPayments(List<PosPayment> rows) {
+        for (PosPayment payment : rows) {
+            if (payment.getMethod() == PosPaymentMethod.GIFT_CARD) {
+                String code = requireGiftCardCode(payment);
+                giftCards.redeem(code,
+                    new RedeemGiftCardRequestDto(payment.getAmount(), "PosPayment", payment.getId()));
+            }
+        }
+    }
+
+    /**
+     * F5.7: credit back each GIFT_CARD tender row on refund or void. The
+     * idempotency triple {@code (PosRefundPayment|PosVoidPayment, payment.id, REFUND)}
+     * keeps re-tries from double-crediting.
+     */
+    private void creditGiftCardPayments(List<PosPayment> rows, String refDocType) {
+        for (PosPayment payment : rows) {
+            if (payment.getMethod() == PosPaymentMethod.GIFT_CARD) {
+                String code = requireGiftCardCode(payment);
+                giftCards.refundCredit(code,
+                    new RefundGiftCardRequestDto(payment.getAmount(), refDocType, payment.getId()));
+            }
+        }
+    }
+
+    private static String requireGiftCardCode(PosPayment payment) {
+        String code = payment.getReference();
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException(
+                "GIFT_CARD tender requires the card code in the 'reference' field");
+        }
+        return code.trim();
     }
 
     private PosSale requireSale(Long id) {

@@ -4,11 +4,17 @@ import com.orbix.engine.modules.cash.domain.dto.CreateSupplierPaymentRequestDto;
 import com.orbix.engine.modules.cash.domain.dto.SupplierPaymentDto;
 import com.orbix.engine.modules.cash.domain.entity.SupplierPayment;
 import com.orbix.engine.modules.cash.domain.entity.SupplierPaymentAllocation;
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.domain.enums.PaymentMethod;
 import com.orbix.engine.modules.cash.repository.SupplierPaymentAllocationRepository;
 import com.orbix.engine.modules.cash.repository.SupplierPaymentRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository;
@@ -17,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +43,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     private final SupplierPaymentAllocationRepository allocations;
     private final SupplierInvoiceRepository invoices;
     private final DayGuard dayGuard;
+    private final CashLedgerService cashLedger;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -85,7 +93,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     @Auditable(action = "POST", entityType = AGG)
     public SupplierPaymentDto post(Long paymentId) {
         SupplierPayment payment = requirePayment(paymentId);
-        dayGuard.requireOpenDay(payment.getBranchId());
+        BusinessDay day = dayGuard.requireOpenDay(payment.getBranchId());
 
         List<SupplierPaymentAllocation> rows = allocations.findBySupplierPaymentId(payment.getId());
         Long actorId = context.userId();
@@ -98,6 +106,28 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         }
 
         payment.post(actorId);
+
+        // F6.1: paired cash entry on the OUT side. Method determines the account
+        // (CASH→CASH_BOX, BANK_TRANSFER/CHEQUE→BANK, MOBILE_MONEY→MOBILE_MONEY).
+        // Supplier payments are single-currency per payment; F6.2 multi-currency
+        // book stores the tender amount as-is with fx_rate_snapshot = 1.
+        cashLedger.post(
+            Instant.now(),
+            payment.getCompanyId(),
+            payment.getBranchId(),
+            day.getBusinessDate(),
+            accountFor(payment.getMethod()),
+            CashDirection.OUT,
+            payment.getTotalAmount(),
+            BigDecimal.ONE,
+            payment.getCurrencyCode(),
+            CashRefType.SUPPLIER_PAYMENT,
+            payment.getId(),
+            GlCategory.SUPPLIER_SETTLEMENT,
+            payment.getNumber(),
+            actorId
+        );
+
         events.publish("SupplierPaymentPosted.v1", AGG, String.valueOf(payment.getId()),
             Map.of(F_ID, payment.getId(), F_NUMBER, payment.getNumber(),
                 "supplierId", payment.getSupplierId(),
@@ -106,6 +136,14 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
                 "method", payment.getMethod().name(),
                 "currencyCode", payment.getCurrencyCode()));
         return SupplierPaymentDto.from(payment, rows);
+    }
+
+    private static CashAccount accountFor(PaymentMethod method) {
+        return switch (method) {
+            case CASH -> CashAccount.CASH_BOX;
+            case MOBILE_MONEY -> CashAccount.MOBILE_MONEY;
+            case BANK_TRANSFER, CHEQUE -> CashAccount.BANK;
+        };
     }
 
     @Override

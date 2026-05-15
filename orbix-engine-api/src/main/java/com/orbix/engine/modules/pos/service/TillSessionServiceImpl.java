@@ -1,5 +1,11 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.cash.domain.enums.CashAccount;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.cash.domain.enums.CashRefType;
+import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -9,10 +15,19 @@ import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
+import com.orbix.engine.modules.pos.domain.entity.PosPayment;
+import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.Till;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
+import com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod;
+import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
+import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillStatus;
+import com.orbix.engine.modules.pos.repository.CashPickupRepository;
+import com.orbix.engine.modules.pos.repository.PettyCashRepository;
+import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
+import com.orbix.engine.modules.pos.repository.PosSaleRepository;
 import com.orbix.engine.modules.pos.repository.TillRepository;
 import com.orbix.engine.modules.pos.repository.TillSessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -40,7 +56,13 @@ public class TillSessionServiceImpl implements TillSessionService {
 
     private final TillSessionRepository sessions;
     private final TillRepository tills;
+    private final PosSaleRepository sales;
+    private final PosPaymentRepository payments;
+    private final CashPickupRepository pickups;
+    private final PettyCashRepository pettyCash;
+    private final CompanyRepository companies;
     private final DayGuard dayGuard;
+    private final CashLedgerService cashLedger;
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
@@ -69,6 +91,30 @@ public class TillSessionServiceImpl implements TillSessionService {
             till.getId(), till.getBranchId(), companyId,
             day.getBusinessDate(), actorId, request.openingFloatAmount()
         ));
+
+        // F6.1: opening float — IN on TILL (the cash-box → till transfer is
+        // recorded as a single IN since the cash box ledger row is owned by
+        // the float assignment doc, not by the till session).
+        if (request.openingFloatAmount().signum() > 0) {
+            // Opening float is always functional currency; F6.2 stores fx_rate_snapshot = 1.
+            cashLedger.post(
+                Instant.now(),
+                companyId,
+                till.getBranchId(),
+                day.getBusinessDate(),
+                CashAccount.TILL,
+                CashDirection.IN,
+                request.openingFloatAmount(),
+                BigDecimal.ONE,
+                requireCompanyCurrency(companyId),
+                CashRefType.TILL_FLOAT,
+                session.getId(),
+                GlCategory.TILL_FLOAT,
+                null,
+                actorId
+            );
+        }
+
         events.publish("TillSessionOpened.v1", AGG, String.valueOf(session.getId()),
             Map.of(F_ID, session.getId(),
                 F_TILL_ID, till.getId(),
@@ -76,6 +122,12 @@ public class TillSessionServiceImpl implements TillSessionService {
                 "businessDate", session.getBusinessDate().toString(),
                 "openingFloat", session.getOpeningFloatAmount()));
         return TillSessionDto.from(session);
+    }
+
+    private String requireCompanyCurrency(Long companyId) {
+        return companies.findById(companyId)
+            .orElseThrow(() -> new NoSuchElementException("Company not found: " + companyId))
+            .getCurrencyCode();
     }
 
     @Override
@@ -89,11 +141,36 @@ public class TillSessionServiceImpl implements TillSessionService {
         }
         BigDecimal expectedCash = computeExpectedCash(session);
         BigDecimal variance = request.declaredCashAmount().subtract(expectedCash);
+        Long actorId = context.userId();
         if (variance.abs().compareTo(varianceThreshold) > 0) {
-            validateSupervisor(request.supervisorId(), context.userId());
+            validateSupervisor(request.supervisorId(), actorId);
         }
-        session.close(expectedCash, request.declaredCashAmount(), context.userId(),
+        session.close(expectedCash, request.declaredCashAmount(), actorId,
             request.supervisorId(), request.notes());
+
+        // F6.1: variance entry on TILL. surplus (declared > expected) → IN,
+        // shortage → OUT. Zero variance posts nothing. F6.2: per-currency
+        // variance is a follow-on — for now the close request is a single
+        // functional-currency declared total, so the variance lands in the
+        // functional bucket with fx_rate_snapshot = 1.
+        if (variance.signum() != 0) {
+            cashLedger.post(
+                Instant.now(),
+                session.getCompanyId(),
+                session.getBranchId(),
+                session.getBusinessDate(),
+                CashAccount.TILL,
+                variance.signum() > 0 ? CashDirection.IN : CashDirection.OUT,
+                variance.abs(),
+                BigDecimal.ONE,
+                requireCompanyCurrency(session.getCompanyId()),
+                CashRefType.TILL_VARIANCE,
+                session.getId(),
+                GlCategory.VARIANCE,
+                null,
+                actorId
+            );
+        }
 
         events.publish("TillSessionClosed.v1", AGG, String.valueOf(session.getId()),
             Map.of(F_ID, session.getId(),
@@ -141,12 +218,43 @@ public class TillSessionServiceImpl implements TillSessionService {
     }
 
     /**
-     * Expected cash = opening_float + cash sales + cash refunds in − cash refunds out
-     * + cash pickups − petty cash out. POS-sale flows ship in F5.2+; until then,
-     * only the float contributes.
+     * Expected drawer cash = opening_float + cash sales − cash refunds
+     *                       − cash pickups (moved to safe) − petty-cash payouts.
+     * Voided sales contribute 0 — the original cash IN is in cash_book but the
+     * cashier handed the money back, so the drawer is unchanged. POSTED refunds
+     * contribute a negative because the cashier paid out cash.
      */
     private BigDecimal computeExpectedCash(TillSession session) {
-        return session.getOpeningFloatAmount();
+        BigDecimal expected = session.getOpeningFloatAmount();
+        for (PosSale sale : sales.findByTillSessionIdOrderByIdAsc(session.getId())) {
+            expected = expected.add(cashContributionFor(sale));
+        }
+        expected = expected.subtract(pickups.sumForSession(session.getId()));
+        expected = expected.subtract(pettyCash.sumForSession(session.getId()));
+        return expected;
+    }
+
+    /**
+     * Signed cash contribution of a single sale to the drawer:
+     * POSTED + SALE   → +cash payments, POSTED + REFUND → -cash payments,
+     * VOIDED → 0 (cashier already handed the cash back).
+     */
+    private BigDecimal cashContributionFor(PosSale sale) {
+        if (sale.getStatus() != PosSaleStatus.POSTED) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal cash = sumCashFunctional(sale.getId());
+        return sale.getKind() == PosSaleKind.REFUND ? cash.negate() : cash;
+    }
+
+    private BigDecimal sumCashFunctional(Long saleId) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (PosPayment p : payments.findByPosSaleIdOrderByIdAsc(saleId)) {
+            if (p.getMethod() == PosPaymentMethod.CASH) {
+                sum = sum.add(p.getAmount());
+            }
+        }
+        return sum;
     }
 
     private void validateSupervisor(Long supervisorId, Long actorId) {

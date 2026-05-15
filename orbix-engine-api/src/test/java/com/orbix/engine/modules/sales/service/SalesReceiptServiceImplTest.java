@@ -1,7 +1,9 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
@@ -51,6 +53,7 @@ class SalesReceiptServiceImplTest {
     @Mock private ReceiptAllocationRepository allocations;
     @Mock private SalesInvoiceRepository invoices;
     @Mock private DayGuard dayGuard;
+    @Mock private CashLedgerService cashLedger;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -62,6 +65,8 @@ class SalesReceiptServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
+        lenient().when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 15), ACTOR_ID));
         lenient().when(receipts.save(any(SalesReceipt.class))).thenAnswer(inv -> {
             SalesReceipt r = inv.getArgument(0);
             if (r.getId() == null) r.setId(nextId.getAndIncrement());
