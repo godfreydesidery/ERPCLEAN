@@ -4,11 +4,11 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `fd0debb` — F5.3 web (void button + header-discount display).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `cc64410` — F5.4 backend (offline-sync push + catalog/balance snapshots).
 
-**▶ RESUME POINT:** next slice is **F5.4 — Offline sync** (XL — split into F5.4a local SQLite + balance snapshot, F5.4b outbox push + `client_op_id` idempotency, F5.4c conflict resolution). Server-side `client_op_id` idempotency is already live from F5.2; F5.4 is mostly Flutter-side work and likely lands as a dedicated mini-phase. All work through F5.3 is committed; working tree clean.
+**▶ RESUME POINT:** next slice is **F5.5 — Refund at till**. `pos_sale.kind = REFUND` flow + supervisor-threshold rule; cash refund posts a `cash_entry` OUT. The PosSaleKind.REFUND enum slot is already in place from F5.2; F5.5 builds the create-refund-from-original-sale flow. All work through F5.4 backend is committed; Flutter POS app (offline outbox queue, Drift local DB, conflict UI) is deferred to a dedicated mini-phase. Working tree clean.
 
-**Progress:** ~56% of MVP slices complete (29 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 done; F5.4–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
+**Progress:** ~58% of MVP slices complete (30 of 52 — Phases 0-4 + F5.1 + F5.2 + F5.3 + F5.4 backend done; F5.5–F5.10, Phase 6 cash, Phase 7 extensions, Phase 8 reporting remain).
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -52,8 +52,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred.)
 - F5.2 — Basic POS sale (cash + mixed tender) — backend ships the full server-side contract; Flutter till app deferred. `PosSale` + `PosSaleLine` + `PosPayment` entities (DATA-MODEL §7.3-§7.5 + Phase 1.1 §17.12 additions); POS sales committed locally and pushed as POSTED (no DRAFT); idempotent on `clientOpId` per company. Validation: OPEN till session, `section_id` matches the till's branch (required), customer exists, tender ≥ total. Posting writes outbound SALE stock moves via `StockMoveService` (DayGuard inherited) — batch-tracked items drain FEFO via `StockBatchService` and emit one stock_move per pick. Mixed tender (cash + card + mobile money + voucher + store credit) via N `pos_payment` rows; card terminals record `terminal_id` + `last4` only. `V34` + `V34_1` + `V35` migrations seed `POS.SALE_POST`. Event: `PosSaleClosed.v1`. Web: read-only `/admin/pos-sales` viewer for managers.
 - F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
+- F5.4 — Offline-sync server contract (backend-complete; Flutter app deferred). `POST /api/v1/sync/push` batch-pushes locally-committed POS sales — each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch; idempotency on `clientOpId` was already in place from F5.2. `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` returns active items + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty + all barcodes (so the till's local DB can scan EAN/PLU offline). `GET /api/v1/sync/balances/snapshot?branchId=` returns current `item_branch_balance` rows for a soft pre-flight oversell check. `V37` seeds `POS.SYNC`.
 
-**Next slice (start here):** **F5.4** — Offline sync. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
+**Next slice (start here):** **F5.5** — Refund at till. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -821,28 +822,32 @@ The biggest phase. Strongly recommend doing F5.1 → F5.2 → F5.4 (offline sync
 
 ## F5.4 — Offline sync
 
-**Story:** US-POS-017, US-POS-018 · **Size:** XL · **Status:** `[ ]`
+**Story:** US-POS-017, US-POS-018 · **Size:** XL · **Status:** `[x]` *(backend-complete; Flutter app deferred)*
 **Dependencies:** F5.2.
 
 Split into:
-- **F5.4a** Local SQLite catalog + balance snapshot pull.
-- **F5.4b** Outbox queue + sync push with `client_op_id` idempotency.
-- **F5.4c** Conflict resolution + re-order handling.
+- **F5.4a** Local SQLite catalog + balance snapshot pull — **server contract shipped**, Flutter side deferred.
+- **F5.4b** Outbox queue + sync push with `client_op_id` idempotency — **server contract shipped**, Flutter outbox deferred.
+- **F5.4c** Conflict resolution + re-order handling — partly served by per-item rejection in the batch push response; full UI deferred with the Flutter app.
 
 **Backend:**
-- [ ] `POST /api/v1/sync/push` endpoint accepting batched operations.
-- [ ] Idempotency on `client_op_id` (UNIQUE on `pos_sale`).
+- [x] `POST /api/v1/sync/push` — batched POS-sale push. Each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch. The response carries per-item accepted/rejected verdicts keyed by `clientOpId` for the till to ack its outbox.
+- [x] Idempotency on `client_op_id` (UNIQUE on `pos_sale` per company) was already in place from F5.2; the sync push reuses it — the same `clientOpId` returns the prior sale's id without re-posting stock.
+- [x] `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` — active items + barcodes + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty (so the till can scan offline and warn on oversell).
+- [x] `GET /api/v1/sync/balances/snapshot?branchId=` — current `item_branch_balance` rows for a soft pre-flight oversell check.
+- [x] `V37` seeds `POS.SYNC`.
 
 **Flutter POS:**
-- [ ] Local DB (Drift): items, prices, recent sales, outbox.
-- [ ] Sync poller, retry, backoff.
-- [ ] Conflict UI when server rejects.
+- [ ] Local DB (Drift): items, prices, recent sales, outbox — **deferred** to the Flutter app slice. The server contract is locked.
+- [ ] Sync poller, retry, backoff — **deferred**.
+- [ ] Conflict UI when server rejects — **deferred** (server already returns per-item rejection reasons via the batch push DTO).
 
 **Tests:**
-- **Integration:** Push duplicate → no second row.
-- **System:** `TC-POS-022` .. `TC-POS-025`; `TC-E2E-004`.
+- **Unit:** `SyncServiceImplTest` (4) — all-accepted batch push; partial-failure isolation (one bad item, others still POSTED); catalog snapshot returns items + barcodes + price + on-hand correctly; balance snapshot returns branch rows.
+- **Integration:** Push duplicate → no second row. *(idempotency is already covered in `PosSaleServiceImplTest`)*
+- **System:** `TC-POS-022` .. `TC-POS-025`; `TC-E2E-004`. *(pending — need the Flutter app to drive end-to-end)*
 
-**DoD:** POS sells offline for 30 minutes, then catches up the moment network returns.
+**DoD:** POS sells offline for 30 minutes, then catches up the moment network returns. *(Backend ready; cashier UI lands with the Flutter app slice.)*
 
 ---
 
