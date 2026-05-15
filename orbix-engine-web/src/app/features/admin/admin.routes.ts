@@ -20,5 +20,9 @@ export const routes: Routes = [
   {
     path: 'fx-rates',
     loadComponent: () => import('./currencies/fx-rate-admin.component').then(m => m.FxRateAdminComponent)
+  },
+  {
+    path: 'tills',
+    loadComponent: () => import('./tills/till-admin.component').then(m => m.TillAdminComponent)
   }
 ];
