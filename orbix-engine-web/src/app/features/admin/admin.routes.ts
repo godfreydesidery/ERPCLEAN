@@ -24,5 +24,9 @@ export const routes: Routes = [
   {
     path: 'tills',
     loadComponent: () => import('./tills/till-admin.component').then(m => m.TillAdminComponent)
+  },
+  {
+    path: 'pos-sales',
+    loadComponent: () => import('./pos-sales/pos-sales.component').then(m => m.PosSalesComponent)
   }
 ];
