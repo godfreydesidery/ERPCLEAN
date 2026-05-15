@@ -8,6 +8,8 @@ import {
   CreateStockTransferRequest,
   ItemBranchBalance,
   Page,
+  PostAdjustmentRequest,
+  PostInternalConsumptionRequest,
   ReceiveTransferRequest,
   RecallStockBatchRequest,
   RecordCountsRequest,
@@ -118,6 +120,18 @@ export class StockService {
   recallBatch(id: number, request: RecallStockBatchRequest): Observable<StockBatch> {
     return unwrap(this.http.post<ApiResponse<StockBatch>>(
       `${this.base}/stock-batches/${id}/recall`, request
+    ));
+  }
+
+  // ---- adjustments + internal consumption (F2.5) ----------------------------
+
+  postAdjustment(request: PostAdjustmentRequest): Observable<StockMove> {
+    return unwrap(this.http.post<ApiResponse<StockMove>>(`${this.base}/adjustments`, request));
+  }
+
+  postInternalConsumption(request: PostInternalConsumptionRequest): Observable<StockMove> {
+    return unwrap(this.http.post<ApiResponse<StockMove>>(
+      `${this.base}/internal-consumption`, request
     ));
   }
 }

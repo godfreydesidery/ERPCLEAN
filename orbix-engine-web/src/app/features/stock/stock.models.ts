@@ -25,6 +25,9 @@ export interface StockMove {
   actorId: number;
   notes: string | null;
   batchId: number | null;
+  sectionId: number | null;
+  consumptionCategory: ConsumptionCategory | null;
+  authorisedByUserId: number | null;
 }
 
 export interface ItemBranchBalance {
@@ -138,4 +141,34 @@ export interface StockBatch {
 
 export interface RecallStockBatchRequest {
   reason: string;
+}
+
+// ---- F2.5: adjustments + internal consumption ------------------------------
+
+export type ConsumptionCategory =
+  'CANTEEN' | 'DISPLAY' | 'SAMPLES' | 'DONATION' | 'MAINTENANCE' | 'OTHER';
+export const CONSUMPTION_CATEGORIES: ConsumptionCategory[] =
+  ['CANTEEN', 'DISPLAY', 'SAMPLES', 'DONATION', 'MAINTENANCE', 'OTHER'];
+
+export interface PostAdjustmentRequest {
+  itemId: number;
+  branchId: number;
+  qty: number;
+  unitCost: number | null;
+  reason: string;
+  sectionId: number | null;
+  batchId: number | null;
+  authorisedByUserId: number | null;
+  allowOversell: boolean;
+}
+
+export interface PostInternalConsumptionRequest {
+  itemId: number;
+  branchId: number;
+  qty: number;
+  consumptionCategory: ConsumptionCategory;
+  sectionId: number;
+  authorisedByUserId: number;
+  reason: string;
+  batchId: number | null;
 }

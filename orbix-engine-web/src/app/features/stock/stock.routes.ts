@@ -21,5 +21,14 @@ export const routes: Routes = [
   {
     path: 'batches',
     loadComponent: () => import('./batches.component').then(m => m.BatchesComponent)
+  },
+  {
+    path: 'adjust',
+    loadComponent: () => import('./adjust.component').then(m => m.AdjustComponent)
+  },
+  {
+    path: 'internal-consumption',
+    loadComponent: () =>
+      import('./internal-consumption.component').then(m => m.InternalConsumptionComponent)
   }
 ];
