@@ -12,8 +12,9 @@ import { PosSale } from './pos-sales.models';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <h2 class="h3 mb-4">POS sales (read-only)</h2>
+    <h2 class="h3 mb-4">POS sales</h2>
     @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
+    @if (info()) { <div class="alert alert-success py-2">{{ info() }}</div> }
 
     <div class="row g-4">
       <div class="col-12 col-lg-4">
@@ -42,8 +43,12 @@ import { PosSale } from './pos-sales.models';
       <div class="col-12 col-lg-8">
         @if (selected(); as sale) {
           <div class="card shadow-sm">
-            <div class="card-header fw-semibold">
-              {{ sale.number }} — {{ sale.status }} ({{ sale.kind }})
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span class="fw-semibold">{{ sale.number }} — {{ sale.status }} ({{ sale.kind }})</span>
+              @if (sale.status === 'POSTED') {
+                <button class="btn btn-sm btn-outline-danger" [disabled]="busy()"
+                        (click)="voidSale(sale)">Void (same-day)</button>
+              }
             </div>
             <div class="card-body">
               <dl class="row mb-3">
@@ -57,6 +62,7 @@ import { PosSale } from './pos-sales.models';
                 <dd class="col-sm-9">{{ sale.saleAt | date:'short' }} (server {{ sale.serverAt | date:'short' }})</dd>
                 <dt class="col-sm-3">Business date</dt><dd class="col-sm-9">{{ sale.businessDate }}</dd>
                 <dt class="col-sm-3">Subtotal</dt><dd class="col-sm-9">{{ sale.subtotalAmount | number:'1.2-2' }}</dd>
+                <dt class="col-sm-3">Header discount</dt><dd class="col-sm-9">{{ sale.discountAmount | number:'1.2-2' }}</dd>
                 <dt class="col-sm-3">Tax</dt><dd class="col-sm-9">{{ sale.taxAmount | number:'1.2-2' }}</dd>
                 <dt class="col-sm-3">Total</dt>
                 <dd class="col-sm-9 fw-semibold">{{ sale.totalAmount | number:'1.2-2' }}</dd>
@@ -129,6 +135,8 @@ export class PosSalesComponent implements OnInit {
 
   readonly sales = signal<PosSale[]>([]);
   readonly selected = signal<PosSale | null>(null);
+  readonly busy = signal<boolean>(false);
+  readonly info = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
   readonly branchId = computed(() =>
@@ -148,6 +156,25 @@ export class PosSalesComponent implements OnInit {
   }
 
   select(s: PosSale): void { this.selected.set(s); }
+
+  voidSale(s: PosSale): void {
+    const reason = window.prompt(`Void sale ${s.number} — reason?`);
+    if (!reason || !reason.trim()) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.info.set(null);
+    unwrap(this.http.post<ApiResponse<PosSale>>(
+      `${this.base}/pos-sales/${s.id}/void`, { reason: reason.trim() }
+    )).subscribe({
+      next: voided => {
+        this.busy.set(false);
+        this.info.set(`Sale ${voided.number} voided.`);
+        this.selected.set(voided);
+        this.refresh();
+      },
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
 
   private showError(err: unknown): void {
     if (err instanceof HttpErrorResponse) {
