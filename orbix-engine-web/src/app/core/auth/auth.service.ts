@@ -24,6 +24,7 @@ export interface LoginResponse {
 const TOKEN_KEY = 'orbix.access';
 const REFRESH_KEY = 'orbix.refresh';
 const USER_KEY = 'orbix.user';
+const ACTIVE_BRANCH_KEY = 'orbix.activeBranchId';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -36,6 +37,13 @@ export class AuthService {
   readonly currentUser = this._user.asReadonly();
   readonly accessToken = this._token.asReadonly();
 
+  /** Permission codes carried in the access token's `perms` claim. */
+  readonly permissions = computed(() => decodePermissions(this._token()));
+
+  hasPermission(code: string): boolean {
+    return this.permissions().includes(code);
+  }
+
   /** Refresh-in-flight latch so concurrent 401s share a single refresh call. */
   private inFlightRefresh: Observable<LoginResponse> | null = null;
 
@@ -43,7 +51,11 @@ export class AuthService {
     return unwrap(this.http.post<ApiResponse<LoginResponse>>(
       `${environment.apiUrl}/auth/login`,
       { username, password }
-    )).pipe(tap(resp => this.storeSession(resp)));
+    )).pipe(tap(resp => {
+      // Fresh login — drop any active-branch left over from a prior session.
+      localStorage.removeItem(ACTIVE_BRANCH_KEY);
+      this.storeSession(resp);
+    }));
   }
 
   refresh(): Observable<LoginResponse> {
@@ -80,6 +92,7 @@ export class AuthService {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_KEY);
     sessionStorage.removeItem(USER_KEY);
+    localStorage.removeItem(ACTIVE_BRANCH_KEY);
     this._token.set(null);
     this._user.set(null);
   }
@@ -96,5 +109,19 @@ export class AuthService {
     const raw = sessionStorage.getItem(USER_KEY);
     if (!raw) return null;
     try { return JSON.parse(raw) as UserSummary; } catch { return null; }
+  }
+}
+
+/** Reads the `perms` claim out of a JWT access token without verifying the signature. */
+function decodePermissions(token: string | null): string[] {
+  if (!token) return [];
+  const payload = token.split('.')[1];
+  if (!payload) return [];
+  try {
+    const json = atob(payload.replaceAll('-', '+').replaceAll('_', '/'));
+    const claims = JSON.parse(json) as { perms?: unknown };
+    return Array.isArray(claims.perms) ? (claims.perms as string[]) : [];
+  } catch {
+    return [];
   }
 }

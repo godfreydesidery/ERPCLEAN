@@ -1,8 +1,34 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
+  { path: '', pathMatch: 'full', redirectTo: 'balances' },
   {
-    path: '',
-    loadComponent: () => import('./stock.component').then(m => m.StockComponent)
+    path: 'balances',
+    loadComponent: () => import('./balances.component').then(m => m.BalancesComponent)
+  },
+  {
+    path: 'card/:itemId',
+    loadComponent: () => import('./stock-card.component').then(m => m.StockCardComponent)
+  },
+  {
+    path: 'counts',
+    loadComponent: () => import('./counts.component').then(m => m.CountsComponent)
+  },
+  {
+    path: 'transfers',
+    loadComponent: () => import('./transfers.component').then(m => m.TransfersComponent)
+  },
+  {
+    path: 'batches',
+    loadComponent: () => import('./batches.component').then(m => m.BatchesComponent)
+  },
+  {
+    path: 'adjust',
+    loadComponent: () => import('./adjust.component').then(m => m.AdjustComponent)
+  },
+  {
+    path: 'internal-consumption',
+    loadComponent: () =>
+      import('./internal-consumption.component').then(m => m.InternalConsumptionComponent)
   }
 ];

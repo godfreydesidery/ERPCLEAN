@@ -66,6 +66,35 @@ orbix:
     dispatch-interval-ms: 1000
     batch-size: 100
     max-attempts: 10
+  stock:
+    # FEFO expiry-flag job. Runs daily by default (cron: "0 5 0 * * *" = 00:05 UTC).
+    batch-expiry-cron: "0 5 0 * * *"
+    # Manual stock-adjustment monetary value above which an authoriser
+    # (`authorised_by_user_id`, must hold `STOCK.ADJUST_APPROVE`) is required.
+    # Currency-agnostic — denominated in the company's functional currency.
+    adjustment-threshold: 50000
+  procurement:
+    # LPO total at or below this value auto-approves on submit (skips
+    # PENDING_APPROVAL). Set to 0 to require approval for every LPO.
+    lpo-auto-approval-threshold: 0
+    # Allowable fractional difference between an invoice's total_amount and the
+    # sum of its GRN allocations (0.005 = ±0.5%). Above this the match is
+    # rejected — the operator must edit the allocations or the invoice totals.
+    invoice-match-tolerance-pct: 0.005
+  sales:
+    # Per-line discount percentage above which an authoriser holding
+    # `SALES.DISCOUNT_APPROVE` is required. Set to 100 to disable.
+    discount-threshold-pct: 10
+  pos:
+    # Absolute till-session variance (|declared - expected|) above which a
+    # supervisor holding POS.SESSION_VARIANCE_APPROVE must authorise the close.
+    session-variance-threshold: 1000
+    # Per-line discount percentage above which a supervisor holding
+    # POS.DISCOUNT_APPROVE must authorise the sale. Set to 100 to disable.
+    discount-threshold-pct: 10
+    # Refund total above which a supervisor holding POS.REFUND_APPROVE must
+    # authorise the refund. Currency-agnostic (functional currency).
+    refund-threshold: 10000
   flags:
     cache-ttl-seconds: 30
 

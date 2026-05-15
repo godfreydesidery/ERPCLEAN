@@ -12,6 +12,26 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     List<UserRole> findByUserIdAndCompanyIdAndRevokedAtIsNull(Long userId, Long companyId);
 
+    List<UserRole> findByRoleIdAndRevokedAtIsNull(Long roleId);
+
+    boolean existsByRoleIdAndRevokedAtIsNull(Long roleId);
+
+    /**
+     * True when the user holds at least one active role grant that covers the
+     * given branch in the given company — either a branch-specific grant or a
+     * company-wide grant ({@code branch_id is null}).
+     */
+    @Query("""
+        select count(ur) > 0 from UserRole ur
+        where ur.userId = :userId
+          and ur.companyId = :companyId
+          and ur.revokedAt is null
+          and (ur.branchId is null or ur.branchId = :branchId)
+        """)
+    boolean hasBranchAccess(@Param("userId") Long userId,
+                            @Param("companyId") Long companyId,
+                            @Param("branchId") Long branchId);
+
     /**
      * Returns the distinct permission codes granted to a user in a company
      * (and matching the requested branch, if any). Branch-scoped grants are

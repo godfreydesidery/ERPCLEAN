@@ -43,6 +43,7 @@ public class ModuleBoundaryTest {
             "com.orbix.engine.modules..domain.enums..", // and enums
             "java..", "jakarta..", "javax..",
             "org.springframework..", "org.hibernate..", "org.slf4j..",
+            "org.aspectj..",                            // AOP infrastructure (AuditAspect)
             "com.fasterxml..", "lombok..", "io.jsonwebtoken..",
             "..domain..", "..service..", "..repository.."
         )

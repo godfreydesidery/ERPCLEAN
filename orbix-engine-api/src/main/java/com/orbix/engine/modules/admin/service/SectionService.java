@@ -1,0 +1,26 @@
+package com.orbix.engine.modules.admin.service;
+
+import com.orbix.engine.modules.admin.domain.dto.CreateSectionRequestDto;
+import com.orbix.engine.modules.admin.domain.dto.SectionResponseDto;
+import com.orbix.engine.modules.admin.domain.dto.UpdateSectionRequestDto;
+
+import java.util.List;
+
+/**
+ * Section management within a branch (F1.1). A branch must always retain at
+ * least one active RETAIL_FLOOR section.
+ */
+public interface SectionService {
+
+    List<SectionResponseDto> listSections(Long branchId);
+
+    SectionResponseDto createSection(Long branchId, CreateSectionRequestDto request);
+
+    SectionResponseDto updateSection(Long sectionId, UpdateSectionRequestDto request);
+
+    /**
+     * Marks the section INACTIVE. Rejected if it is the branch's last active
+     * RETAIL_FLOOR section, or if the section is already inactive.
+     */
+    void deactivateSection(Long sectionId);
+}

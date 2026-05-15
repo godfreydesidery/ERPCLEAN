@@ -65,4 +65,21 @@ public class Section {
         this.createdBy = actorId;
         this.updatedBy = actorId;
     }
+
+    public void updateDetails(String name, SectionType type, Long managerUserId, Long actorId) {
+        this.name = name;
+        this.type = type;
+        this.managerUserId = managerUserId;
+        touch(actorId);
+    }
+
+    public void deactivate(Long actorId) {
+        this.status = AdminStatus.INACTIVE;
+        touch(actorId);
+    }
+
+    private void touch(Long actorId) {
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
 }

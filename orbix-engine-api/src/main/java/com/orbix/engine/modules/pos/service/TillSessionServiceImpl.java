@@ -1,0 +1,186 @@
+package com.orbix.engine.modules.pos.service;
+
+import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.EventPublisher;
+import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.day.domain.entity.BusinessDay;
+import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
+import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
+import com.orbix.engine.modules.pos.domain.entity.Till;
+import com.orbix.engine.modules.pos.domain.entity.TillSession;
+import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
+import com.orbix.engine.modules.pos.domain.enums.TillStatus;
+import com.orbix.engine.modules.pos.repository.TillRepository;
+import com.orbix.engine.modules.pos.repository.TillSessionRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+
+@Service
+@RequiredArgsConstructor
+public class TillSessionServiceImpl implements TillSessionService {
+
+    static final String VARIANCE_APPROVE_PERMISSION = "POS.SESSION_VARIANCE_APPROVE";
+
+    private static final String AGG = "TillSession";
+    private static final String F_ID = "tillSessionId";
+    private static final String F_TILL_ID = "tillId";
+    private static final String F_BRANCH_ID = "branchId";
+
+    private final TillSessionRepository sessions;
+    private final TillRepository tills;
+    private final DayGuard dayGuard;
+    private final PermissionResolverService permissions;
+    private final EventPublisher events;
+    private final RequestContext context;
+
+    @Value("${orbix.pos.session-variance-threshold}")
+    private BigDecimal varianceThreshold;
+
+    @Override
+    @Transactional
+    @Auditable(action = "OPEN", entityType = AGG)
+    public TillSessionDto open(OpenTillSessionRequestDto request) {
+        Long companyId = context.companyId();
+        Long actorId = context.userId();
+        Till till = requireTill(request.tillId());
+        if (till.getStatus() != TillStatus.ACTIVE) {
+            throw new IllegalArgumentException(
+                "Till " + till.getCode() + " is " + till.getStatus() + " — cannot open a session");
+        }
+        if (sessions.findFirstByTillIdAndStatus(till.getId(), TillSessionStatus.OPEN).isPresent()) {
+            throw new IllegalArgumentException(
+                "Till " + till.getCode() + " already has an OPEN session");
+        }
+        BusinessDay day = dayGuard.requireOpenDay(till.getBranchId());
+
+        TillSession session = sessions.save(new TillSession(
+            till.getId(), till.getBranchId(), companyId,
+            day.getBusinessDate(), actorId, request.openingFloatAmount()
+        ));
+        events.publish("TillSessionOpened.v1", AGG, String.valueOf(session.getId()),
+            Map.of(F_ID, session.getId(),
+                F_TILL_ID, till.getId(),
+                F_BRANCH_ID, till.getBranchId(),
+                "businessDate", session.getBusinessDate().toString(),
+                "openingFloat", session.getOpeningFloatAmount()));
+        return TillSessionDto.from(session);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "CLOSE", entityType = AGG)
+    public TillSessionDto close(Long sessionId, CloseTillSessionRequestDto request) {
+        TillSession session = requireSession(sessionId);
+        if (session.getStatus() != TillSessionStatus.OPEN) {
+            throw new IllegalStateException(
+                "Only OPEN sessions can be closed (was " + session.getStatus() + ")");
+        }
+        BigDecimal expectedCash = computeExpectedCash(session);
+        BigDecimal variance = request.declaredCashAmount().subtract(expectedCash);
+        if (variance.abs().compareTo(varianceThreshold) > 0) {
+            validateSupervisor(request.supervisorId(), context.userId());
+        }
+        session.close(expectedCash, request.declaredCashAmount(), context.userId(),
+            request.supervisorId(), request.notes());
+
+        events.publish("TillSessionClosed.v1", AGG, String.valueOf(session.getId()),
+            Map.of(F_ID, session.getId(),
+                F_TILL_ID, session.getTillId(),
+                F_BRANCH_ID, session.getBranchId(),
+                "expectedCash", expectedCash,
+                "declaredCash", request.declaredCashAmount(),
+                "variance", variance));
+        return TillSessionDto.from(session);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "RECONCILE", entityType = AGG)
+    public TillSessionDto reconcile(Long sessionId) {
+        TillSession session = requireSession(sessionId);
+        session.reconcile(context.userId());
+        events.publish("TillSessionReconciled.v1", AGG, String.valueOf(session.getId()),
+            Map.of(F_ID, session.getId(),
+                F_TILL_ID, session.getTillId()));
+        return TillSessionDto.from(session);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TillSessionDto> list(Long branchId) {
+        Long companyId = context.companyId();
+        List<TillSession> rows = branchId == null
+            ? sessions.findByCompanyIdOrderByIdDesc(companyId)
+            : sessions.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+        return rows.stream().map(TillSessionDto::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TillSessionDto> listByTill(Long tillId) {
+        requireTill(tillId);
+        return sessions.findByTillIdOrderByIdDesc(tillId).stream().map(TillSessionDto::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TillSessionDto get(Long sessionId) {
+        return TillSessionDto.from(requireSession(sessionId));
+    }
+
+    /**
+     * Expected cash = opening_float + cash sales + cash refunds in − cash refunds out
+     * + cash pickups − petty cash out. POS-sale flows ship in F5.2+; until then,
+     * only the float contributes.
+     */
+    private BigDecimal computeExpectedCash(TillSession session) {
+        return session.getOpeningFloatAmount();
+    }
+
+    private void validateSupervisor(Long supervisorId, Long actorId) {
+        if (supervisorId == null) {
+            throw new IllegalArgumentException(
+                "Variance above threshold requires a supervisor holding "
+                    + VARIANCE_APPROVE_PERMISSION);
+        }
+        if (Objects.equals(supervisorId, actorId)) {
+            throw new IllegalArgumentException("You cannot authorise your own variance");
+        }
+        boolean ok = permissions.resolve(supervisorId, context.companyId(), null)
+            .contains(VARIANCE_APPROVE_PERMISSION);
+        if (!ok) {
+            throw new AccessDeniedException(
+                "Supervisor " + supervisorId + " does not hold " + VARIANCE_APPROVE_PERMISSION);
+        }
+    }
+
+    private TillSession requireSession(Long id) {
+        TillSession session = sessions.findById(id)
+            .orElseThrow(() -> new NoSuchElementException("Till session not found: " + id));
+        if (!Objects.equals(session.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Till session not found: " + id);
+        }
+        return session;
+    }
+
+    private Till requireTill(Long tillId) {
+        Till till = tills.findById(tillId)
+            .orElseThrow(() -> new NoSuchElementException("Till not found: " + tillId));
+        if (!Objects.equals(till.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Till not found: " + tillId);
+        }
+        return till;
+    }
+}

@@ -2,6 +2,7 @@ package com.orbix.engine.modules.catalog.domain.entity;
 
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -58,6 +59,16 @@ public class Item {
     @Column(name = "is_tracked", nullable = false)
     private boolean tracked = true;
 
+    @Column(name = "is_weighed", nullable = false)
+    private boolean weighed = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weighing_unit", length = 10)
+    private WeighingUnit weighingUnit;
+
+    @Column(name = "is_batch_tracked", nullable = false)
+    private boolean batchTracked = false;
+
     @Column(name = "avg_cost", precision = 18, scale = 4, nullable = false)
     private BigDecimal avgCost = BigDecimal.ZERO;
 
@@ -110,9 +121,50 @@ public class Item {
         this.updatedBy = actorId;
     }
 
+    /** Audited attribute edit. Code is immutable and not updatable here. */
+    @SuppressWarnings("java:S107")  // mirrors the constructor's field set; a VO would cost more than it saves
+    public void update(String name, String shortName, ItemType type, Long itemGroupId,
+                       Long uomId, Long vatGroupId, boolean tracked,
+                       java.math.BigDecimal minSellPrice, Long actorId) {
+        this.name = name;
+        this.shortName = shortName;
+        this.type = type;
+        this.itemGroupId = itemGroupId;
+        this.uomId = uomId;
+        this.vatGroupId = vatGroupId;
+        this.tracked = tracked;
+        this.minSellPrice = minSellPrice;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
     /** Audited archive — prefer this over {@code setStatus(ARCHIVED)}. */
     public void archive(Long actorId) {
         this.status = ItemStatus.ARCHIVED;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    /** Audited un-archive back to ACTIVE. */
+    public void activate(Long actorId) {
+        this.status = ItemStatus.ACTIVE;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Sets the weighed flag and its unit together. {@code unit} must be non-null
+     * iff {@code weighed} — the caller validates that invariant.
+     */
+    public void applyWeighing(boolean weighed, WeighingUnit unit, Long actorId) {
+        this.weighed = weighed;
+        this.weighingUnit = weighed ? unit : null;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
+
+    public void applyBatchTracking(boolean batchTracked, Long actorId) {
+        this.batchTracked = batchTracked;
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;
     }
