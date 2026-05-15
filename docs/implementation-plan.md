@@ -4,9 +4,9 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `f015f5d` — F3.4 web (supplier payment list + allocation grid).
+**Last updated:** 2026-05-15 · **Branch:** `feature` · **Last commit:** `fbbca7a` — F4.4 + F4.5 (customer returns + credit notes + packing lists).
 
-**▶ RESUME POINT:** Phase 3 inbound is complete (F3.5 vendor-return deferred to Phase 8 per plan). Next slice is **F4.2 — Sales invoice posting (cash + credit)** — F4.1 quotation is skippable per plan ("Skip if pilot doesn't need quotations; jump to F4.2"). `SalesInvoice` + `SalesInvoiceLine` entities, credit-limit + discount-threshold + `min_sell_price` rules, void on same business day only. All work through F3.4 is committed; working tree clean. Read the F4.2 section + DATA-MODEL §6 (sales) before starting. Workflow: backend → `mvn test` → commit, then web → `ng build` → commit.
+**▶ RESUME POINT:** Phase 4 outbound is complete (F4.1 quotation skipped per plan; F3.5 vendor-return deferred to Phase 8). Next slice is **F5.1 — Till + session lifecycle** — the POS phase opens here. `Till` + `TillSession` entities, open with float, close with declared cash + variance, supervisor PIN above threshold; `TillSessionOpened/Closed.v1` events. Flutter-heavy phase ahead. All work through F4.5 is committed; working tree clean. Read the F5.x slices + DATA-MODEL §7 (POS) before starting.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
@@ -39,7 +39,14 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 - F3.3 — Supplier invoice + 3-way match (`SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities with DRAFT → POSTED lifecycle; DRAFT/POSTED → CANCELLED; per-branch unique invoice number + per-supplier unique `supplier_invoice_no`; allocations validated against each referenced GRN — POSTED + same supplier + cumulative amount ≤ `grn.total_amount` (over-allocation rejected; cancelled invoices excluded); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005); due date defaults to `invoice_date + supplier.payment_terms_days`; `V23` + `V23_1` + `V24` migrations; `PROCUREMENT.MANAGE_INVOICE` permission; `SupplierInvoiceCreated/Matched/Cancelled.v1` events; web `/procurement/invoices` list + per-supplier GRN picker + live tolerance hint + state-aware Post/Cancel.)
 - F3.4 — Supplier payment + invoice settlement (first floor of the cash module; `SupplierPayment` + `SupplierPaymentAllocation` entities with DRAFT → POSTED → terminal lifecycle + DRAFT → CANCELLED; per-branch unique payment number; `PaymentMethod` enum (CASH/BANK_TRANSFER/CHEQUE/MOBILE_MONEY); allocation guards — same-supplier + in-company + amount ≤ invoice outstanding + no-duplicate-invoice + Σ allocations ≤ payment total; posting requires `DayGuard.requireOpenDay`; `SupplierInvoice.applyPayment` advances `paid_amount` and flips to PARTIALLY_PAID until total → PAID; `V25` + `V25_1` + `V26` migrations seed `CASH.MANAGE_SUPPLIER_PAYMENT`; `SupplierPaymentCreated/Posted/Cancelled.v1` events for the F6.1 cash-side subscriber; web `/procurement/payments` list + supplier-scoped open-invoice picker + outstanding hint + state-aware Post/Cancel.)
 
-**Next slice (start here):** **F4.2** — Sales invoice posting. F3.5 (vendor return) deferred to Phase 8 per plan; F4.1 (quotation) skippable. Phase-0 test debt still outstanding.
+**Done in Phase 4:**
+- F4.1 — Sales quotation (**skipped** per plan: "Skip if pilot doesn't need quotations; jump to F4.2").
+- F4.2 — Sales invoice posting (`SalesInvoice` + `SalesInvoiceLine` (DATA-MODEL §6.3/§6.4); DRAFT → POSTED → (PARTIALLY_PAID/PAID via F4.3) | VOIDED | CANCELLED; per-branch unique number; `PaymentTerms` (CASH/CREDIT); business rules — credit-limit check against `customer.creditLimitAmount` + running outstanding debt; discount-threshold via `orbix.sales.discount-threshold-pct` requires `SALES.DISCOUNT_APPROVE` authoriser; `item.minSellPrice` enforced; same-business-day-only void writes RETURN_IN compensating moves at snapped line cost — batch-tracked items rejected (use F4.4 return instead); posting routes through `StockMoveService` with DayGuard + per-batch FEFO drains for batch-tracked items; `V27` + `V27_1` + `V28` migrations seed `SALES.MANAGE_INVOICE/DISCOUNT_APPROVE/MANAGE_RECEIPT/MANAGE_RETURN/MANAGE_PACKING`; `SalesInvoiceCreated/Posted/Voided/Cancelled.v1` events; web `/sales/invoices` list + multi-line draft form + state-aware Post/Void/Cancel.)
+- F4.3 — Sales receipt + allocation (`SalesReceipt` + `ReceiptAllocation` (DATA-MODEL §6.5/§6.6); DRAFT → POSTED → terminal + DRAFT → CANCELLED; `ReceiptMethod` (CASH/CARD/BANK_TRANSFER/MOBILE_MONEY/CHEQUE/STORE_CREDIT); allocation guards mirror F3.4 — same-customer, no-duplicate, amount ≤ outstanding, Σ ≤ total; tracks `unallocated_amount` for future customer-credit routing; DayGuard on post; `SalesInvoice.applyReceipt` flips PARTIALLY_PAID / PAID; `V29` + `V29_1`; `SalesReceiptCreated/Posted/Cancelled.v1` events; web `/sales/receipts` with customer-scoped open-invoice picker.)
+- F4.4 — Customer returns + credit notes (`CustomerReturn` + `CustomerReturnLine` (DATA-MODEL §6.7/§6.8); DRAFT → POSTED → CREDITED + DRAFT → CANCELLED; `ReturnReason` (DAMAGED/EXPIRED/WRONG_ITEM/BUYER_REMORSE/OTHER); on post (DayGuard required) writes RETURN_IN moves when `restock=true`, DAMAGE moves otherwise — batch-tracked items rejected for now (restock-to-original-batch is a follow-on); issue-credit-note transitions POSTED → CREDITED and creates `CustomerCreditNote` (DATA-MODEL §6.9) at full return amount — allocation to open invoices is follow-on work; `V30` + `V30_1`; `CustomerReturnCreated/Posted/Cancelled.v1` + `CustomerCreditNoteIssued.v1` events; web `/sales/returns` with state-aware action buttons.)
+- F4.5 — Packing lists (`PackingList` + `PackingListLine` (DATA-MODEL §6.10/§6.11); DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED; created against POSTED/PARTIALLY_PAID/PAID invoices; tracking-only — no stock moves (parent invoice already decremented on post); `V31` + `V31_1`; `PackingListCreated/Dispatched/Delivered/Cancelled.v1` events; web `/sales/packing-lists` with per-invoice-line tick + qty picker.)
+
+**Next slice (start here):** **F5.1** — Till + session lifecycle. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped. Phase-0 test debt still outstanding.
 
 **Pending across all of Phase 0 (tests + docs):**
 - Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
@@ -642,29 +649,31 @@ Defer to Phase 8 if not used in pilot.
 
 ## F4.1 — Sales quotation
 
-**Story:** US-SALES-003, US-SALES-004 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-003, US-SALES-004 · **Size:** M · **Status:** `[skipped]`
 **Dependencies:** F1.7 (customers), F1.5 (price lists).
 
-Skip if pilot doesn't need quotations; jump to F4.2.
+Skipped — per plan "Skip if pilot doesn't need quotations; jump to F4.2." Revisit when a sales-quote flow is requested.
 
 ---
 
 ## F4.2 — Sales invoice posting (cash + credit)
 
-**Story:** US-SALES-005, US-SALES-006, US-SALES-007 · **Size:** L · **Status:** `[ ]`
+**Story:** US-SALES-005, US-SALES-006, US-SALES-007 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.7, F1.5, F2.2, F2.1.
 
 **Backend:**
-- [ ] `SalesInvoice`, `SalesInvoiceLine` entities.
-- [ ] `SalesInvoiceService` + Impl. Credit-limit check; discount-threshold rule; `min_sell_price` rule.
-- [ ] Void rule: same business day only.
-- [ ] Events: `SalesInvoicePosted.v1`, `SalesInvoiceVoided.v1`.
+- [x] `SalesInvoice` + `SalesInvoiceLine` entities (`V27` + `V27_1`); per-branch unique number; `PaymentTerms` (CASH/CREDIT). DRAFT → POSTED → settlement-via-F4.3 → VOIDED | CANCELLED.
+- [x] `SalesInvoiceService` + Impl. Credit-limit check sums POSTED + PARTIALLY_PAID outstanding debt against `customer.creditLimitAmount`; zero-limit rejects credit. Discount-threshold via `orbix.sales.discount-threshold-pct` requires `SALES.DISCOUNT_APPROVE` authoriser (verified via `PermissionResolverService`). `item.minSellPrice` enforced post-discount.
+- [x] Same-business-day-only void writes RETURN_IN compensating moves at the snapped line cost. Rejects voids on invoices with any payment or any batch-tracked line (use F4.4 customer return instead).
+- [x] Posting writes outbound SALE moves via `StockMoveService` (DayGuard + moving-average reused); batch-tracked items drain FEFO via `StockBatchService` and emit one move per pick — `line.cost_amount` becomes the qty-weighted cost across picks.
+- [x] Events: `SalesInvoiceCreated/Posted/Voided/Cancelled.v1`. `V28` seeds the 5 sales permissions in one shot.
 
 **Web:**
-- [ ] `/sales/invoices` flow; copy-from-quotation; line discounting.
+- [x] `/sales/invoices` — list with status-coloured badges + multi-line draft form (customer / agent / dates / terms / currency / price list / discount approver / per-line items). State-aware Post / Void / Cancel buttons.
 
 **Tests:**
-- **System:** `TC-SALES-001` .. `TC-SALES-013`; `TC-E2E-003`.
+- **Unit:** `SalesInvoiceServiceImplTest` (14) — create + totals, credit-limit + zero-limit, discount-threshold (missing / wrong-permission / approved authoriser), min-sell-price, post writes stock moves, batch-tracked FEFO drain, day-closed, same-day void, void-on-different-day rejected, void-with-batch rejected, cancel from draft.
+- **System:** `TC-SALES-001` .. `TC-SALES-013`; `TC-E2E-003`. *(pending)*
 
 **DoD:** Back-office user raises a credit invoice; debt opens.
 
@@ -672,35 +681,55 @@ Skip if pilot doesn't need quotations; jump to F4.2.
 
 ## F4.3 — Sales receipt + allocation
 
-**Story:** US-SALES-008, US-SALES-009 · **Size:** M · **Status:** `[ ]`
-**Dependencies:** F4.2, F6.1.
+**Story:** US-SALES-008, US-SALES-009 · **Size:** M · **Status:** `[x]`
+**Dependencies:** F4.2.
 
 **Backend:**
-- [ ] `SalesReceipt`, `ReceiptAllocation` entities + service.
-- [ ] Allocation oldest-first by default; surplus held as customer credit.
+- [x] `SalesReceipt` + `ReceiptAllocation` entities (`V29` + `V29_1`). DRAFT → POSTED → terminal + DRAFT → CANCELLED. `ReceiptMethod`: CASH/CARD/BANK_TRANSFER/MOBILE_MONEY/CHEQUE/STORE_CREDIT.
+- [x] `SalesReceiptService` + Impl. Allocation guards mirror F3.4: same-customer + in-company + no-duplicate-invoice + amount ≤ outstanding + Σ ≤ receipt total. Surplus tracked on `unallocated_amount`; customer-credit routing is follow-on work.
+- [x] DayGuard on post; `SalesInvoice.applyReceipt` flips PARTIALLY_PAID / PAID. `SalesReceiptCreated/Posted/Cancelled.v1` events.
 
 **Web:**
-- [ ] `/sales/receipts` flow; allocation grid.
+- [x] `/sales/receipts` with customer-scoped open-invoice picker that pre-fills the allocation amount from outstanding. State-aware Post / Cancel.
 
-**Tests:** `TC-SALES-014` .. `TC-SALES-017`; `TC-E2E-003`.
+**Tests:**
+- **Unit:** `SalesReceiptServiceImplTest` (9) — capture allocations + unallocated math; outstanding/total overruns rejected; foreign customer rejected; post advances invoice paid + flips PARTIALLY_PAID; full settlement → PAID; day-closed; cancel; duplicate number.
+- **System:** `TC-SALES-014` .. `TC-SALES-017`; `TC-E2E-003`. *(pending)*
 
 ---
 
 ## F4.4 — Customer return + credit note
 
-**Story:** US-SALES-010, US-SALES-011 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-010, US-SALES-011 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F4.2.
 
-**Tests:** `TC-SALES-018` .. `TC-SALES-021`.
+**Backend:**
+- [x] `CustomerReturn` + `CustomerReturnLine` entities (`V30` + `V30_1`). DRAFT → POSTED → CREDITED + DRAFT → CANCELLED. `ReturnReason`: DAMAGED/EXPIRED/WRONG_ITEM/BUYER_REMORSE/OTHER.
+- [x] On post (DayGuard required) writes RETURN_IN moves when `restock=true`, DAMAGE moves otherwise. Batch-tracked items rejected — restock-to-original-batch needs a separate slice.
+- [x] Issue-credit-note transitions POSTED → CREDITED and creates a `CustomerCreditNote` (DATA-MODEL §6.9) at the full return total. Allocation of the credit note to open invoices is a follow-on slice.
+- [x] Events: `CustomerReturnCreated/Posted/Cancelled.v1`, `CustomerCreditNoteIssued.v1`.
+
+**Web:**
+- [x] `/sales/returns` — list + draft form with reason + restock toggle + per-line items. State-aware Post / Cancel / Issue-credit-note.
+
+**Tests:** `TC-SALES-018` .. `TC-SALES-021`. *(pending)*
 
 ---
 
 ## F4.5 — Packing list
 
-**Story:** US-SALES-012 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-012 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F4.2.
 
-**Tests:** `TC-SALES-022` .. `TC-SALES-024`.
+**Backend:**
+- [x] `PackingList` + `PackingListLine` entities (`V31` + `V31_1`). DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED. Created against POSTED / PARTIALLY_PAID / PAID invoices.
+- [x] Tracking-only — no stock moves are written by the packing list itself; the parent sales invoice already decremented stock on post. The IN_TRANSIT split mentioned in DATA-MODEL §6.10 is deferred to a follow-on slice when packing-then-invoice workflow becomes a real customer ask.
+- [x] Events: `PackingListCreated/Dispatched/Delivered/Cancelled.v1`.
+
+**Web:**
+- [x] `/sales/packing-lists` — load invoice by id, tick lines + qty, draft → dispatch → deliver. State-aware buttons.
+
+**Tests:** `TC-SALES-022` .. `TC-SALES-024`. *(pending)*
 
 ---
 
