@@ -78,3 +78,58 @@ export interface CreateSalesInvoiceRequest {
 export interface VoidSalesInvoiceRequest {
   reason: string;
 }
+
+// ---- F4.3: sales receipt ---------------------------------------------------
+
+export type ReceiptMethod =
+  'CASH' | 'CARD' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHEQUE' | 'STORE_CREDIT';
+export const RECEIPT_METHODS: ReceiptMethod[] =
+  ['CASH', 'CARD', 'BANK_TRANSFER', 'MOBILE_MONEY', 'CHEQUE', 'STORE_CREDIT'];
+
+export type SalesReceiptStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+export interface ReceiptAllocation {
+  id: number;
+  salesInvoiceId: number;
+  amount: number;
+  allocatedAt: string;
+  allocatedBy: number;
+}
+
+export interface SalesReceipt {
+  id: number;
+  number: string;
+  companyId: number;
+  branchId: number;
+  customerId: number;
+  receiptDate: string;
+  method: ReceiptMethod;
+  reference: string | null;
+  currencyCode: string;
+  totalAmount: number;
+  allocatedAmount: number;
+  unallocatedAmount: number;
+  status: SalesReceiptStatus;
+  postedAt: string | null;
+  postedBy: number | null;
+  notes: string | null;
+  allocations: ReceiptAllocation[];
+}
+
+export interface CreateReceiptAllocation {
+  salesInvoiceId: number;
+  amount: number;
+}
+
+export interface CreateSalesReceiptRequest {
+  number: string;
+  branchId: number;
+  customerId: number;
+  receiptDate: string;
+  method: ReceiptMethod;
+  reference: string | null;
+  currencyCode: string;
+  totalAmount: number;
+  notes: string | null;
+  allocations: CreateReceiptAllocation[];
+}
