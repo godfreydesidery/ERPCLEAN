@@ -69,6 +69,22 @@ orbix:
   giftcard:
     # F7.1 — daily auto-expiry of gift cards past expires_at. Default 00:10 UTC.
     expiry-cron: "0 10 0 * * *"
+  orders:
+    # F7.2 — default deposit-required percentage of total when the client
+    # omits depositRequiredAmount on order create.
+    deposit-required-pct: 30
+    # Default reserved-until horizons (in days from create) when the client
+    # omits reservedUntil. Layby keeps the goods for longer than a typical
+    # production lead time.
+    default-layby-reserve-days: 30
+    default-pre-order-reserve-days: 7
+    # Cancel-window: cancellations within this many days of create refund all
+    # prior payments on their original tender; cancellations outside the window
+    # forfeit the paid amount. Set to 0 to forfeit always (no-refund policy).
+    cancel-refund-window-days: 7
+    # Daily expiry sweep — runs at 00:15 UTC, ten minutes after the gift-card
+    # sweep so logs don't interleave.
+    expiry-cron: "0 15 0 * * *"
   stock:
     # FEFO expiry-flag job. Runs daily by default (cron: "0 5 0 * * *" = 00:05 UTC).
     batch-expiry-cron: "0 5 0 * * *"

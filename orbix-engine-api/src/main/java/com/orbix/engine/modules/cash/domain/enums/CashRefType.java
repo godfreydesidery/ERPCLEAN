@@ -40,4 +40,9 @@ public final class CashRefType {
 
     /** Gift-card issuance — single IN entry for the load proceeds. */
     public static final String GIFT_CARD_ISSUE = "GiftCardIssue";
+
+    /** Customer-order payment (deposit / instalment / final balance). */
+    public static final String ORDER_PAYMENT = "OrderPayment";
+    /** Customer-order refund on cancel (per refund policy). */
+    public static final String ORDER_REFUND = "OrderRefund";
 }
