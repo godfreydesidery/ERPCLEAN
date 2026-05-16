@@ -12,52 +12,97 @@ import { PARTY_CATEGORIES, PartyDetails } from './party.models';
   standalone: true,
   imports: [FormsModule],
   template: `
-    <div class="row g-2">
-      <div class="col-md-6">
-        <label class="form-label">Name</label>
-        <input class="form-control" name="pname" [(ngModel)]="details().name" required>
+    <fieldset class="party-fieldset">
+      <legend class="party-fieldset__legend">
+        <i class="bi bi-person-vcard text-secondary"></i> Party details
+      </legend>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold text-secondary">Name</label>
+          <input class="form-control" name="pname" [(ngModel)]="details().name" required
+                 placeholder="Legal or display name">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold text-secondary">Legal name <span class="text-muted">(optional)</span></label>
+          <input class="form-control" name="plegal" [ngModel]="details().legalName"
+                 (ngModelChange)="details().legalName = $event || null">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold text-secondary">Category</label>
+          <select class="form-select" name="pcat" [(ngModel)]="details().category" required>
+            @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold text-secondary">TIN</label>
+          <input class="form-control font-monospace" name="ptin" [ngModel]="details().tin"
+                 (ngModelChange)="details().tin = $event || null"
+                 (blur)="emitTin()" placeholder="Tax ID">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold text-secondary">VRN <span class="text-muted">(optional)</span></label>
+          <input class="form-control font-monospace" name="pvrn" [ngModel]="details().vrn"
+                 (ngModelChange)="details().vrn = $event || null">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold text-secondary">
+            <i class="bi bi-telephone me-1"></i>Phone
+          </label>
+          <input class="form-control" name="pphone" [ngModel]="details().phone"
+                 (ngModelChange)="details().phone = $event || null">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold text-secondary">
+            <i class="bi bi-envelope me-1"></i>Email
+          </label>
+          <input class="form-control" type="email" name="pemail" [ngModel]="details().email"
+                 (ngModelChange)="details().email = $event || null">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label small fw-semibold text-secondary">
+            <i class="bi bi-geo-alt me-1"></i>Physical address
+          </label>
+          <input class="form-control" name="paddr" [ngModel]="details().physicalAddress"
+                 (ngModelChange)="details().physicalAddress = $event || null">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold text-secondary">Country code</label>
+          <input class="form-control text-uppercase font-monospace" name="pcc" maxlength="2"
+                 [ngModel]="details().countryCode"
+                 (ngModelChange)="details().countryCode = $event || null" placeholder="UG">
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-semibold text-secondary">Notes</label>
+          <textarea class="form-control" rows="2" name="pnotes"
+                    [ngModel]="details().notes"
+                    (ngModelChange)="details().notes = $event || null"
+                    placeholder="Internal notes about this party"></textarea>
+        </div>
       </div>
-      <div class="col-md-6">
-        <label class="form-label">Legal name</label>
-        <input class="form-control" name="plegal" [(ngModel)]="details().legalName">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Category</label>
-        <select class="form-select" name="pcat" [(ngModel)]="details().category" required>
-          @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
-        </select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">TIN</label>
-        <input class="form-control" name="ptin" [(ngModel)]="details().tin"
-               (blur)="emitTin()">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">VRN</label>
-        <input class="form-control" name="pvrn" [(ngModel)]="details().vrn">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Phone</label>
-        <input class="form-control" name="pphone" [(ngModel)]="details().phone">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Email</label>
-        <input class="form-control" type="email" name="pemail" [(ngModel)]="details().email">
-      </div>
-      <div class="col-md-8">
-        <label class="form-label">Physical address</label>
-        <input class="form-control" name="paddr" [(ngModel)]="details().physicalAddress">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Country code</label>
-        <input class="form-control" name="pcc" maxlength="2" [(ngModel)]="details().countryCode">
-      </div>
-      <div class="col-12">
-        <label class="form-label">Notes</label>
-        <textarea class="form-control" rows="2" name="pnotes" [(ngModel)]="details().notes"></textarea>
-      </div>
-    </div>
-  `
+    </fieldset>
+  `,
+  styles: [`
+    .party-fieldset {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 1rem 1.25rem 1.25rem;
+    }
+    .party-fieldset__legend {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #374151;
+      padding: 0 0.5rem;
+      width: auto;
+      margin-bottom: 0.5rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8;
+      box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+  `]
 })
 export class PartyDetailsFormComponent {
   readonly details = input.required<PartyDetails>();
