@@ -10,6 +10,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.PettyCashDto;
 import com.orbix.engine.modules.pos.domain.dto.PostPettyCashRequestDto;
@@ -45,6 +46,7 @@ public class PettyCashServiceImpl implements PettyCashService {
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -90,6 +92,7 @@ public class PettyCashServiceImpl implements PettyCashService {
         if (!Objects.equals(session.getCompanyId(), companyId)) {
             throw new NoSuchElementException("Till session not found: " + tillSessionId);
         }
+        branchScope.requireAccess(session.getBranchId());
         return payouts.findByTillSessionIdOrderByAtAsc(tillSessionId).stream()
             .map(PettyCashDto::from)
             .toList();
@@ -101,6 +104,7 @@ public class PettyCashServiceImpl implements PettyCashService {
         if (!Objects.equals(session.getCompanyId(), companyId)) {
             throw new NoSuchElementException("Till session not found: " + sessionId);
         }
+        branchScope.requireAccess(session.getBranchId());
         if (session.getStatus() != TillSessionStatus.OPEN) {
             throw new IllegalArgumentException(
                 "Till session " + sessionId + " is " + session.getStatus() + " — cannot record petty cash");

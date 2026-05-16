@@ -3,6 +3,7 @@ package com.orbix.engine.modules.pos.service;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.dto.CreateTillRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.TillDto;
 import com.orbix.engine.modules.pos.domain.dto.UpdateTillRequestDto;
@@ -33,11 +34,13 @@ public class TillServiceImpl implements TillService {
     private final TillSessionRepository tillSessions;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
     @Auditable(action = "CREATE", entityType = AGG)
     public TillDto create(CreateTillRequestDto request) {
+        branchScope.requireAccess(request.branchId());
         Long companyId = context.companyId();
         Long actorId = context.userId();
         String code = request.code().trim().toUpperCase();
@@ -98,9 +101,10 @@ public class TillServiceImpl implements TillService {
     @Transactional(readOnly = true)
     public List<TillDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<Till> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<Till> rows = scope == null
             ? tills.findByCompanyIdOrderByIdAsc(companyId)
-            : tills.findByCompanyIdAndBranchIdOrderByIdAsc(companyId, branchId);
+            : tills.findByCompanyIdAndBranchIdOrderByIdAsc(companyId, scope);
         return rows.stream().map(TillDto::from).toList();
     }
 
@@ -116,6 +120,7 @@ public class TillServiceImpl implements TillService {
         if (!Objects.equals(till.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Till not found: " + tillId);
         }
+        branchScope.requireAccess(till.getBranchId());
         return till;
     }
 }

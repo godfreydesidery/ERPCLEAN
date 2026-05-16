@@ -12,6 +12,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +36,13 @@ public class CashAdjustmentServiceImpl implements CashAdjustmentService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
     public CashAdjustmentDto post(PostCashAdjustmentRequestDto request) {
+        branchScope.requireAccess(request.branchId());
         Long companyId = context.companyId();
         Long actorId = context.userId();
         BusinessDay day = dayGuard.requireOpenDay(request.branchId());
@@ -71,6 +74,7 @@ public class CashAdjustmentServiceImpl implements CashAdjustmentService {
     @Override
     @Transactional(readOnly = true)
     public List<CashAdjustmentDto> list(Long branchId, LocalDate businessDate) {
+        branchScope.requireAccess(branchId);
         return adjustments.findByBranchIdAndBusinessDateOrderByAtAsc(branchId, businessDate).stream()
             .map(CashAdjustmentDto::from)
             .toList();
