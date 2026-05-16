@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.production.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.ProductionVarianceRowDto;
 import com.orbix.engine.modules.production.domain.entity.ProductionBatch;
 import com.orbix.engine.modules.production.domain.entity.ProductionConsumption;
@@ -33,14 +34,16 @@ public class ProductionVarianceReportServiceImpl implements ProductionVarianceRe
     private final ProductionConsumptionRepository consumption;
     private final ProductionWastageRepository wastage;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public List<ProductionVarianceRowDto> report(Long branchId, Long sectionId, Long bomId,
                                                  LocalDate from, LocalDate to) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         return batches.findByCompanyIdOrderByIdDesc(companyId).stream()
-            .filter(b -> branchId == null || Objects.equals(b.getBranchId(), branchId))
+            .filter(b -> scope == null || Objects.equals(b.getBranchId(), scope))
             .filter(b -> sectionId == null || Objects.equals(b.getSectionId(), sectionId))
             .filter(b -> bomId == null || Objects.equals(b.getBomId(), bomId))
             .filter(b -> within(b, from, to))

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.orders.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.orders.domain.dto.LaybyAgeingBucketDto;
 import com.orbix.engine.modules.orders.domain.dto.LaybyAgeingOrderDto;
 import com.orbix.engine.modules.orders.domain.dto.LaybyAgeingReportDto;
@@ -42,16 +43,18 @@ public class LaybyAgeingReportServiceImpl implements LaybyAgeingReportService {
 
     private final CustomerOrderRepository orders;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public LaybyAgeingReportDto report(Long branchId, CustomerOrderType type, Instant asOf) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         Instant cutoff = asOf != null ? asOf : Instant.now();
 
-        List<CustomerOrder> open = branchId != null
+        List<CustomerOrder> open = scope != null
             ? orders.findByCompanyIdAndBranchIdAndStatusInOrderByCreatedAtAsc(
-                companyId, branchId, OPEN_STATUSES)
+                companyId, scope, OPEN_STATUSES)
             : orders.findByCompanyIdAndStatusInOrderByCreatedAtAsc(companyId, OPEN_STATUSES);
 
         Map<CustomerOrderType, BigDecimal> balanceByType = new EnumMap<>(CustomerOrderType.class);

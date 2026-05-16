@@ -5,6 +5,7 @@ import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.domain.dto.VatReturnDto;
 import com.orbix.engine.modules.common.domain.dto.VatReturnRowDto;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
@@ -32,6 +33,7 @@ public class VatReturnReportServiceImpl implements VatReturnReportService {
     private static final int MONEY_SCALE = 4;
 
     private final RequestContext context;
+    private final BranchScope branchScope;
     private final VatGroupRepository vatGroups;
     private final SalesInvoiceLineRepository salesInvoiceLines;
     private final PosSaleLineRepository posSaleLines;
@@ -41,6 +43,7 @@ public class VatReturnReportServiceImpl implements VatReturnReportService {
     @Transactional(readOnly = true)
     public VatReturnDto vatReturn(Long branchId, LocalDate from, LocalDate to) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
 
         LocalDate today = LocalDate.now();
         LocalDate defaultFrom = today.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
@@ -58,18 +61,18 @@ public class VatReturnReportServiceImpl implements VatReturnReportService {
         }
 
         // --- Output (sales) ---
-        for (Object[] row : salesInvoiceLines.aggregateOutputVat(companyId, branchId, start, end)) {
+        for (Object[] row : salesInvoiceLines.aggregateOutputVat(companyId, scope, start, end)) {
             Bucket b = bucketFor(byGroup, meta, (Long) row[0]);
             b.outputNet = b.outputNet.add(asMoney(row[1]));
             b.outputVat = b.outputVat.add(asMoney(row[2]));
         }
-        for (Object[] row : posSaleLines.aggregateOutputVat(companyId, branchId, start, end,
+        for (Object[] row : posSaleLines.aggregateOutputVat(companyId, scope, start, end,
                 PosSaleStatus.POSTED, PosSaleKind.SALE)) {
             Bucket b = bucketFor(byGroup, meta, (Long) row[0]);
             b.outputNet = b.outputNet.add(asMoney(row[1]));
             b.outputVat = b.outputVat.add(asMoney(row[2]));
         }
-        for (Object[] row : posSaleLines.aggregateOutputVat(companyId, branchId, start, end,
+        for (Object[] row : posSaleLines.aggregateOutputVat(companyId, scope, start, end,
                 PosSaleStatus.POSTED, PosSaleKind.REFUND)) {
             Bucket b = bucketFor(byGroup, meta, (Long) row[0]);
             // Refund reverses output VAT obligation — subtract from the totals.
@@ -78,7 +81,7 @@ public class VatReturnReportServiceImpl implements VatReturnReportService {
         }
 
         // --- Input (procurement) ---
-        for (Object[] row : grnLines.aggregateInputVat(companyId, branchId, start, end)) {
+        for (Object[] row : grnLines.aggregateInputVat(companyId, scope, start, end)) {
             Long vatGroupId = (Long) row[0];
             BigDecimal rate = asMoney(row[1]);
             BigDecimal net = asMoney(row[2]);
@@ -131,7 +134,7 @@ public class VatReturnReportServiceImpl implements VatReturnReportService {
         }
 
         return new VatReturnDto(
-            start, end, branchId, rows,
+            start, end, scope, rows,
             totalOutputNet, totalOutputVat,
             totalInputNet, totalInputVat,
             totalOutputVat.subtract(totalInputVat)
