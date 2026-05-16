@@ -83,7 +83,7 @@ class ItemServiceImplTest {
         });
 
         ItemResponseDto result = service.create(
-            new CreateItemRequestDto("SKU1", "Sugar 1kg", ItemType.SELLABLE, 10L, 20L, 30L));
+            new CreateItemRequestDto("SKU1", "Sugar 1kg", null, ItemType.SELLABLE, 10L, 20L, 30L));
 
         assertThat(result.id()).isEqualTo(1L);
         assertThat(result.code()).isEqualTo("SKU1");
@@ -95,7 +95,7 @@ class ItemServiceImplTest {
         when(repo.findByCompanyAndCode(COMPANY_ID, "SKU1")).thenReturn(Optional.of(item(1L, ItemStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.create(
-            new CreateItemRequestDto("SKU1", "Sugar", ItemType.SELLABLE, 10L, 20L, 30L)))
+            new CreateItemRequestDto("SKU1", "Sugar", null, ItemType.SELLABLE, 10L, 20L, 30L)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
         verify(repo, never()).save(any());

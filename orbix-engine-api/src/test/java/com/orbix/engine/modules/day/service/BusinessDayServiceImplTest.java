@@ -9,6 +9,7 @@ import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.domain.entity.BusinessDayId;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
 import com.orbix.engine.modules.day.repository.BusinessDayRepository;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,7 @@ class BusinessDayServiceImplTest {
     @Mock private BranchRepository branches;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     private BusinessDayServiceImpl service;
 
@@ -52,7 +54,8 @@ class BusinessDayServiceImplTest {
         // F7.5: BusinessDayServiceImpl auto-wires List<EodGuard>; pass empty
         // here so the tests focus on the state-machine without per-module
         // guard plumbing. EodGuard behaviour is unit-tested per-module.
-        service = new BusinessDayServiceImpl(businessDays, branches, List.of(), events, context);
+        service = new BusinessDayServiceImpl(
+            businessDays, branches, List.of(), events, context, branchScope);
     }
 
     private static Branch branch(Long companyId) {

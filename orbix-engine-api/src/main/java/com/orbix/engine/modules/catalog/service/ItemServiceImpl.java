@@ -52,6 +52,11 @@ public class ItemServiceImpl implements ItemService {
             request.vatGroupId(),
             context.userId()
         );
+        String shortName = request.shortName();
+        if (shortName != null) {
+            String trimmed = shortName.trim();
+            item.setShortName(trimmed.isEmpty() ? null : trimmed);
+        }
         Item saved = repo.save(item);
         events.publish(
             "ItemCreated.v1",

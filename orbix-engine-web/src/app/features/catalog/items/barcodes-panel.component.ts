@@ -4,7 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
-import { BARCODE_TYPES, BarcodeType, ItemBarcode } from '../catalog.models';
+import { BARCODE_TYPES, BarcodeType, ItemBarcode, Uom } from '../catalog.models';
 
 @Component({
   selector: 'orbix-barcodes-panel',
@@ -19,14 +19,14 @@ import { BARCODE_TYPES, BarcodeType, ItemBarcode } from '../catalog.models';
 
     <table class="table table-sm align-middle" style="max-width: 640px">
       <thead>
-        <tr><th>Barcode</th><th>Type</th><th>Pack UoM id</th><th class="text-end">Pack qty</th><th></th></tr>
+        <tr><th>Barcode</th><th>Type</th><th>Pack UoM</th><th class="text-end">Pack qty</th><th></th></tr>
       </thead>
       <tbody>
         @for (barcode of barcodes(); track barcode.id) {
           <tr>
             <td>{{ barcode.barcode }}</td>
             <td>{{ barcode.barcodeType }}</td>
-            <td>{{ barcode.packUomId ?? '—' }}</td>
+            <td>{{ uomLabel(barcode.packUomId) }}</td>
             <td class="text-end">{{ barcode.packQty }}</td>
             <td class="text-end">
               <button type="button" class="btn btn-sm btn-outline-danger"
@@ -51,8 +51,13 @@ import { BARCODE_TYPES, BarcodeType, ItemBarcode } from '../catalog.models';
         </select>
       </div>
       <div class="col-2">
-        <label class="form-label">Pack UoM id</label>
-        <input class="form-control" type="number" name="puom" [(ngModel)]="form.packUomId">
+        <label class="form-label">Pack UoM</label>
+        <select class="form-select" name="puom" [(ngModel)]="form.packUomId">
+          <option [ngValue]="null">—</option>
+          @for (u of uoms(); track u.id) {
+            <option [ngValue]="u.id">{{ u.code }}</option>
+          }
+        </select>
       </div>
       <div class="col-2">
         <label class="form-label">Pack qty</label>
@@ -70,6 +75,7 @@ export class BarcodesPanelComponent implements OnInit {
   readonly itemId = input.required<number>();
 
   readonly barcodes = signal<ItemBarcode[]>([]);
+  readonly uoms = signal<Uom[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -77,7 +83,17 @@ export class BarcodesPanelComponent implements OnInit {
   form: { barcode: string; barcodeType: BarcodeType; packUomId: number | null; packQty: number | null } = blank();
 
   ngOnInit(): void {
+    this.catalog.listUoms().subscribe({
+      next: uoms => this.uoms.set(uoms),
+      error: err => this.showError(err)
+    });
     this.load();
+  }
+
+  uomLabel(id: number | null): string {
+    if (id == null) return '—';
+    const match = this.uoms().find(u => u.id === id);
+    return match ? match.code : String(id);
   }
 
   add(): void {
