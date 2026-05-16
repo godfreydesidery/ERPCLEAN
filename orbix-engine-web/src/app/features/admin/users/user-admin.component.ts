@@ -1,20 +1,14 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
-import { RoleAdminService } from '../roles/role-admin.service';
-import { RoleSummary } from '../roles/role-admin.models';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
   CreateUserResponse,
-  ResetPasswordResponse,
-  RoleGrantSummary,
-  UserDetail,
   UserSummary
 } from './user-admin.models';
 
@@ -33,7 +27,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 @Component({
   selector: 'orbix-user-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -112,9 +106,8 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                     }
                   </select>
                   <small class="form-text text-secondary">
-                    Where the user lands on login. This does NOT grant them access — go to
-                    <a routerLink="/admin/roles" class="text-decoration-none">Roles &amp; permissions</a>
-                    after creating to assign their role.
+                    Where the user lands on login. This does NOT grant them access — open the user after
+                    creating to assign their roles.
                   </small>
                 </div>
               </div>
@@ -152,277 +145,74 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
     }
 
     @if (!showNewForm()) {
-    <!-- Toolbar — hidden on mobile when a user is open -->
-    <div class="card border-0 shadow-sm mb-3" [class.mobile-hide]="selected()">
-      <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
-        <div class="search-box flex-grow-1">
-          <i class="bi bi-search"></i>
-          <input type="search" class="form-control" placeholder="Search by username, name or email"
-                 [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
-        </div>
-        <div class="status-pills d-flex gap-1 flex-wrap">
-          @for (opt of filterOptions; track opt.value) {
-            <button type="button" class="status-pill"
-                    [class.is-active]="filter() === opt.value"
-                    (click)="filter.set(opt.value)">
-              {{ opt.label }}
-            </button>
-          }
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-3 g-md-4">
-      <!-- Users list — hidden on mobile when a user is open -->
-      <div class="col-12 col-lg-5" [class.mobile-hide]="selected()">
-        <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-            <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
-            <span class="badge text-bg-light text-secondary">
-              {{ filtered().length }}@if (filtered().length !== users().length) { / {{ users().length }} }
-            </span>
+      <!-- Toolbar -->
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
+          <div class="search-box flex-grow-1">
+            <i class="bi bi-search"></i>
+            <input type="search" class="form-control" placeholder="Search by username, name or email"
+                   [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
           </div>
-          @if (filtered().length === 0) {
-            <div class="p-5 text-center">
-              <div class="empty-icon mx-auto mb-3"><i class="bi bi-people"></i></div>
-              <p class="small text-secondary mb-0">
-                @if (users().length === 0) { No users yet. }
-                @else { No users match these filters. }
-              </p>
-            </div>
-          } @else {
-            <ul class="list-unstyled mb-0 u-list">
-              @for (u of filtered(); track u.id) {
-                <li>
-                  <button type="button" class="u-row"
-                          [class.is-active]="selected()?.id === u.id"
-                          (click)="selectUser(u.id)">
-                    <span class="u-avatar">{{ initials(u.displayName) }}</span>
-                    <div class="flex-grow-1 min-w-0">
-                      <p class="fw-semibold text-dark mb-0 text-truncate">{{ u.displayName }}</p>
-                      <p class="small text-secondary mb-0 font-monospace">&#64;{{ u.username }}</p>
-                    </div>
-                    <div class="d-flex flex-column align-items-end gap-1">
-                      <span class="status-badge status-badge--{{ u.status.toLowerCase() }}">
-                        <span class="status-badge__dot"></span>{{ u.status }}
-                      </span>
-                      @if (u.locked) {
-                        <span class="badge text-bg-danger-subtle text-danger small">
-                          <i class="bi bi-lock-fill"></i> Locked
-                        </span>
-                      }
-                      @if (u.mustChangePassword) {
-                        <span class="badge text-bg-warning-subtle text-warning small">
-                          <i class="bi bi-key-fill"></i> Reset
-                        </span>
-                      }
-                    </div>
-                  </button>
-                </li>
-              }
-            </ul>
-          }
-        </div>
-      </div>
-
-      <!-- Detail -->
-      <div class="col-12 col-lg-7">
-        @if (selected(); as user) {
-          <!-- Back-to-list button — mobile only -->
-          <button type="button" class="btn btn-link back-btn d-lg-none mb-2 px-0"
-                  (click)="selected.set(null)">
-            <i class="bi bi-arrow-left me-2"></i>Back to users
-          </button>
-
-          <div class="card border-0 shadow-sm mb-3">
-            <div class="card-body p-3 p-md-4">
-              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
-                <div class="d-flex align-items-center gap-3 min-w-0">
-                  <span class="u-avatar u-avatar--lg">{{ initials(user.displayName) }}</span>
-                  <div class="min-w-0">
-                    <p class="small text-secondary mb-1 font-monospace">&#64;{{ user.username }}</p>
-                    <h2 class="h4 fw-bold mb-1 text-dark text-truncate">{{ user.displayName }}</h2>
-                    <span class="status-badge status-badge--{{ user.status.toLowerCase() }}">
-                      <span class="status-badge__dot"></span>{{ user.status }}
-                    </span>
-                    @if (user.locked) {
-                      <span class="badge text-bg-danger-subtle text-danger ms-1">
-                        <i class="bi bi-lock-fill me-1"></i>Locked
-                      </span>
-                    }
-                    @if (user.mustChangePassword) {
-                      <span class="badge text-bg-warning-subtle text-warning ms-1">
-                        <i class="bi bi-key-fill me-1"></i>Must change password
-                      </span>
-                    }
-                  </div>
-                </div>
-                <div class="user-actions d-flex flex-wrap gap-2">
-                  @if (user.status === 'ACTIVE') {
-                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center gap-1"
-                            (click)="onDisable(user)" [disabled]="busy()">
-                      <i class="bi bi-pause-circle"></i> Disable
-                    </button>
-                  } @else {
-                    <button class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center gap-1"
-                            (click)="onEnable(user)" [disabled]="busy()">
-                      <i class="bi bi-play-circle"></i> Enable
-                    </button>
-                  }
-                  @if (user.locked) {
-                    <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center justify-content-center gap-1"
-                            (click)="onUnlock(user)" [disabled]="busy()">
-                      <i class="bi bi-unlock"></i> Unlock
-                    </button>
-                  }
-                  <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1"
-                          (click)="onResetPassword(user)" [disabled]="busy()">
-                    <i class="bi bi-key"></i><span class="d-none d-sm-inline">Reset password</span><span class="d-sm-none">Reset</span>
-                  </button>
-                  <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center gap-1"
-                          (click)="onForceLogout(user)" [disabled]="busy()">
-                    <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline">Force logout</span><span class="d-sm-none">Logout</span>
-                  </button>
-                </div>
-              </div>
-
-              <form (ngSubmit)="onSave(user)" #ef="ngForm" class="d-flex flex-column gap-3">
-                <fieldset class="form-fieldset">
-                  <legend class="form-fieldset__legend"><i class="bi bi-person text-secondary"></i> Profile</legend>
-                  <div class="row g-2">
-                    <div class="col-md-6">
-                      <label class="form-label small fw-semibold text-secondary">Display name</label>
-                      <input class="form-control" name="dn" [(ngModel)]="editForm.displayName" required>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-semibold text-secondary">Email</label>
-                      <input class="form-control" type="email" name="em" [(ngModel)]="editForm.email">
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-semibold text-secondary">Phone</label>
-                      <input class="form-control" name="ph" [(ngModel)]="editForm.phone">
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small fw-semibold text-secondary">Default branch</label>
-                      <select class="form-select" name="br" [(ngModel)]="editForm.defaultBranchId">
-                        <option [ngValue]="null">— No default —</option>
-                        @for (b of branches(); track b.id) {
-                          <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
-                        }
-                      </select>
-                    </div>
-                  </div>
-                </fieldset>
-                <div>
-                  <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
-                          [disabled]="busy() || ef.invalid">
-                    <i class="bi bi-save"></i> Save profile
-                  </button>
-                </div>
-              </form>
-
-              <div class="user-meta-strip mt-3" role="group" aria-label="Audit timestamps">
-                <span [title]="'Last login: ' + (user.lastLoginAt ? (user.lastLoginAt | date:'medium') : 'never')">
-                  <i class="bi bi-box-arrow-in-right"></i>
-                  {{ user.lastLoginAt ? (user.lastLoginAt | date:'mediumDate') : 'Never logged in' }}
-                </span>
-                <span class="user-meta-strip__sep">·</span>
-                <span [title]="'Created: ' + (user.createdAt | date:'medium')">
-                  <i class="bi bi-calendar-plus"></i>
-                  Created {{ user.createdAt | date:'mediumDate' }}
-                </span>
-                <span class="user-meta-strip__sep">·</span>
-                <span [title]="'Updated: ' + (user.updatedAt | date:'medium')">
-                  <i class="bi bi-clock-history"></i>
-                  Updated {{ user.updatedAt | date:'mediumDate' }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Roles -->
-          <div class="card border-0 shadow-sm overflow-hidden">
-            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-              <h3 class="h6 fw-bold mb-0 text-dark">Roles</h3>
-              <span class="badge text-bg-light text-secondary">{{ user.grants.length }} grant{{ user.grants.length === 1 ? '' : 's' }}</span>
-            </div>
-            @if (roles().length === 0) {
-              <div class="p-4 text-center small text-secondary">
-                No roles defined yet. Create roles on the
-                <a routerLink="/admin/roles" class="text-decoration-none">Roles &amp; permissions</a> page first.
-              </div>
-            } @else {
-              <ul class="list-unstyled mb-0">
-                @for (role of roles(); track role.id) {
-                  <li class="role-row">
-                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
-                      <div class="min-w-0 flex-grow-1">
-                        <p class="fw-semibold text-dark mb-0">{{ role.name }}</p>
-                        <p class="small text-secondary mb-0">
-                          <span class="font-monospace">{{ role.code }}</span>
-                          @if (role.isSystem) {
-                            <span class="badge text-bg-primary-subtle text-primary ms-1">SYSTEM</span>
-                          }
-                          · {{ role.permissionCount }} permission{{ role.permissionCount === 1 ? '' : 's' }}
-                        </p>
-                      </div>
-                    </div>
-
-                    @if (grantsForRole(user, role.id); as roleGrants) {
-                      @if (roleGrants.length > 0) {
-                        <div class="grant-chips mb-2">
-                          @for (g of roleGrants; track g.id) {
-                            <span class="grant-chip">
-                              <i class="bi bi-check2 me-1"></i>
-                              @if (g.branchId === null) { Company-wide }
-                              @else { Branch #{{ g.branchId }} }
-                              <button type="button" class="grant-chip__x"
-                                      [disabled]="busy()"
-                                      (click)="onRevoke(user, g)"
-                                      title="Revoke">
-                                <i class="bi bi-x"></i>
-                              </button>
-                            </span>
-                          }
-                        </div>
-                      }
-
-                      <div class="grant-add d-flex align-items-center gap-2 flex-wrap">
-                        <select class="form-select form-select-sm grant-add__select"
-                                [(ngModel)]="grantPick[role.id]" name="gp{{ role.id }}">
-                          <option [ngValue]="null">— Pick scope —</option>
-                          @if (!hasCompanyWide(roleGrants)) {
-                            <option [ngValue]="-1">Company-wide</option>
-                          }
-                          @for (b of branches(); track b.id) {
-                            @if (!hasBranch(roleGrants, b.id)) {
-                              <option [ngValue]="b.id">Branch · {{ b.name }}</option>
-                            }
-                          }
-                        </select>
-                        <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
-                                [disabled]="busy() || grantPick[role.id] == null"
-                                (click)="onGrant(user, role)">
-                          <i class="bi bi-plus-lg"></i> Grant
-                        </button>
-                      </div>
-                    }
-                  </li>
-                }
-              </ul>
+          <div class="status-pills d-flex gap-1 flex-wrap">
+            @for (opt of filterOptions; track opt.value) {
+              <button type="button" class="status-pill"
+                      [class.is-active]="filter() === opt.value"
+                      (click)="filter.set(opt.value)">
+                {{ opt.label }}
+              </button>
             }
           </div>
-        } @else {
-          <div class="card border-0 shadow-sm">
-            <div class="card-body p-5 text-center">
-              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
-              <h2 class="h6 fw-bold mb-1 text-dark">Pick a user</h2>
-              <p class="small text-secondary mb-0">Or create a new one to onboard staff.</p>
-            </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
+          <span class="badge text-bg-light text-secondary">
+            {{ filtered().length }}@if (filtered().length !== users().length) { / {{ users().length }} }
+          </span>
+        </div>
+        @if (filtered().length === 0) {
+          <div class="p-5 text-center">
+            <div class="empty-icon mx-auto mb-3"><i class="bi bi-people"></i></div>
+            <p class="small text-secondary mb-0">
+              @if (users().length === 0) { No users yet. }
+              @else { No users match these filters. }
+            </p>
           </div>
+        } @else {
+          <ul class="list-unstyled mb-0 u-list">
+            @for (u of filtered(); track u.id) {
+              <li>
+                <a class="u-row text-decoration-none"
+                   [routerLink]="['/admin/users', u.id]">
+                  <span class="u-avatar">{{ initials(u.displayName) }}</span>
+                  <div class="flex-grow-1 min-w-0">
+                    <p class="fw-semibold text-dark mb-0 text-truncate">{{ u.displayName }}</p>
+                    <p class="small text-secondary mb-0 font-monospace">&#64;{{ u.username }}</p>
+                  </div>
+                  <div class="d-flex flex-column align-items-end gap-1">
+                    <span class="status-badge status-badge--{{ u.status.toLowerCase() }}">
+                      <span class="status-badge__dot"></span>{{ u.status }}
+                    </span>
+                    @if (u.locked) {
+                      <span class="badge text-bg-danger-subtle text-danger small">
+                        <i class="bi bi-lock-fill"></i> Locked
+                      </span>
+                    }
+                    @if (u.mustChangePassword) {
+                      <span class="badge text-bg-warning-subtle text-warning small">
+                        <i class="bi bi-key-fill"></i> Reset
+                      </span>
+                    }
+                  </div>
+                  <i class="bi bi-chevron-right text-secondary u-row__chev"></i>
+                </a>
+              </li>
+            }
+          </ul>
         }
       </div>
-    </div>
     }
   `,
   styles: [`
@@ -447,9 +237,6 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       color: #9ca3af; pointer-events: none;
     }
     .search-box .form-control { padding-left: 2.4rem; border: 1px solid #e5e7eb; }
-    .search-box .form-control:focus {
-      border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
-    }
 
     .status-pill {
       padding: 0.4rem 0.85rem; font-size: 0.85rem; font-weight: 500;
@@ -466,16 +253,19 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       .status-pill { flex-shrink: 0; }
     }
 
-    .u-list { max-height: 70vh; overflow-y: auto; }
+    .u-list { }
     .u-row {
       width: 100%; display: flex; align-items: center; gap: 0.75rem;
-      padding: 0.875rem 1rem; background: #fff; border: none;
-      border-bottom: 1px solid #f3f4f6; text-align: left;
+      padding: 0.875rem 1rem; background: #fff;
+      border-bottom: 1px solid #f3f4f6;
+      color: inherit;
       transition: background 0.1s ease;
+      min-height: 64px;
     }
     .u-row:hover { background: #f8fafc; }
-    .u-row.is-active { background: #eef4ff; border-left: 3px solid #1d4ed8; padding-left: calc(1rem - 3px); }
     .u-row:last-child { border-bottom: none; }
+    .u-row__chev { font-size: 1rem; color: #cbd5e1; transition: transform 0.15s ease, color 0.15s ease; }
+    .u-row:hover .u-row__chev { color: #1d4ed8; transform: translateX(2px); }
 
     .u-avatar {
       width: 36px; height: 36px; border-radius: 50%;
@@ -483,7 +273,6 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       display: inline-flex; align-items: center; justify-content: center;
       font-weight: 600; font-size: 0.85rem; flex-shrink: 0;
     }
-    .u-avatar--lg { width: 56px; height: 56px; font-size: 1.1rem; }
 
     .status-badge {
       display: inline-flex; align-items: center; gap: 0.375rem;
@@ -503,14 +292,6 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
     .text-bg-danger-subtle  { background: #fee2e2; color: #b91c1c; }
     .text-bg-warning-subtle { background: #fef3c7; color: #92400e; }
 
-    .simple-table thead th {
-      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-      color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.65rem 1rem;
-    }
-    .simple-table tbody td { padding: 0.65rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
-    .simple-table tbody tr:last-child td { border-bottom: none; }
-    .simple-table tbody tr:hover { background: #f8fafc; }
-
     .empty-icon {
       width: 64px; height: 64px; border-radius: 16px;
       background: #e0ecff; color: #1d4ed8; font-size: 1.75rem;
@@ -523,101 +304,22 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       font-size: 1.05rem; font-weight: 600; letter-spacing: 0.05em;
       color: #78350f; user-select: all;
     }
-
-    /* ---- Mobile master-detail toggle ---- */
-    @media (max-width: 991.98px) {
-      .mobile-hide { display: none !important; }
-
-      /* Action-button grid: two buttons per row, full width, easy tap */
-      .user-actions {
-        width: 100%;
-        display: grid !important;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.5rem !important;
-      }
-      .user-actions .btn {
-        min-height: 44px;          /* WCAG tap target */
-        font-size: 0.85rem;
-      }
-
-      .role-row { padding: 0.875rem 1rem; }
-      .grant-add__select { max-width: 100% !important; flex: 1 1 0; }
-    }
-
-    .back-btn {
-      color: #1d4ed8;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .back-btn:hover { color: #0d2a5b; text-decoration: underline; }
-
-    /* ---- Audit timestamps footer ---- */
-    .user-meta-strip {
-      display: flex; flex-wrap: wrap; align-items: center;
-      gap: 0.5rem 0.75rem;
-      padding-top: 0.75rem;
-      border-top: 1px solid #f3f4f6;
-      font-size: 0.78rem;
-      color: #6b7280;
-    }
-    .user-meta-strip span { display: inline-flex; align-items: center; gap: 0.3rem; }
-    .user-meta-strip i { color: #9ca3af; font-size: 0.88rem; }
-    .user-meta-strip__sep { color: #d1d5db; padding: 0 0.1rem; }
-    @media (max-width: 575.98px) {
-      .user-meta-strip__sep { display: none; }
-      .user-meta-strip { gap: 0.4rem 0.6rem; }
-    }
-
-    /* ---- Role grant rows ---- */
-    .role-row {
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid #f3f4f6;
-    }
-    .role-row:last-child { border-bottom: none; }
-
-    .grant-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-    .grant-chip {
-      display: inline-flex; align-items: center;
-      padding: 0.3rem 0.5rem 0.3rem 0.7rem;
-      background: #eef4ff; color: #1d4ed8;
-      border-radius: 999px;
-      font-size: 0.78rem; font-weight: 600;
-    }
-    .grant-chip__x {
-      margin-left: 0.4rem;
-      width: 20px; height: 20px;
-      display: inline-flex; align-items: center; justify-content: center;
-      background: transparent; border: none; border-radius: 50%;
-      color: #1d4ed8;
-      cursor: pointer;
-    }
-    .grant-chip__x:hover { background: #dbe8ff; }
-    .grant-chip__x:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .grant-add__select { max-width: 260px; }
-
-    .text-bg-primary-subtle { background: #e0ecff; color: #1d4ed8; }
   `]
 })
 export class UserAdminComponent implements OnInit {
   private readonly api = inject(UserAdminService);
   private readonly branchService = inject(BranchService);
-  private readonly roleApi = inject(RoleAdminService);
+  private readonly router = inject(Router);
 
   protected readonly branches = signal<AccessibleBranch[]>([]);
-  protected readonly roles = signal<RoleSummary[]>([]);
-  protected grantPick: Record<number, number | null> = {};
   protected readonly users = signal<UserSummary[]>([]);
-  protected readonly selected = signal<UserDetail | null>(null);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
   protected readonly showNewForm = signal(false);
-
   protected readonly tempPasswordBanner = signal<{ username: string; password: string } | null>(null);
 
   protected newForm: CreateForm = blankCreateForm();
-  protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as number | null };
 
   // --- toolbar state ------------------------------------------------------
   protected readonly searchSignal = signal('');
@@ -640,7 +342,7 @@ export class UserAdminComponent implements OnInit {
         case 'disabled': if (u.status === 'ACTIVE') return false; break;
         case 'locked':   if (!u.locked) return false; break;
         case 'reset':    if (!u.mustChangePassword) return false; break;
-        default: /* all */ break;
+        default: break;
       }
       if (!q) return true;
       return u.username.toLowerCase().includes(q)
@@ -649,63 +351,11 @@ export class UserAdminComponent implements OnInit {
     });
   });
 
-  protected readonly statusBadgeFor = computed(() => this.selected()?.status?.toLowerCase());
-
   ngOnInit(): void {
     this.load();
     this.branchService.listBranches().subscribe({
       next: list => this.branches.set(list),
       error: () => this.branches.set([])
-    });
-    this.roleApi.listRoles().subscribe({
-      next: list => this.roles.set(list),
-      error: () => this.roles.set([])
-    });
-  }
-
-  // --- role-grant helpers -------------------------------------------------
-
-  grantsForRole(user: UserDetail, roleId: number): RoleGrantSummary[] {
-    return user.grants.filter(g => g.roleId === roleId);
-  }
-
-  hasCompanyWide(grants: RoleGrantSummary[]): boolean {
-    return grants.some(g => g.branchId === null);
-  }
-
-  hasBranch(grants: RoleGrantSummary[], branchId: number): boolean {
-    return grants.some(g => g.branchId === branchId);
-  }
-
-  onGrant(user: UserDetail, role: RoleSummary): void {
-    const pick = this.grantPick[role.id];
-    if (pick == null) return;
-    // -1 sentinel = "Company-wide" — backend expects null branchId for that.
-    const branchId = pick === -1 ? null : pick;
-    this.busy.set(true);
-    this.error.set(null);
-    this.roleApi.grantRole(role.id, { username: user.username, branchId }).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.grantPick[role.id] = null;
-        this.info.set(`Granted ${role.code} to ${user.username}.`);
-        this.selectUser(user.id);
-      },
-      error: err => { this.busy.set(false); this.showError(err); }
-    });
-  }
-
-  onRevoke(user: UserDetail, grant: RoleGrantSummary): void {
-    if (!globalThis.confirm(`Revoke this role from ${user.username}?`)) return;
-    this.busy.set(true);
-    this.error.set(null);
-    this.roleApi.revokeGrant(grant.id).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.info.set(`Role revoked from ${user.username}.`);
-        this.selectUser(user.id);
-      },
-      error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 
@@ -721,32 +371,7 @@ export class UserAdminComponent implements OnInit {
 
   toggleNewForm(): void {
     this.showNewForm.update(v => !v);
-    if (this.showNewForm()) {
-      // Clear any open detail so the right column collapses to its empty
-      // state — the new-user form is the focus while it's open.
-      this.selected.set(null);
-    } else {
-      this.newForm = blankCreateForm();
-    }
-  }
-
-  selectUser(id: number): void {
-    this.error.set(null);
-    // Close the new-user form if the admin is now picking an existing user
-    // — they're switching tasks.
-    if (this.showNewForm()) this.showNewForm.set(false);
-    this.api.getUser(id).subscribe({
-      next: detail => {
-        this.selected.set(detail);
-        this.editForm = {
-          displayName: detail.displayName,
-          email: detail.email ?? '',
-          phone: detail.phone ?? '',
-          defaultBranchId: detail.defaultBranchId
-        };
-      },
-      error: err => this.showError(err)
-    });
+    if (!this.showNewForm()) this.newForm = blankCreateForm();
   }
 
   createUser(): void {
@@ -765,88 +390,20 @@ export class UserAdminComponent implements OnInit {
     this.api.createUser(request).subscribe({
       next: (resp: CreateUserResponse) => {
         this.busy.set(false);
-        this.info.set(`User ${resp.user.username} created.`);
-        if (resp.temporaryPassword) {
-          this.tempPasswordBanner.set({
-            username: resp.user.username,
-            password: resp.temporaryPassword
-          });
-        }
         this.newForm = blankCreateForm();
         this.showNewForm.set(false);
-        this.load();
-        this.selectUser(resp.user.id);
-      },
-      error: err => { this.busy.set(false); this.showError(err); }
-    });
-  }
-
-  onSave(user: UserDetail): void {
-    this.run(this.api.updateUser(user.id, {
-      displayName: this.editForm.displayName.trim(),
-      email: emptyToNull(this.editForm.email),
-      phone: emptyToNull(this.editForm.phone),
-      defaultBranchId: this.editForm.defaultBranchId
-    }), updated => {
-      this.info.set('Profile saved.');
-      this.selected.set(updated);
-      this.load();
-    });
-  }
-
-  onDisable(user: UserDetail): void {
-    if (!globalThis.confirm(`Disable ${user.username}? They will lose access immediately.`)) return;
-    this.run(this.api.disableUser(user.id), updated => {
-      this.info.set(`${user.username} disabled.`);
-      this.selected.set(updated);
-      this.load();
-    });
-  }
-
-  onEnable(user: UserDetail): void {
-    this.run(this.api.enableUser(user.id), updated => {
-      this.info.set(`${user.username} re-enabled.`);
-      this.selected.set(updated);
-      this.load();
-    });
-  }
-
-  onUnlock(user: UserDetail): void {
-    this.run(this.api.unlockUser(user.id), updated => {
-      this.info.set(`${user.username} unlocked.`);
-      this.selected.set(updated);
-      this.load();
-    });
-  }
-
-  onResetPassword(user: UserDetail): void {
-    if (!globalThis.confirm(`Reset password for ${user.username}? A temporary password will be generated.`)) return;
-    this.busy.set(true);
-    this.error.set(null);
-    this.api.resetPassword(user.id, {
-      newPassword: null,
-      mustChangePassword: true
-    }).subscribe({
-      next: (resp: ResetPasswordResponse) => {
-        this.busy.set(false);
-        this.info.set(`Password reset for ${user.username}.`);
         if (resp.temporaryPassword) {
-          this.tempPasswordBanner.set({
-            username: resp.user.username,
-            password: resp.temporaryPassword
-          });
+          // Stash the temp password so the detail page can show the banner
+          // after navigation.
+          globalThis.sessionStorage.setItem(
+            'orbix.tempPwd.' + resp.user.id,
+            JSON.stringify({ username: resp.user.username, password: resp.temporaryPassword })
+          );
         }
-        this.selected.set(resp.user);
-        this.load();
+        // Hand off to the detail page so the admin can assign roles.
+        void this.router.navigate(['/admin/users', resp.user.id]);
       },
       error: err => { this.busy.set(false); this.showError(err); }
-    });
-  }
-
-  onForceLogout(user: UserDetail): void {
-    if (!globalThis.confirm(`Force ${user.username} out of every session?`)) return;
-    this.run(this.api.forceLogout(user.id), () => {
-      this.info.set(`${user.username} signed out everywhere.`);
     });
   }
 
@@ -854,15 +411,6 @@ export class UserAdminComponent implements OnInit {
     this.api.listUsers().subscribe({
       next: list => this.users.set(list),
       error: err => this.showError(err)
-    });
-  }
-
-  private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
-    this.busy.set(true);
-    this.error.set(null);
-    source.subscribe({
-      next: value => { this.busy.set(false); onSuccess(value); },
-      error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 
