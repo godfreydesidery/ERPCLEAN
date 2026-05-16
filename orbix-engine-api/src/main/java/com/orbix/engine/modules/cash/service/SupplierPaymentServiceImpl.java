@@ -16,6 +16,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     private final CashLedgerService cashLedger;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -53,6 +55,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     public SupplierPaymentDto createDraft(CreateSupplierPaymentRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
 
         if (payments.existsByBranchIdAndNumber(request.branchId(), number)) {
@@ -162,9 +165,10 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     @Transactional(readOnly = true)
     public List<SupplierPaymentDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<SupplierPayment> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<SupplierPayment> rows = scope == null
             ? payments.findByCompanyIdOrderByIdDesc(companyId)
-            : payments.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : payments.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(p -> SupplierPaymentDto.from(p, allocations.findBySupplierPaymentId(p.getId())))
             .toList();
@@ -223,6 +227,7 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         if (!Objects.equals(payment.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Supplier payment not found: " + id);
         }
+        branchScope.requireAccess(payment.getBranchId());
         return payment;
     }
 }

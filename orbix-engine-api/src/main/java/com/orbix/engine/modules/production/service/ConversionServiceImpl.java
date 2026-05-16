@@ -6,6 +6,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.ConversionDto;
 import com.orbix.engine.modules.production.domain.dto.CreateConversionRequestDto;
 import com.orbix.engine.modules.production.domain.entity.Conversion;
@@ -45,6 +46,7 @@ public class ConversionServiceImpl implements ConversionService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -52,6 +54,7 @@ public class ConversionServiceImpl implements ConversionService {
     public ConversionDto createDraft(CreateConversionRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         dayGuard.requireOpenDay(request.branchId());
         if (Objects.equals(request.fromItemId(), request.toItemId())) {
             throw new IllegalArgumentException("from_item and to_item must differ");
@@ -150,16 +153,17 @@ public class ConversionServiceImpl implements ConversionService {
     @Transactional(readOnly = true)
     public List<ConversionDto> list(Long branchId, ConversionStatus status) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<Conversion> rows;
         if (status != null) {
             rows = conversions.findByCompanyIdAndStatusOrderByIdDesc(companyId, status);
-        } else if (branchId != null) {
-            rows = conversions.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+        } else if (scope != null) {
+            rows = conversions.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         } else {
             rows = conversions.findByCompanyIdOrderByIdDesc(companyId);
         }
         return rows.stream()
-            .filter(c -> branchId == null || Objects.equals(c.getBranchId(), branchId))
+            .filter(c -> scope == null || Objects.equals(c.getBranchId(), scope))
             .map(ConversionDto::from)
             .toList();
     }
@@ -170,6 +174,7 @@ public class ConversionServiceImpl implements ConversionService {
         if (!Objects.equals(conv.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Conversion not found: " + id);
         }
+        branchScope.requireAccess(conv.getBranchId());
         return conv;
     }
 

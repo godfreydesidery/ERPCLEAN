@@ -9,6 +9,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
@@ -67,6 +68,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.sales.discount-threshold-pct}")
     private BigDecimal discountThresholdPct;
@@ -77,6 +79,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     public SalesInvoiceDto createDraft(CreateSalesInvoiceRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (invoices.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException(
@@ -197,9 +200,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Transactional(readOnly = true)
     public List<SalesInvoiceDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<SalesInvoice> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<SalesInvoice> rows = scope == null
             ? invoices.findByCompanyIdOrderByIdDesc(companyId)
-            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(s -> SalesInvoiceDto.from(s, lines.findBySalesInvoiceIdOrderByLineNoAsc(s.getId())))
             .toList();
@@ -355,6 +359,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         if (!Objects.equals(invoice.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Sales invoice not found: " + id);
         }
+        branchScope.requireAccess(invoice.getBranchId());
         return invoice;
     }
 

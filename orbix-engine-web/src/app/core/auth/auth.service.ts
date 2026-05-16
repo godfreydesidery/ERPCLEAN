@@ -11,6 +11,7 @@ export interface UserSummary {
   displayName: string;
   defaultCompanyId: number | null;
   defaultBranchId: number | null;
+  mustChangePassword: boolean;
 }
 
 export interface LoginResponse {
@@ -95,6 +96,15 @@ export class AuthService {
     localStorage.removeItem(ACTIVE_BRANCH_KEY);
     this._token.set(null);
     this._user.set(null);
+  }
+
+  /**
+   * Persist a token pair returned by any endpoint that mints a fresh session
+   * (login, refresh, branch switch). Replaces the active access + refresh
+   * tokens and the cached user-summary signal.
+   */
+  applySession(resp: LoginResponse): void {
+    this.storeSession(resp);
   }
 
   private storeSession(resp: LoginResponse): void {

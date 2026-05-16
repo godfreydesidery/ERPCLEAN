@@ -1,17 +1,18 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
-import { ITEM_TYPES, ItemGroup, ItemType, WEIGHING_UNITS, WeighingUnit } from '../catalog.models';
+import { ITEM_TYPES, ItemGroup, ItemType, Uom, VatGroup, WEIGHING_UNITS, WeighingUnit } from '../catalog.models';
 import { BarcodesPanelComponent } from './barcodes-panel.component';
 import { PriceHistoryPanelComponent } from './price-history-panel.component';
 
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
+  imports: [DecimalPipe, FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
   template: `
     <h2 class="h3 mb-4">{{ itemId() ? 'Edit item' : 'New item' }}</h2>
 
@@ -49,12 +50,22 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label">UoM id</label>
-        <input class="form-control" type="number" name="uom" [(ngModel)]="form.uomId" required>
+        <label class="form-label">Unit of measure</label>
+        <select class="form-select" name="uom" [(ngModel)]="form.uomId" required>
+          <option [ngValue]="null" disabled>Select a UoM…</option>
+          @for (u of uoms(); track u.id) {
+            <option [ngValue]="u.id">{{ u.name }} ({{ u.code }})</option>
+          }
+        </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label">VAT group id</label>
-        <input class="form-control" type="number" name="vat" [(ngModel)]="form.vatGroupId" required>
+        <label class="form-label">VAT group</label>
+        <select class="form-select" name="vat" [(ngModel)]="form.vatGroupId" required>
+          <option [ngValue]="null" disabled>Select a VAT group…</option>
+          @for (v of vatGroups(); track v.id) {
+            <option [ngValue]="v.id">{{ v.name }} ({{ v.code }} — {{ v.rate * 100 | number:'1.0-2' }}%)</option>
+          }
+        </select>
       </div>
       @if (itemId()) {
         <div class="col-md-3">
@@ -121,6 +132,8 @@ export class ItemEditComponent implements OnInit {
 
   readonly itemId = signal<number | null>(null);
   readonly groups = signal<ItemGroup[]>([]);
+  readonly uoms = signal<Uom[]>([]);
+  readonly vatGroups = signal<VatGroup[]>([]);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -146,6 +159,14 @@ export class ItemEditComponent implements OnInit {
   ngOnInit(): void {
     this.catalog.listGroups().subscribe({
       next: groups => this.groups.set(groups.filter(g => g.status === 'ACTIVE')),
+      error: err => this.showError(err)
+    });
+    this.catalog.listUoms().subscribe({
+      next: uoms => this.uoms.set(uoms),
+      error: err => this.showError(err)
+    });
+    this.catalog.listVatGroups().subscribe({
+      next: vats => this.vatGroups.set(vats.filter(v => v.status === 'ACTIVE')),
       error: err => this.showError(err)
     });
 
@@ -208,6 +229,7 @@ export class ItemEditComponent implements OnInit {
       this.catalog.createItem({
         code: this.form.code.trim(),
         name: this.form.name.trim(),
+        shortName: emptyToNull(this.form.shortName),
         type: this.form.type,
         itemGroupId: this.form.itemGroupId!,
         uomId: this.form.uomId!,

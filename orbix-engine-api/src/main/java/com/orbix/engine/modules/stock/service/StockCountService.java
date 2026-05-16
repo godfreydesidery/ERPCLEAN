@@ -12,7 +12,7 @@ import java.util.List;
  */
 public interface StockCountService {
 
-    List<StockCountDto> listCounts();
+    List<StockCountDto> listCounts(Long branchId);
 
     StockCountDto getCount(Long countId);
 

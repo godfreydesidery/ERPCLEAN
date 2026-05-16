@@ -1,11 +1,11 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.AccessibleBranchDto;
 import com.orbix.engine.modules.iam.domain.dto.SetActiveBranchRequestDto;
 import com.orbix.engine.modules.iam.service.SessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,9 +26,13 @@ public class SessionController {
         return service.listAccessibleBranches();
     }
 
+    /**
+     * Switch the caller's active branch. Returns a fresh access + refresh
+     * token pair whose JWT carries the new {@code branchId} + perms resolved
+     * against the new branch context.
+     */
     @PutMapping("/active-branch")
-    public ResponseEntity<Void> setActiveBranch(@Valid @RequestBody SetActiveBranchRequestDto request) {
-        service.setActiveBranch(request.branchId());
-        return ResponseEntity.noContent().build();
+    public LoginResponseDto setActiveBranch(@Valid @RequestBody SetActiveBranchRequestDto request) {
+        return service.setActiveBranch(request.branchId());
     }
 }

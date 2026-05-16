@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
@@ -33,18 +34,20 @@ public class SectionPnlReportServiceImpl implements SectionPnlReportService {
     private final SectionRepository sections;
     private final ItemRepository items;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public List<SectionPnlRowDto> report(Long branchId, LocalDate from, LocalDate to) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         LocalDate start = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate end = to != null ? to : LocalDate.now();
 
         Map<Long, Aggregate> aggBySection = new HashMap<>();
 
         // 1) POS revenue + COGS per section (POSTED, kind = SALE).
-        for (Object[] row : posLines.aggregateBySection(companyId, branchId, start, end,
+        for (Object[] row : posLines.aggregateBySection(companyId, scope, start, end,
                 PosSaleStatus.POSTED, PosSaleKind.SALE)) {
             Long sectionId = ((Number) row[0]).longValue();
             BigDecimal revenue = bd(row[1]);
@@ -57,7 +60,7 @@ public class SectionPnlReportServiceImpl implements SectionPnlReportService {
         }
 
         // 2) POS refunds per section (POSTED, kind = REFUND) — subtract from revenue.
-        for (Object[] row : posLines.aggregateBySection(companyId, branchId, start, end,
+        for (Object[] row : posLines.aggregateBySection(companyId, scope, start, end,
                 PosSaleStatus.POSTED, PosSaleKind.REFUND)) {
             Long sectionId = ((Number) row[0]).longValue();
             BigDecimal refundAmount = bd(row[1]);
@@ -73,7 +76,7 @@ public class SectionPnlReportServiceImpl implements SectionPnlReportService {
         // 3) Production wastage per section — qty + best-effort cost from item.avg_cost.
         Instant fromInstant = start.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant toInstant = end.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-        for (Object[] row : wastage.aggregateBySectionAndItem(companyId, branchId,
+        for (Object[] row : wastage.aggregateBySectionAndItem(companyId, scope,
                 fromInstant, toInstant)) {
             Long sectionId = ((Number) row[0]).longValue();
             Long itemId = ((Number) row[1]).longValue();

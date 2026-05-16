@@ -3,6 +3,7 @@ package com.orbix.engine.modules.stock.service;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -41,11 +42,13 @@ public class StockBatchServiceImpl implements StockBatchService {
     private final StockMoveService stockMoveService;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
     @Auditable(action = "CREATE", entityType = "StockBatch")
     public StockBatchDto createBatch(CreateStockBatchRequestDto request) {
+        branchScope.requireAccess(request.branchId());
         Long companyId = context.companyId();
         Long actorId = context.userId();
         batches.findByBranchIdAndItemIdAndBatchNo(request.branchId(), request.itemId(), request.batchNo())
@@ -149,9 +152,10 @@ public class StockBatchServiceImpl implements StockBatchService {
     @Transactional(readOnly = true)
     public List<StockBatchDto> listBatches(Long branchId, Long itemId, StockBatchStatus status) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<StockBatch> rows;
-        if (branchId != null) {
-            rows = batches.findByCompanyIdAndBranchIdOrderByExpiryAtAscIdAsc(companyId, branchId);
+        if (scope != null) {
+            rows = batches.findByCompanyIdAndBranchIdOrderByExpiryAtAscIdAsc(companyId, scope);
         } else if (itemId != null) {
             rows = batches.findByCompanyIdAndItemIdOrderByExpiryAtAscIdAsc(companyId, itemId);
         } else if (status != null) {
@@ -160,7 +164,7 @@ public class StockBatchServiceImpl implements StockBatchService {
             rows = batches.findByCompanyIdOrderByExpiryAtAscIdAsc(companyId);
         }
         return rows.stream()
-            .filter(b -> branchId == null || Objects.equals(b.getBranchId(), branchId))
+            .filter(b -> scope == null || Objects.equals(b.getBranchId(), scope))
             .filter(b -> itemId == null || Objects.equals(b.getItemId(), itemId))
             .filter(b -> status == null || b.getStatus() == status)
             .map(StockBatchDto::from)
@@ -173,11 +177,12 @@ public class StockBatchServiceImpl implements StockBatchService {
         if (daysAhead < 0) {
             throw new IllegalArgumentException("daysAhead must be >= 0");
         }
+        Long scope = branchScope.requireReadable(branchId);
         LocalDate cutoff = LocalDate.now().plusDays(daysAhead).plusDays(1);  // exclusive bound for "before"
         Long companyId = context.companyId();
         return batches.findByCompanyIdAndStatusAndExpiryAtBeforeOrderByExpiryAtAscIdAsc(
                 companyId, StockBatchStatus.ACTIVE, cutoff).stream()
-            .filter(b -> branchId == null || Objects.equals(b.getBranchId(), branchId))
+            .filter(b -> scope == null || Objects.equals(b.getBranchId(), scope))
             .filter(b -> b.getExpiryAt() != null)
             .map(StockBatchDto::from)
             .toList();
@@ -195,6 +200,7 @@ public class StockBatchServiceImpl implements StockBatchService {
         if (!Objects.equals(batch.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Stock batch not found: " + batchId);
         }
+        branchScope.requireAccess(batch.getBranchId());
         return batch;
     }
 }

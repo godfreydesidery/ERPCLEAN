@@ -14,6 +14,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,11 +38,13 @@ public class BankDepositServiceImpl implements BankDepositService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
     public BankDepositDto post(PostBankDepositRequestDto request) {
+        branchScope.requireAccess(request.branchId());
         Long companyId = context.companyId();
         Long actorId = context.userId();
         BusinessDay day = dayGuard.requireOpenDay(request.branchId());
@@ -80,6 +83,7 @@ public class BankDepositServiceImpl implements BankDepositService {
     @Override
     @Transactional(readOnly = true)
     public List<BankDepositDto> list(Long branchId, LocalDate businessDate) {
+        branchScope.requireAccess(branchId);
         return deposits.findByBranchIdAndBusinessDateOrderByAtAsc(branchId, businessDate).stream()
             .map(BankDepositDto::from)
             .toList();

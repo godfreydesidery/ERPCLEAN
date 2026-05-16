@@ -6,6 +6,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
@@ -35,6 +36,7 @@ public class StockReservationServiceImpl implements StockReservationService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -42,6 +44,7 @@ public class StockReservationServiceImpl implements StockReservationService {
     public ItemBranchBalanceDto reserve(Long itemId, Long branchId, BigDecimal qty,
                                         String refType, Long refId, String notes) {
         requirePositive(qty);
+        branchScope.requireAccess(branchId);
         requireItem(itemId);
         dayGuard.requireOpenDay(branchId);
 
@@ -70,6 +73,7 @@ public class StockReservationServiceImpl implements StockReservationService {
     public ItemBranchBalanceDto release(Long itemId, Long branchId, BigDecimal qty,
                                         String refType, Long refId, String notes) {
         requirePositive(qty);
+        branchScope.requireAccess(branchId);
         requireItem(itemId);
         dayGuard.requireOpenDay(branchId);
 
@@ -93,6 +97,7 @@ public class StockReservationServiceImpl implements StockReservationService {
     @Override
     @Transactional(readOnly = true)
     public BigDecimal available(Long itemId, Long branchId) {
+        branchScope.requireAccess(branchId);
         return balances.findById(new ItemBranchBalanceId(itemId, branchId))
             .map(b -> b.getQtyOnHand().subtract(b.getQtyReserved()))
             .orElse(BigDecimal.ZERO);

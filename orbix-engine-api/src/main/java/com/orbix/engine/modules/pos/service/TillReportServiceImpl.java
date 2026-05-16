@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.dto.TillReportDto;
 import com.orbix.engine.modules.pos.domain.entity.CashPickup;
 import com.orbix.engine.modules.pos.domain.entity.PettyCash;
@@ -41,6 +42,7 @@ public class TillReportServiceImpl implements TillReportService {
     private final CashPickupRepository pickups;
     private final PettyCashRepository pettyCash;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
@@ -154,6 +156,7 @@ public class TillReportServiceImpl implements TillReportService {
         if (!Objects.equals(session.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Till session not found: " + id);
         }
+        branchScope.requireAccess(session.getBranchId());
         return session;
     }
 

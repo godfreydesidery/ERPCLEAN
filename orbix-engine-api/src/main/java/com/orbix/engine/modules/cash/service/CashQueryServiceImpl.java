@@ -6,6 +6,7 @@ import com.orbix.engine.modules.cash.domain.enums.CashAccount;
 import com.orbix.engine.modules.cash.repository.CashBookRepository;
 import com.orbix.engine.modules.cash.repository.CashEntryRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,18 +23,20 @@ public class CashQueryServiceImpl implements CashQueryService {
     private final CashEntryRepository entries;
     private final CashBookRepository books;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public List<CashEntryDto> listEntries(Long branchId, CashAccount account, LocalDate businessDate) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<com.orbix.engine.modules.cash.domain.entity.CashEntry> rows;
-        if (branchId == null && businessDate != null) {
+        if (scope == null && businessDate != null) {
             rows = entries.findByCompanyIdAndBusinessDateOrderByAtAsc(companyId, businessDate);
-        } else if (branchId != null && account != null && businessDate != null) {
-            rows = entries.findByBranchIdAndAccountAndBusinessDateOrderByAtAsc(branchId, account, businessDate);
-        } else if (branchId != null && businessDate != null) {
-            rows = entries.findByBranchIdAndBusinessDateOrderByAtAsc(branchId, businessDate);
+        } else if (scope != null && account != null && businessDate != null) {
+            rows = entries.findByBranchIdAndAccountAndBusinessDateOrderByAtAsc(scope, account, businessDate);
+        } else if (scope != null && businessDate != null) {
+            rows = entries.findByBranchIdAndBusinessDateOrderByAtAsc(scope, businessDate);
         } else {
             throw new IllegalArgumentException(
                 "Provide at least businessDate, optionally with branchId + account, to query cash entries");
@@ -48,9 +51,10 @@ public class CashQueryServiceImpl implements CashQueryService {
     @Transactional(readOnly = true)
     public List<CashBookDto> listCashBook(Long branchId, LocalDate businessDate) {
         Long companyId = context.companyId();
-        List<com.orbix.engine.modules.cash.domain.entity.CashBook> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<com.orbix.engine.modules.cash.domain.entity.CashBook> rows = scope == null
             ? books.findByCompanyIdAndIdBusinessDate(companyId, businessDate)
-            : books.findByIdBranchIdAndIdBusinessDate(branchId, businessDate);
+            : books.findByIdBranchIdAndIdBusinessDate(scope, businessDate);
         return rows.stream()
             .filter(b -> Objects.equals(b.getCompanyId(), companyId))
             .sorted(Comparator

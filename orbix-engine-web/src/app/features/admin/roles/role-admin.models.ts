@@ -30,6 +30,7 @@ export interface RoleDetail {
 export interface RoleGrant {
   id: number;
   userId: number;
+  roleId: number;
   username: string;
   displayName: string;
   companyId: number;

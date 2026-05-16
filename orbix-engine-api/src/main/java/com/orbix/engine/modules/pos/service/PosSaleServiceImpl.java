@@ -22,6 +22,7 @@ import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.giftcard.domain.dto.RedeemGiftCardRequestDto;
 import com.orbix.engine.modules.giftcard.domain.dto.RefundGiftCardRequestDto;
 import com.orbix.engine.modules.giftcard.service.GiftCardService;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -97,6 +98,7 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @org.springframework.beans.factory.annotation.Value("${orbix.pos.discount-threshold-pct}")
     private BigDecimal discountThresholdPct;
@@ -182,9 +184,10 @@ public class PosSaleServiceImpl implements PosSaleService {
     @Transactional(readOnly = true)
     public List<PosSaleDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<PosSale> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<PosSale> rows = scope == null
             ? sales.findByCompanyIdOrderByIdDesc(companyId)
-            : sales.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : sales.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(s -> PosSaleDto.from(s,
                 lines.findByPosSaleIdOrderByLineNoAsc(s.getId()),
@@ -562,6 +565,7 @@ public class PosSaleServiceImpl implements PosSaleService {
         if (!Objects.equals(sale.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("POS sale not found: " + id);
         }
+        branchScope.requireAccess(sale.getBranchId());
         return sale;
     }
 

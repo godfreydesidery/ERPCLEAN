@@ -7,6 +7,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
@@ -37,6 +38,7 @@ public class StockMoveServiceImpl implements StockMoveService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -92,15 +94,17 @@ public class StockMoveServiceImpl implements StockMoveService {
     @Transactional(readOnly = true)
     public PageDto<StockMoveDto> listMoves(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
-        var page = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        var page = scope == null
             ? moves.findByCompanyId(companyId, pageable)
-            : moves.findByCompanyIdAndBranchId(companyId, branchId, pageable);
+            : moves.findByCompanyIdAndBranchId(companyId, scope, pageable);
         return PageDto.of(page, StockMoveDto::from);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ItemBranchBalanceDto> listBalances(Long branchId) {
+        branchScope.requireAccess(branchId);
         return balances.findByBranchId(branchId).stream()
             .map(ItemBranchBalanceDto::from)
             .toList();
@@ -109,6 +113,7 @@ public class StockMoveServiceImpl implements StockMoveService {
     @Override
     @Transactional(readOnly = true)
     public PageDto<StockMoveDto> stockCard(Long itemId, Long branchId, Pageable pageable) {
+        branchScope.requireAccess(branchId);
         requireItem(itemId);
         return PageDto.of(
             moves.findByItemIdAndBranchIdOrderByAtAsc(itemId, branchId, pageable),

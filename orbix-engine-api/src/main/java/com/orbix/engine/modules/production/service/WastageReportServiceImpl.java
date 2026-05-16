@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.WastageReportRowDto;
 import com.orbix.engine.modules.production.domain.enums.WastageCategory;
 import com.orbix.engine.modules.production.repository.ProductionWastageRepository;
@@ -33,6 +34,7 @@ public class WastageReportServiceImpl implements WastageReportService {
     private final SectionRepository sections;
     private final ItemRepository items;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
@@ -40,6 +42,7 @@ public class WastageReportServiceImpl implements WastageReportService {
                                             WastageCategory category,
                                             LocalDate from, LocalDate to) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         LocalDate start = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate end = to != null ? to : LocalDate.now();
         Instant fromInstant = start.atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -47,7 +50,7 @@ public class WastageReportServiceImpl implements WastageReportService {
 
         Map<BucketKey, Aggregate> buckets = new HashMap<>();
         for (Object[] row : wastage.aggregateBySectionCategoryItem(
-                companyId, branchId, sectionId, category, fromInstant, toInstant)) {
+                companyId, scope, sectionId, category, fromInstant, toInstant)) {
             Long secId = ((Number) row[0]).longValue();
             WastageCategory cat = (WastageCategory) row[1];
             Long itemId = ((Number) row[2]).longValue();

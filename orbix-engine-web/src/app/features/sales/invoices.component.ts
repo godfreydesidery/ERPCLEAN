@@ -7,6 +7,11 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { CatalogService } from '../catalog/catalog.service';
+import { Item, PriceList } from '../catalog/catalog.models';
+import { PartyService } from '../party/party.service';
+import { Customer, SalesAgent } from '../party/party.models';
 import { SalesService } from './sales.service';
 import {
   CreateSalesInvoiceLine,
@@ -25,7 +30,7 @@ interface LineRow {
 @Component({
   selector: 'orbix-sales-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -72,12 +77,16 @@ interface LineRow {
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="INV0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Customer ID</label>
-                  <input class="form-control" type="number" name="cid" [(ngModel)]="newCustomerId" required>
+                  <label class="form-label small fw-semibold text-secondary">Customer</label>
+                  <orbix-search-select name="cid" [options]="customerOptions()"
+                                       [(ngModel)]="newCustomerId" placeholder="Select a customer…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Sales agent ID <span class="text-muted">(optional)</span></label>
-                  <input class="form-control" type="number" name="aid" [(ngModel)]="newSalesAgentId">
+                  <label class="form-label small fw-semibold text-secondary">Sales agent <span class="text-muted">(optional)</span></label>
+                  <orbix-search-select name="aid" [options]="salesAgentOptions()"
+                                       [(ngModel)]="newSalesAgentId" placeholder="—">
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Invoice date</label>
@@ -98,8 +107,10 @@ interface LineRow {
                   <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Price list ID</label>
-                  <input class="form-control" type="number" name="pl" [(ngModel)]="newPriceListId" required>
+                  <label class="form-label small fw-semibold text-secondary">Price list</label>
+                  <orbix-search-select name="pl" [options]="priceListOptions()"
+                                       [(ngModel)]="newPriceListId" placeholder="Select a price list…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Discount approver <span class="text-muted">(if &gt; 10%)</span></label>
@@ -119,7 +130,7 @@ interface LineRow {
                 <table class="table table-sm align-middle mb-0 line-table">
                   <thead>
                     <tr>
-                      <th>Item ID</th><th class="text-end">Qty</th>
+                      <th>Item</th><th class="text-end">Qty</th>
                       <th class="text-end">Unit price</th><th class="text-end">Disc %</th>
                       <th class="actions-col"></th>
                     </tr>
@@ -128,8 +139,9 @@ interface LineRow {
                     @for (row of newLines; track $index) {
                       <tr>
                         <td>
-                          <input class="form-control form-control-sm" type="number"
-                                 [name]="'lid' + $index" [(ngModel)]="row.itemId">
+                          <orbix-search-select [name]="'lid' + $index" [options]="itemOptions()"
+                                               [(ngModel)]="row.itemId" placeholder="Select an item…" required>
+                          </orbix-search-select>
                         </td>
                         <td>
                           <input class="form-control form-control-sm text-end" type="number" step="0.0001" min="0"
@@ -409,10 +421,29 @@ export class InvoicesComponent implements OnInit {
   private readonly sales = inject(SalesService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly party = inject(PartyService);
+  private readonly catalog = inject(CatalogService);
 
   protected readonly paymentTerms = PAYMENT_TERMS;
   protected readonly invoices = signal<SalesInvoice[]>([]);
   protected readonly selected = signal<SalesInvoice | null>(null);
+  protected readonly customers = signal<Customer[]>([]);
+  protected readonly salesAgents = signal<SalesAgent[]>([]);
+  protected readonly priceLists = signal<PriceList[]>([]);
+  protected readonly items = signal<Item[]>([]);
+
+  protected readonly customerOptions = computed<SearchSelectOption[]>(() =>
+    this.customers().map(c => ({ id: c.partyId, label: `${c.party.name} (${c.party.code})` }))
+  );
+  protected readonly salesAgentOptions = computed<SearchSelectOption[]>(() =>
+    this.salesAgents().map(a => ({ id: a.partyId, label: `${a.party.name} (${a.agentCode})` }))
+  );
+  protected readonly priceListOptions = computed<SearchSelectOption[]>(() =>
+    this.priceLists().map(p => ({ id: p.id, label: `${p.name} (${p.code} — ${p.currencyCode})` }))
+  );
+  protected readonly itemOptions = computed<SearchSelectOption[]>(() =>
+    this.items().map(i => ({ id: i.id, label: `${i.name} (${i.code})` }))
+  );
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
@@ -433,7 +464,31 @@ export class InvoicesComponent implements OnInit {
   protected newDiscountApproverId: number | null = null;
   protected newLines: LineRow[] = [{ itemId: null, qty: null, unitPrice: null, discountPct: null }];
 
-  ngOnInit(): void { this.refresh(); }
+  ngOnInit(): void {
+    this.refresh();
+    this.loadSelectables();
+  }
+
+  private loadSelectables(): void {
+    this.party.listCustomers().subscribe({
+      next: rows => this.customers.set(rows.filter(c => c.party.status === 'ACTIVE')),
+      error: err => this.showError(err)
+    });
+    this.party.listSalesAgents().subscribe({
+      next: rows => this.salesAgents.set(rows.filter(a => a.party.status === 'ACTIVE')),
+      error: err => this.showError(err)
+    });
+    this.catalog.listPriceLists().subscribe({
+      next: rows => this.priceLists.set(rows.filter(p => p.status === 'ACTIVE')),
+      error: err => this.showError(err)
+    });
+    // 500 covers most catalogs; items list is paginated server-side and a
+    // type-ahead picker is the longer-term answer.
+    this.catalog.listItems(null, 0, 500).subscribe({
+      next: page => this.items.set(page.content.filter(i => i.status === 'ACTIVE')),
+      error: err => this.showError(err)
+    });
+  }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 

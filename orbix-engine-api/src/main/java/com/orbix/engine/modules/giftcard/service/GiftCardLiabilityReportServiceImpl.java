@@ -2,6 +2,7 @@ package com.orbix.engine.modules.giftcard.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.giftcard.domain.dto.GiftCardLiabilityReportDto;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.giftcard.domain.dto.GiftCardLiabilityRowDto;
 import com.orbix.engine.modules.giftcard.domain.enums.GiftCardStatus;
 import com.orbix.engine.modules.giftcard.repository.GiftCardRepository;
@@ -28,12 +29,14 @@ public class GiftCardLiabilityReportServiceImpl implements GiftCardLiabilityRepo
 
     private final GiftCardRepository giftCards;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public GiftCardLiabilityReportDto report(Long branchId, Instant asOf) {
         Long companyId = context.companyId();
-        List<Object[]> raw = giftCards.aggregateLiability(companyId, branchId, asOf);
+        Long scope = branchScope.requireReadable(branchId);
+        List<Object[]> raw = giftCards.aggregateLiability(companyId, scope, asOf);
 
         List<GiftCardLiabilityRowDto> rows = new ArrayList<>(raw.size());
         Map<String, BigDecimal> outstandingByCurrency = new LinkedHashMap<>();

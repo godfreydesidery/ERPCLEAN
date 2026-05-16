@@ -18,6 +18,7 @@ import com.orbix.engine.modules.giftcard.domain.dto.GiftCardTxnDto;
 import com.orbix.engine.modules.giftcard.domain.dto.RedeemGiftCardRequestDto;
 import com.orbix.engine.modules.giftcard.domain.dto.RefundGiftCardRequestDto;
 import com.orbix.engine.modules.giftcard.service.GiftCardService;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.orders.domain.dto.CancelCustomerOrderRequestDto;
 import com.orbix.engine.modules.orders.domain.dto.CreateCustomerOrderRequestDto;
 import com.orbix.engine.modules.orders.domain.dto.CustomerOrderDto;
@@ -78,6 +79,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.orders.deposit-required-pct:30}")
     private BigDecimal depositRequiredPct;
@@ -101,6 +103,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     public CustomerOrderDto create(CreateCustomerOrderRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         dayGuard.requireOpenDay(request.branchId());
         requireCustomer(request.customerId());
         validateLines(request.lines(), companyId);
@@ -400,11 +403,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     public List<CustomerOrderDto> list(Long branchId, Long customerId, CustomerOrderStatus status,
                                        CustomerOrderType type) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<CustomerOrder> rows;
         if (customerId != null) {
             rows = orders.findByCompanyIdAndCustomerIdOrderByIdDesc(companyId, customerId);
-        } else if (branchId != null) {
-            rows = orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+        } else if (scope != null) {
+            rows = orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         } else if (status != null) {
             rows = orders.findByCompanyIdAndStatusOrderByIdDesc(companyId, status);
         } else {
@@ -413,7 +417,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         return rows.stream()
             .filter(o -> status == null || o.getStatus() == status)
             .filter(o -> type == null || o.getType() == type)
-            .filter(o -> branchId == null || Objects.equals(o.getBranchId(), branchId))
+            .filter(o -> scope == null || Objects.equals(o.getBranchId(), scope))
             .map(this::loadDto)
             .toList();
     }
@@ -473,6 +477,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (!Objects.equals(order.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Customer order not found: " + id);
         }
+        branchScope.requireAccess(order.getBranchId());
         return order;
     }
 

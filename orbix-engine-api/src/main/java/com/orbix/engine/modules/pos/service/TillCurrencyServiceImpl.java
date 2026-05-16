@@ -6,6 +6,7 @@ import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.dto.TillCurrencyDto;
 import com.orbix.engine.modules.pos.domain.entity.Till;
 import com.orbix.engine.modules.pos.domain.entity.TillCurrency;
@@ -31,6 +32,7 @@ public class TillCurrencyServiceImpl implements TillCurrencyService {
     private final CurrencyRepository currencies;
     private final CompanyRepository companies;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
@@ -78,6 +80,7 @@ public class TillCurrencyServiceImpl implements TillCurrencyService {
         if (!Objects.equals(till.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Till not found: " + tillId);
         }
+        branchScope.requireAccess(till.getBranchId());
         return till;
     }
 

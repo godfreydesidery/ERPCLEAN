@@ -26,6 +26,14 @@ public interface AuthService {
     /** Revoke every refresh token owned by the given user (sign-out everywhere). */
     void logoutEverywhere(Long userId);
 
+    /**
+     * Issue a fresh access + refresh pair for an already-authenticated user.
+     * Used when session context changes mid-flight (e.g. active-branch switch)
+     * so that the new JWT carries the up-to-date {@code branchId} claim and
+     * {@code perms[]} resolved against the new branch context.
+     */
+    LoginResponseDto reissueTokens(Long userId);
+
     class InvalidCredentialsException extends RuntimeException {
         public InvalidCredentialsException() {
             super("Invalid username or password");

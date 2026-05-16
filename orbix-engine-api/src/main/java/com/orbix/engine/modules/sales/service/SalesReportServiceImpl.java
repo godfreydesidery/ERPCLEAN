@@ -4,6 +4,7 @@ import com.orbix.engine.modules.cash.domain.entity.CashBook;
 import com.orbix.engine.modules.cash.domain.enums.CashAccount;
 import com.orbix.engine.modules.cash.repository.CashBookRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.dto.TillReportDto;
 import com.orbix.engine.modules.pos.domain.entity.PosSale;
 import com.orbix.engine.modules.pos.domain.entity.TillSession;
@@ -50,6 +51,7 @@ public class SalesReportServiceImpl implements SalesReportService {
     private final TillSessionRepository tillSessions;
     private final TillReportService tillReports;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     // ---------------------------------------------------------------------
     // Daily sales (US-RPT-001)
@@ -59,13 +61,14 @@ public class SalesReportServiceImpl implements SalesReportService {
     @Transactional(readOnly = true)
     public List<DailySalesRowDto> dailySales(Long branchId, LocalDate businessDate) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<DailySalesRowDto> out = new ArrayList<>();
-        for (SalesInvoice inv : invoices.findPostedOnDate(companyId, branchId, businessDate)) {
+        for (SalesInvoice inv : invoices.findPostedOnDate(companyId, scope, businessDate)) {
             out.add(DailySalesRowDto.from(inv));
         }
-        List<PosSale> sales = branchId != null
+        List<PosSale> sales = scope != null
             ? posSales.findByCompanyIdAndBranchIdAndBusinessDateOrderByIdAsc(
-                companyId, branchId, businessDate)
+                companyId, scope, businessDate)
             : posSales.findByCompanyIdAndBusinessDateOrderByIdAsc(companyId, businessDate);
         for (PosSale s : sales) {
             out.add(DailySalesRowDto.from(s));
@@ -83,12 +86,13 @@ public class SalesReportServiceImpl implements SalesReportService {
     @Transactional(readOnly = true)
     public DailySummaryDto dailySummary(Long branchId, LocalDate businessDate) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
 
         BigDecimal invTotal = BigDecimal.ZERO;
         BigDecimal invTax = BigDecimal.ZERO;
         BigDecimal invDiscount = BigDecimal.ZERO;
         int invCount = 0;
-        for (SalesInvoice inv : invoices.findPostedOnDate(companyId, branchId, businessDate)) {
+        for (SalesInvoice inv : invoices.findPostedOnDate(companyId, scope, businessDate)) {
             if (inv.getStatus() == SalesInvoiceStatus.VOIDED) continue;
             invTotal = invTotal.add(inv.getTotalAmount());
             invTax = invTax.add(inv.getTaxAmount());
@@ -101,9 +105,9 @@ public class SalesReportServiceImpl implements SalesReportService {
         BigDecimal posDiscount = BigDecimal.ZERO;
         int posSaleCount = 0;
         int posRefundCount = 0;
-        List<PosSale> sales = branchId != null
+        List<PosSale> sales = scope != null
             ? posSales.findByCompanyIdAndBranchIdAndBusinessDateOrderByIdAsc(
-                companyId, branchId, businessDate)
+                companyId, scope, businessDate)
             : posSales.findByCompanyIdAndBusinessDateOrderByIdAsc(companyId, businessDate);
         for (PosSale s : sales) {
             if (s.getStatus() == PosSaleStatus.VOIDED) continue;
@@ -125,9 +129,9 @@ public class SalesReportServiceImpl implements SalesReportService {
         BigDecimal grnTotal = BigDecimal.ZERO;
         BigDecimal grnTax = BigDecimal.ZERO;
         int grnCount = 0;
-        List<Grn> postedGrns = branchId != null
+        List<Grn> postedGrns = scope != null
             ? grns.findByCompanyIdAndBranchIdAndReceivedDateAndStatus(
-                companyId, branchId, businessDate, GrnStatus.POSTED)
+                companyId, scope, businessDate, GrnStatus.POSTED)
             : grns.findByCompanyIdAndReceivedDateAndStatus(companyId, businessDate, GrnStatus.POSTED);
         for (Grn g : postedGrns) {
             grnTotal = grnTotal.add(g.getTotalAmount());
@@ -137,9 +141,9 @@ public class SalesReportServiceImpl implements SalesReportService {
         DailySummaryDto.PurchasesBlock purchasesBlock =
             new DailySummaryDto.PurchasesBlock(grnTotal, grnTax, grnCount);
 
-        DailySummaryDto.CashBlock cashBlock = buildCashBlock(companyId, branchId, businessDate);
+        DailySummaryDto.CashBlock cashBlock = buildCashBlock(companyId, scope, businessDate);
 
-        return new DailySummaryDto(businessDate, branchId, salesBlock, purchasesBlock, cashBlock);
+        return new DailySummaryDto(businessDate, scope, salesBlock, purchasesBlock, cashBlock);
     }
 
     private DailySummaryDto.CashBlock buildCashBlock(Long companyId, Long branchId,
@@ -176,11 +180,12 @@ public class SalesReportServiceImpl implements SalesReportService {
     @Transactional(readOnly = true)
     public List<ZHistoryEntryDto> zHistory(Long branchId, LocalDate from, LocalDate to) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         LocalDate start = from != null ? from : LocalDate.now().minusDays(7);
         LocalDate end = to != null ? to : LocalDate.now();
-        List<TillSession> sessions = branchId != null
+        List<TillSession> sessions = scope != null
             ? tillSessions.findByCompanyIdAndBranchIdAndBusinessDateBetweenOrderByIdDesc(
-                companyId, branchId, start, end)
+                companyId, scope, start, end)
             : tillSessions.findByCompanyIdAndBusinessDateBetweenOrderByIdDesc(companyId, start, end);
 
         List<ZHistoryEntryDto> out = new ArrayList<>();

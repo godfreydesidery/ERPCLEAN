@@ -3,6 +3,7 @@ package com.orbix.engine.modules.procurement.service;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.party.domain.entity.Supplier;
 import com.orbix.engine.modules.party.repository.SupplierRepository;
 import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequestDto;
@@ -42,6 +43,7 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     private final SupplierRepository suppliers;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.procurement.invoice-match-tolerance-pct}")
     private BigDecimal toleranceFraction;
@@ -52,6 +54,7 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     public SupplierInvoiceDto createDraft(CreateSupplierInvoiceRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         String supplierInvoiceNo = request.supplierInvoiceNo().trim();
 
@@ -129,9 +132,10 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     @Transactional(readOnly = true)
     public List<SupplierInvoiceDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<SupplierInvoice> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<SupplierInvoice> rows = scope == null
             ? invoices.findByCompanyIdOrderByIdDesc(companyId)
-            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(i -> SupplierInvoiceDto.from(i, allocations.findBySupplierInvoiceId(i.getId())))
             .toList();
@@ -200,6 +204,7 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
         if (!Objects.equals(invoice.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Supplier invoice not found: " + id);
         }
+        branchScope.requireAccess(invoice.getBranchId());
         return invoice;
     }
 

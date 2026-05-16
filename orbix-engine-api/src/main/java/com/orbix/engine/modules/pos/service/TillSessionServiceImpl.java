@@ -11,6 +11,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
@@ -66,6 +67,7 @@ public class TillSessionServiceImpl implements TillSessionService {
     private final PermissionResolverService permissions;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.pos.session-variance-threshold}")
     private BigDecimal varianceThreshold;
@@ -198,9 +200,10 @@ public class TillSessionServiceImpl implements TillSessionService {
     @Transactional(readOnly = true)
     public List<TillSessionDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<TillSession> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<TillSession> rows = scope == null
             ? sessions.findByCompanyIdOrderByIdDesc(companyId)
-            : sessions.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : sessions.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream().map(TillSessionDto::from).toList();
     }
 
@@ -280,6 +283,7 @@ public class TillSessionServiceImpl implements TillSessionService {
         if (!Objects.equals(session.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Till session not found: " + id);
         }
+        branchScope.requireAccess(session.getBranchId());
         return session;
     }
 
@@ -289,6 +293,7 @@ public class TillSessionServiceImpl implements TillSessionService {
         if (!Objects.equals(till.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Till not found: " + tillId);
         }
+        branchScope.requireAccess(till.getBranchId());
         return till;
     }
 }

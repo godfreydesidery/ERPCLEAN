@@ -38,6 +38,7 @@ export interface Item {
 export interface CreateItemRequest {
   code: string;
   name: string;
+  shortName: string | null;
   type: ItemType;
   itemGroupId: number;
   uomId: number;

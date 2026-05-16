@@ -7,6 +7,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.BomDto;
 import com.orbix.engine.modules.production.domain.dto.CreateBomRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PatchBomRequestDto;
@@ -42,6 +43,7 @@ public class BomServiceImpl implements BomService {
     private final SectionRepository sections;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     // ---------------------------------------------------------------------
     // Create / patch
@@ -291,7 +293,9 @@ public class BomServiceImpl implements BomService {
     }
 
     private Section requireSection(Long sectionId) {
-        return sections.findById(sectionId)
+        Section section = sections.findById(sectionId)
             .orElseThrow(() -> new NoSuchElementException("Section not found: " + sectionId));
+        branchScope.requireAccess(section.getBranchId());
+        return section;
     }
 }

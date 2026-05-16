@@ -23,8 +23,8 @@ public class StockCountController {
     private final StockCountService service;
 
     @GetMapping
-    public List<StockCountDto> listCounts() {
-        return service.listCounts();
+    public List<StockCountDto> listCounts(@RequestParam(required = false) Long branchId) {
+        return service.listCounts(branchId);
     }
 
     @GetMapping("/{id}")

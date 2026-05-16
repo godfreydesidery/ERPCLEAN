@@ -1,8 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../api/api-response';
+import { AuthService, LoginResponse } from '../auth/auth.service';
 
 /** A branch the current user may switch into (mirrors backend AccessibleBranchDto). */
 export interface AccessibleBranch {
@@ -18,6 +19,7 @@ export const ACTIVE_BRANCH_KEY = 'orbix.activeBranchId';
 @Injectable({ providedIn: 'root' })
 export class BranchService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
 
   private readonly _activeBranchId = signal<number | null>(readStoredBranchId());
   readonly activeBranchId = this._activeBranchId.asReadonly();
@@ -28,10 +30,20 @@ export class BranchService {
     ));
   }
 
-  setActiveBranch(branchId: number): Observable<void> {
-    return this.http.put(`${environment.apiUrl}/session/active-branch`, { branchId }).pipe(
-      map(() => void 0),
-      tap(() => this.applyActiveBranch(branchId))
+  /**
+   * Persist the user's active branch and apply the fresh token pair the
+   * server returns — the new JWT carries the new {@code branchId} claim
+   * and {@code perms[]} resolved against the new branch context, so
+   * subsequent requests don't need the X-Branch-Id override path.
+   */
+  setActiveBranch(branchId: number): Observable<LoginResponse> {
+    return unwrap(this.http.put<ApiResponse<LoginResponse>>(
+      `${environment.apiUrl}/session/active-branch`, { branchId }
+    )).pipe(
+      tap(resp => {
+        this.auth.applySession(resp);
+        this.applyActiveBranch(branchId);
+      })
     );
   }
 
