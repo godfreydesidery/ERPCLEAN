@@ -8,6 +8,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.AdvanceLifecycleRequestDto;
 import com.orbix.engine.modules.production.domain.dto.ExplodedMaterialDto;
 import com.orbix.engine.modules.production.domain.dto.PlanProductionBatchRequestDto;
@@ -72,6 +73,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     /** Hard-reject above this multiple of planned (TC-PROD-011). */
     @Value("${orbix.production.yield-hard-reject-multiple:2.0}")
@@ -98,6 +100,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
                 "BOM " + bom.getId() + " is not ACTIVE (was " + bom.getStatus() + ")");
         }
         Section section = requireSection(bom.getSectionId());
+        branchScope.requireAccess(section.getBranchId());
         Long branchId = section.getBranchId();
         dayGuard.requireOpenDay(branchId);
 
@@ -379,11 +382,12 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Transactional(readOnly = true)
     public List<ProductionBatchDto> list(Long branchId, Long sectionId, ProductionBatchStatus status) {
         Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
         List<ProductionBatch> rows;
         if (sectionId != null) {
             rows = batches.findByCompanyIdAndSectionIdOrderByIdDesc(companyId, sectionId);
-        } else if (branchId != null) {
-            rows = batches.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+        } else if (scope != null) {
+            rows = batches.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         } else if (status != null) {
             rows = batches.findByCompanyIdAndStatusOrderByIdDesc(companyId, status);
         } else {
@@ -391,7 +395,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
         }
         return rows.stream()
             .filter(b -> status == null || b.getStatus() == status)
-            .filter(b -> branchId == null || Objects.equals(b.getBranchId(), branchId))
+            .filter(b -> scope == null || Objects.equals(b.getBranchId(), scope))
             .map(this::loadDto)
             .toList();
     }
@@ -435,6 +439,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
         if (!Objects.equals(batch.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Production batch not found: " + id);
         }
+        branchScope.requireAccess(batch.getBranchId());
         return batch;
     }
 

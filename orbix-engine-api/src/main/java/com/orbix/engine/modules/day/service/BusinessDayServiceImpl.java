@@ -10,6 +10,7 @@ import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.domain.entity.BusinessDayId;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
 import com.orbix.engine.modules.day.repository.BusinessDayRepository;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,7 @@ public class BusinessDayServiceImpl implements BusinessDayService {
     private final List<EodGuard> eodGuards;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
@@ -204,6 +206,7 @@ public class BusinessDayServiceImpl implements BusinessDayService {
         if (!Objects.equals(branch.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Branch not found: " + branchId);
         }
+        branchScope.requireAccess(branchId);
         return branch;
     }
 

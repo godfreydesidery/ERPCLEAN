@@ -5,6 +5,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.production.domain.dto.ProductionWastageDto;
 import com.orbix.engine.modules.production.domain.dto.RecordWastageRequestDto;
 import com.orbix.engine.modules.production.domain.entity.ProductionBatch;
@@ -32,6 +33,7 @@ public class ProductionWastageServiceImpl implements ProductionWastageService {
     private final ItemRepository items;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -74,6 +76,7 @@ public class ProductionWastageServiceImpl implements ProductionWastageService {
         if (!Objects.equals(batch.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Production batch not found: " + id);
         }
+        branchScope.requireAccess(batch.getBranchId());
         return batch;
     }
 
