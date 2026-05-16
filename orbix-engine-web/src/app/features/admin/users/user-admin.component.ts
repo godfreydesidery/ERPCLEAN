@@ -6,11 +6,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { RoleAdminService } from '../roles/role-admin.service';
+import { RoleSummary } from '../roles/role-admin.models';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
   CreateUserResponse,
   ResetPasswordResponse,
+  RoleGrantSummary,
   UserDetail,
   UserSummary
 } from './user-admin.models';
@@ -149,8 +152,8 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
     }
 
     @if (!showNewForm()) {
-    <!-- Toolbar -->
-    <div class="card border-0 shadow-sm mb-3">
+    <!-- Toolbar — hidden on mobile when a user is open -->
+    <div class="card border-0 shadow-sm mb-3" [class.mobile-hide]="selected()">
       <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
         <div class="search-box flex-grow-1">
           <i class="bi bi-search"></i>
@@ -170,8 +173,8 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
     </div>
 
     <div class="row g-3 g-md-4">
-      <!-- Users list -->
-      <div class="col-12 col-lg-5">
+      <!-- Users list — hidden on mobile when a user is open -->
+      <div class="col-12 col-lg-5" [class.mobile-hide]="selected()">
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
@@ -225,8 +228,14 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       <!-- Detail -->
       <div class="col-12 col-lg-7">
         @if (selected(); as user) {
+          <!-- Back-to-list button — mobile only -->
+          <button type="button" class="btn btn-link back-btn d-lg-none mb-2 px-0"
+                  (click)="selected.set(null)">
+            <i class="bi bi-arrow-left me-2"></i>Back to users
+          </button>
+
           <div class="card border-0 shadow-sm mb-3">
-            <div class="card-body p-4">
+            <div class="card-body p-3 p-md-4">
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div class="d-flex align-items-center gap-3 min-w-0">
                   <span class="u-avatar u-avatar--lg">{{ initials(user.displayName) }}</span>
@@ -248,31 +257,31 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                     }
                   </div>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
+                <div class="user-actions d-flex flex-wrap gap-2">
                   @if (user.status === 'ACTIVE') {
-                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center gap-1"
                             (click)="onDisable(user)" [disabled]="busy()">
                       <i class="bi bi-pause-circle"></i> Disable
                     </button>
                   } @else {
-                    <button class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1"
+                    <button class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center gap-1"
                             (click)="onEnable(user)" [disabled]="busy()">
                       <i class="bi bi-play-circle"></i> Enable
                     </button>
                   }
                   @if (user.locked) {
-                    <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1"
+                    <button class="btn btn-sm btn-outline-warning d-inline-flex align-items-center justify-content-center gap-1"
                             (click)="onUnlock(user)" [disabled]="busy()">
                       <i class="bi bi-unlock"></i> Unlock
                     </button>
                   }
-                  <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
+                  <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1"
                           (click)="onResetPassword(user)" [disabled]="busy()">
-                    <i class="bi bi-key"></i> Reset password
+                    <i class="bi bi-key"></i><span class="d-none d-sm-inline">Reset password</span><span class="d-sm-none">Reset</span>
                   </button>
-                  <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                  <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center gap-1"
                           (click)="onForceLogout(user)" [disabled]="busy()">
-                    <i class="bi bi-box-arrow-right"></i> Force logout
+                    <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline">Force logout</span><span class="d-sm-none">Logout</span>
                   </button>
                 </div>
               </div>
@@ -312,48 +321,95 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                 </div>
               </form>
 
-              <dl class="row small mt-3 mb-0">
-                <dt class="col-4 text-secondary">Last login</dt>
-                <dd class="col-8 mb-1">{{ user.lastLoginAt ? (user.lastLoginAt | date:'medium') : '—' }}</dd>
-                <dt class="col-4 text-secondary">Created</dt>
-                <dd class="col-8 mb-1">{{ user.createdAt | date:'medium' }}</dd>
-                <dt class="col-4 text-secondary">Updated</dt>
-                <dd class="col-8 mb-1">{{ user.updatedAt | date:'medium' }}</dd>
-              </dl>
+              <div class="user-meta-strip mt-3" role="group" aria-label="Audit timestamps">
+                <span [title]="'Last login: ' + (user.lastLoginAt ? (user.lastLoginAt | date:'medium') : 'never')">
+                  <i class="bi bi-box-arrow-in-right"></i>
+                  {{ user.lastLoginAt ? (user.lastLoginAt | date:'mediumDate') : 'Never logged in' }}
+                </span>
+                <span class="user-meta-strip__sep">·</span>
+                <span [title]="'Created: ' + (user.createdAt | date:'medium')">
+                  <i class="bi bi-calendar-plus"></i>
+                  Created {{ user.createdAt | date:'mediumDate' }}
+                </span>
+                <span class="user-meta-strip__sep">·</span>
+                <span [title]="'Updated: ' + (user.updatedAt | date:'medium')">
+                  <i class="bi bi-clock-history"></i>
+                  Updated {{ user.updatedAt | date:'mediumDate' }}
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Grants -->
+          <!-- Roles -->
           <div class="card border-0 shadow-sm overflow-hidden">
             <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-              <h3 class="h6 fw-bold mb-0 text-dark">Active role grants</h3>
-              <span class="badge text-bg-light text-secondary">{{ user.grants.length }}</span>
+              <h3 class="h6 fw-bold mb-0 text-dark">Roles</h3>
+              <span class="badge text-bg-light text-secondary">{{ user.grants.length }} grant{{ user.grants.length === 1 ? '' : 's' }}</span>
             </div>
-            @if (user.grants.length === 0) {
+            @if (roles().length === 0) {
               <div class="p-4 text-center small text-secondary">
-                No active role grants. Assign roles from
-                <a routerLink="/admin/roles" class="text-decoration-none">Roles &amp; permissions</a>.
+                No roles defined yet. Create roles on the
+                <a routerLink="/admin/roles" class="text-decoration-none">Roles &amp; permissions</a> page first.
               </div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 simple-table">
-                  <thead>
-                    <tr><th>Grant #</th><th>Branch</th><th>Granted at</th></tr>
-                  </thead>
-                  <tbody>
-                    @for (g of user.grants; track g.id) {
-                      <tr>
-                        <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ g.id }}</span></td>
-                        <td class="small">
-                          @if (g.branchId !== null) { #{{ g.branchId }} }
-                          @else { <em>company-wide</em> }
-                        </td>
-                        <td class="small text-secondary">{{ g.grantedAt | date:'short' }}</td>
-                      </tr>
+              <ul class="list-unstyled mb-0">
+                @for (role of roles(); track role.id) {
+                  <li class="role-row">
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+                      <div class="min-w-0 flex-grow-1">
+                        <p class="fw-semibold text-dark mb-0">{{ role.name }}</p>
+                        <p class="small text-secondary mb-0">
+                          <span class="font-monospace">{{ role.code }}</span>
+                          @if (role.isSystem) {
+                            <span class="badge text-bg-primary-subtle text-primary ms-1">SYSTEM</span>
+                          }
+                          · {{ role.permissionCount }} permission{{ role.permissionCount === 1 ? '' : 's' }}
+                        </p>
+                      </div>
+                    </div>
+
+                    @if (grantsForRole(user, role.id); as roleGrants) {
+                      @if (roleGrants.length > 0) {
+                        <div class="grant-chips mb-2">
+                          @for (g of roleGrants; track g.id) {
+                            <span class="grant-chip">
+                              <i class="bi bi-check2 me-1"></i>
+                              @if (g.branchId === null) { Company-wide }
+                              @else { Branch #{{ g.branchId }} }
+                              <button type="button" class="grant-chip__x"
+                                      [disabled]="busy()"
+                                      (click)="onRevoke(user, g)"
+                                      title="Revoke">
+                                <i class="bi bi-x"></i>
+                              </button>
+                            </span>
+                          }
+                        </div>
+                      }
+
+                      <div class="grant-add d-flex align-items-center gap-2 flex-wrap">
+                        <select class="form-select form-select-sm grant-add__select"
+                                [(ngModel)]="grantPick[role.id]" name="gp{{ role.id }}">
+                          <option [ngValue]="null">— Pick scope —</option>
+                          @if (!hasCompanyWide(roleGrants)) {
+                            <option [ngValue]="-1">Company-wide</option>
+                          }
+                          @for (b of branches(); track b.id) {
+                            @if (!hasBranch(roleGrants, b.id)) {
+                              <option [ngValue]="b.id">Branch · {{ b.name }}</option>
+                            }
+                          }
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
+                                [disabled]="busy() || grantPick[role.id] == null"
+                                (click)="onGrant(user, role)">
+                          <i class="bi bi-plus-lg"></i> Grant
+                        </button>
+                      </div>
                     }
-                  </tbody>
-                </table>
-              </div>
+                  </li>
+                }
+              </ul>
             }
           </div>
         } @else {
@@ -467,13 +523,90 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       font-size: 1.05rem; font-weight: 600; letter-spacing: 0.05em;
       color: #78350f; user-select: all;
     }
+
+    /* ---- Mobile master-detail toggle ---- */
+    @media (max-width: 991.98px) {
+      .mobile-hide { display: none !important; }
+
+      /* Action-button grid: two buttons per row, full width, easy tap */
+      .user-actions {
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem !important;
+      }
+      .user-actions .btn {
+        min-height: 44px;          /* WCAG tap target */
+        font-size: 0.85rem;
+      }
+
+      .role-row { padding: 0.875rem 1rem; }
+      .grant-add__select { max-width: 100% !important; flex: 1 1 0; }
+    }
+
+    .back-btn {
+      color: #1d4ed8;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .back-btn:hover { color: #0d2a5b; text-decoration: underline; }
+
+    /* ---- Audit timestamps footer ---- */
+    .user-meta-strip {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 0.5rem 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #f3f4f6;
+      font-size: 0.78rem;
+      color: #6b7280;
+    }
+    .user-meta-strip span { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .user-meta-strip i { color: #9ca3af; font-size: 0.88rem; }
+    .user-meta-strip__sep { color: #d1d5db; padding: 0 0.1rem; }
+    @media (max-width: 575.98px) {
+      .user-meta-strip__sep { display: none; }
+      .user-meta-strip { gap: 0.4rem 0.6rem; }
+    }
+
+    /* ---- Role grant rows ---- */
+    .role-row {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .role-row:last-child { border-bottom: none; }
+
+    .grant-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .grant-chip {
+      display: inline-flex; align-items: center;
+      padding: 0.3rem 0.5rem 0.3rem 0.7rem;
+      background: #eef4ff; color: #1d4ed8;
+      border-radius: 999px;
+      font-size: 0.78rem; font-weight: 600;
+    }
+    .grant-chip__x {
+      margin-left: 0.4rem;
+      width: 20px; height: 20px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent; border: none; border-radius: 50%;
+      color: #1d4ed8;
+      cursor: pointer;
+    }
+    .grant-chip__x:hover { background: #dbe8ff; }
+    .grant-chip__x:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .grant-add__select { max-width: 260px; }
+
+    .text-bg-primary-subtle { background: #e0ecff; color: #1d4ed8; }
   `]
 })
 export class UserAdminComponent implements OnInit {
   private readonly api = inject(UserAdminService);
   private readonly branchService = inject(BranchService);
+  private readonly roleApi = inject(RoleAdminService);
 
   protected readonly branches = signal<AccessibleBranch[]>([]);
+  protected readonly roles = signal<RoleSummary[]>([]);
+  protected grantPick: Record<number, number | null> = {};
   protected readonly users = signal<UserSummary[]>([]);
   protected readonly selected = signal<UserDetail | null>(null);
   protected readonly busy = signal(false);
@@ -523,6 +656,56 @@ export class UserAdminComponent implements OnInit {
     this.branchService.listBranches().subscribe({
       next: list => this.branches.set(list),
       error: () => this.branches.set([])
+    });
+    this.roleApi.listRoles().subscribe({
+      next: list => this.roles.set(list),
+      error: () => this.roles.set([])
+    });
+  }
+
+  // --- role-grant helpers -------------------------------------------------
+
+  grantsForRole(user: UserDetail, roleId: number): RoleGrantSummary[] {
+    return user.grants.filter(g => g.roleId === roleId);
+  }
+
+  hasCompanyWide(grants: RoleGrantSummary[]): boolean {
+    return grants.some(g => g.branchId === null);
+  }
+
+  hasBranch(grants: RoleGrantSummary[], branchId: number): boolean {
+    return grants.some(g => g.branchId === branchId);
+  }
+
+  onGrant(user: UserDetail, role: RoleSummary): void {
+    const pick = this.grantPick[role.id];
+    if (pick == null) return;
+    // -1 sentinel = "Company-wide" — backend expects null branchId for that.
+    const branchId = pick === -1 ? null : pick;
+    this.busy.set(true);
+    this.error.set(null);
+    this.roleApi.grantRole(role.id, { username: user.username, branchId }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.grantPick[role.id] = null;
+        this.info.set(`Granted ${role.code} to ${user.username}.`);
+        this.selectUser(user.id);
+      },
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
+
+  onRevoke(user: UserDetail, grant: RoleGrantSummary): void {
+    if (!globalThis.confirm(`Revoke this role from ${user.username}?`)) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.roleApi.revokeGrant(grant.id).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.info.set(`Role revoked from ${user.username}.`);
+        this.selectUser(user.id);
+      },
+      error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 

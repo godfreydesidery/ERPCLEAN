@@ -201,68 +201,46 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
             </div>
           </div>
 
-          <!-- Grants -->
+          <!-- Granted to (read-only — manage from /admin/users) -->
           <div class="card border-0 shadow-sm overflow-hidden">
             <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
               <h3 class="h6 fw-bold mb-0 text-dark">Granted to</h3>
               <span class="badge text-bg-light text-secondary">{{ grants().length }}</span>
             </div>
-            <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0 simple-table">
-                <thead>
-                  <tr>
-                    <th>User</th><th>Branch</th><th>Granted</th><th class="text-end actions-col"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (grant of grants(); track grant.id) {
-                    <tr>
-                      <td>
-                        <p class="fw-semibold text-dark mb-0">{{ grant.displayName }}</p>
-                        <p class="small text-secondary mb-0">&#64;{{ grant.username }}</p>
-                      </td>
-                      <td class="small text-secondary">
-                        @if (grant.branchId !== null) { #{{ grant.branchId }} }
-                        @else { <em>company-wide</em> }
-                      </td>
-                      <td class="small text-secondary">{{ grant.grantedAt | date:'short' }}</td>
-                      <td class="text-end actions-col">
-                        <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
-                                (click)="revoke(grant)" [disabled]="saving()">
-                          <i class="bi bi-x-circle"></i> Revoke
-                        </button>
-                      </td>
-                    </tr>
-                  } @empty {
-                    <tr><td colspan="4" class="text-center text-secondary py-4">Not granted to anyone yet.</td></tr>
-                  }
-                </tbody>
-              </table>
+            <div class="alert alert-info d-flex align-items-start gap-2 m-3 mb-0 py-2">
+              <i class="bi bi-info-circle-fill mt-1"></i>
+              <div class="flex-grow-1 small">
+                Manage who holds this role on the
+                <a routerLink="/admin/users" class="text-decoration-none fw-semibold">Users page</a>
+                — open a user, then toggle roles in the Roles section.
+              </div>
             </div>
-
-            <div class="card-footer bg-white border-top p-3">
-              <form (ngSubmit)="grant(role)" #gf="ngForm" class="d-flex flex-column gap-2">
-                <p class="small fw-semibold text-secondary mb-0">Grant role</p>
-                <div class="row g-2 align-items-end">
-                  <div class="col-md-6">
-                    <label class="form-label small fw-semibold text-secondary">Username</label>
-                    <input class="form-control" name="guser" [(ngModel)]="grantUsername" required>
-                  </div>
-                  <div class="col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">
-                      Branch ID <span class="text-muted">(opt)</span>
-                    </label>
-                    <input class="form-control" name="gbranch" type="number" [(ngModel)]="grantBranchId">
-                  </div>
-                  <div class="col-md-3">
-                    <button class="btn btn-primary w-100 d-inline-flex justify-content-center align-items-center gap-1"
-                            [disabled]="saving() || gf.invalid">
-                      <i class="bi bi-person-plus"></i> Grant
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </div>
+            @if (grants().length === 0) {
+              <div class="p-4 text-center small text-secondary">Not granted to anyone yet.</div>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 simple-table">
+                  <thead>
+                    <tr><th>User</th><th>Branch</th><th>Granted</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (grant of grants(); track grant.id) {
+                      <tr>
+                        <td>
+                          <p class="fw-semibold text-dark mb-0">{{ grant.displayName }}</p>
+                          <p class="small text-secondary mb-0">&#64;{{ grant.username }}</p>
+                        </td>
+                        <td class="small text-secondary">
+                          @if (grant.branchId !== null) { #{{ grant.branchId }} }
+                          @else { <em>company-wide</em> }
+                        </td>
+                        <td class="small text-secondary">{{ grant.grantedAt | date:'short' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
           </div>
         } @else {
           <div class="card border-0 shadow-sm">
@@ -361,8 +339,6 @@ export class RoleAdminComponent implements OnInit {
   protected editName = '';
   protected editDescription = '';
 
-  protected grantUsername = '';
-  protected grantBranchId: number | null = null;
 
   protected readonly permissionGroups = computed(() => {
     const groups = new Map<string, Permission[]>();
@@ -460,27 +436,6 @@ export class RoleAdminComponent implements OnInit {
     });
   }
 
-  grant(role: RoleDetail): void {
-    this.run(this.api.grantRole(role.id, {
-      username: this.grantUsername.trim(),
-      branchId: this.grantBranchId
-    }), () => {
-      this.grantUsername = '';
-      this.grantBranchId = null;
-      this.selectRole(role.id);
-      this.loadRoles();
-    });
-  }
-
-  revoke(grant: RoleGrant): void {
-    const role = this.selected();
-    this.run(this.api.revokeGrant(grant.id), () => {
-      if (role) {
-        this.selectRole(role.id);
-        this.loadRoles();
-      }
-    });
-  }
 
   private applySelected(role: RoleDetail): void {
     this.selected.set(role);

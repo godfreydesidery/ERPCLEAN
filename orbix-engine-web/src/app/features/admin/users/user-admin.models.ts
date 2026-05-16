@@ -19,6 +19,7 @@ export interface UserSummary {
 export interface RoleGrantSummary {
   id: number;
   userId: number;
+  roleId: number;
   username: string | null;
   displayName: string | null;
   companyId: number;
