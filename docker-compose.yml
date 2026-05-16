@@ -39,9 +39,10 @@ services:
       retries: 10
 
   phpmyadmin:
-    # Web UI for the MariaDB above. Reachable at http://localhost:8080.
+    # Web UI for the MariaDB above. Reachable at http://localhost:8081.
     # Auto-logs in as the orbix user; switch to root on the login screen
-    # if you need to create users or databases.
+    # if you need to create users or databases. Host port is 8081 to keep
+    # 8080 free for the Spring Boot backend's default Tomcat port.
     image: phpmyadmin:5
     container_name: orbix-phpmyadmin
     restart: unless-stopped
@@ -55,7 +56,7 @@ services:
       PMA_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
       UPLOAD_LIMIT: 256M
     ports:
-      - "8080:80"
+      - "8081:80"
 
   postgres:
     image: postgres:15
