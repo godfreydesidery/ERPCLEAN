@@ -1,0 +1,38 @@
+package com.orbix.engine.modules.production.service;
+
+import com.orbix.engine.modules.production.domain.dto.BomDto;
+import com.orbix.engine.modules.production.domain.dto.CreateBomRequestDto;
+import com.orbix.engine.modules.production.domain.dto.PatchBomRequestDto;
+import com.orbix.engine.modules.production.domain.enums.BomStatus;
+
+import java.util.List;
+
+/**
+ * BOM authoring (F7.3a). DRAFT -> ACTIVE -> RETIRED lifecycle. Sub-recipe
+ * cycle detection runs at activation (lines may reference other BOMs which
+ * may themselves reference more BOMs; the BFS reaching its own id throws).
+ */
+public interface BomService {
+
+    BomDto create(CreateBomRequestDto request);
+
+    BomDto patch(Long bomId, PatchBomRequestDto request);
+
+    /** DRAFT -> ACTIVE; runs the cycle check. */
+    BomDto activate(Long bomId);
+
+    /** ACTIVE -> RETIRED. Sets {@code valid_to = today}. */
+    BomDto retire(Long bomId);
+
+    /**
+     * Clone the current ACTIVE version into a new DRAFT version (N+1), so the
+     * recipe can be edited without disturbing in-flight batches. The caller
+     * activates the new DRAFT separately; activation auto-retires the prior
+     * ACTIVE at {@code newVersion.validFrom − 1}.
+     */
+    BomDto version(Long bomId);
+
+    BomDto get(Long bomId);
+
+    List<BomDto> list(Long sectionId, Long outputItemId, BomStatus status);
+}

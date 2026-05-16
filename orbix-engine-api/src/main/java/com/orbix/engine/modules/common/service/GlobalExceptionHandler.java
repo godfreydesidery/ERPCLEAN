@@ -3,6 +3,7 @@ package com.orbix.engine.modules.common.service;
 import com.orbix.engine.modules.common.domain.dto.ApiErrorDto;
 import com.orbix.engine.modules.common.domain.dto.ApiResponseDto;
 import com.orbix.engine.modules.common.domain.enums.ResponseCode;
+import com.orbix.engine.modules.day.service.EodBlockedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -43,6 +44,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseDto<Object>> onBadArg(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
             ApiResponseDto.error(400, ResponseCode.BAD_REQUEST, ex.getMessage())
+        );
+    }
+
+    @ExceptionHandler(EodBlockedException.class)
+    public ResponseEntity<ApiResponseDto<Object>> onEodBlocked(EodBlockedException ex) {
+        List<ApiErrorDto> errors = ex.blockers().stream()
+            .map(b -> ApiErrorDto.field(b.refType() + ":" + b.refId(), b.kind(), b.message()))
+            .toList();
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(
+            ApiResponseDto.error(422, ResponseCode.DAY_EOD_BLOCKED,
+                "Cannot close day — " + errors.size() + " blocker(s)", errors)
         );
     }
 
