@@ -1,7 +1,9 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
@@ -20,210 +22,418 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
   template: `
-    <h2 class="h3 mb-4">Supplier invoices</h2>
-    @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
-    @if (info()) { <div class="alert alert-success py-2">{{ info() }}</div> }
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
+          <a routerLink=".." class="text-decoration-none text-secondary">Procurement</a> &rsaquo; Supplier invoices
+        </p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Supplier invoices</h1>
+        <p class="text-secondary mb-0 small">{{ invoices().length }} invoice{{ invoices().length === 1 ? '' : 's' }} on file.</p>
+      </div>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
+        <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
+        {{ showForm() ? 'Close form' : 'New invoice' }}
+      </button>
+    </header>
 
-    <div class="row g-4">
-      <div class="col-12 col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-header fw-semibold">Invoices</div>
-          <div class="list-group list-group-flush">
-            @for (i of invoices(); track i.id) {
-              <button type="button"
-                      class="list-group-item list-group-item-action d-flex justify-content-between"
-                      [class.active]="selected()?.id === i.id" (click)="select(i)">
-                <span>{{ i.number }}
-                  <small class="d-block text-muted">
-                    supplier #{{ i.supplierId }} · their no {{ i.supplierInvoiceNo }} ·
-                    {{ i.totalAmount | number:'1.0-2' }} · due {{ i.dueDate }}
-                  </small>
-                </span>
-                <span class="badge align-self-center"
-                      [class.text-bg-secondary]="i.status === 'DRAFT'"
-                      [class.text-bg-success]="i.status === 'POSTED' || i.status === 'PAID'"
-                      [class.text-bg-warning]="i.status === 'PARTIALLY_PAID'"
-                      [class.text-bg-danger]="i.status === 'CANCELLED'">{{ i.status }}</span>
-              </button>
-            } @empty { <div class="list-group-item text-muted">No invoices yet.</div> }
-          </div>
+    @if (error()) {
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (info()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+      </div>
+    }
+
+    @if (showForm()) {
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <h2 class="h6 fw-bold mb-0 text-dark">New supplier invoice</h2>
+          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
         </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-semibold">New invoice</div>
-          <div class="card-body">
-            <form (ngSubmit)="create()" #f="ngForm">
-              <div class="row g-2 mb-2">
-                <div class="col">
-                  <label class="form-label small mb-1">Our number</label>
-                  <input class="form-control" name="num" [(ngModel)]="newNumber" required>
+        <div class="card-body p-3">
+          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
+            <fieldset class="form-fieldset">
+              <legend class="form-fieldset__legend"><i class="bi bi-receipt-cutoff text-secondary"></i> Header</legend>
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Our number</label>
+                  <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="SI0001">
                 </div>
-                <div class="col">
-                  <label class="form-label small mb-1">Supplier inv no</label>
-                  <input class="form-control" name="sino" [(ngModel)]="newSupplierInvoiceNo" required>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Supplier inv no</label>
+                  <input class="form-control font-monospace" name="sino" [(ngModel)]="newSupplierInvoiceNo" required>
                 </div>
-              </div>
-              <div class="mb-2">
-                <label class="form-label small mb-1">Supplier id</label>
-                <input class="form-control" type="number" name="sid"
-                       [(ngModel)]="newSupplierId" (ngModelChange)="loadGrns()" required>
-              </div>
-              <div class="row g-2 mb-2">
-                <div class="col">
-                  <label class="form-label small mb-1">Invoice date</label>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Supplier ID</label>
+                  <input class="form-control" type="number" name="sid"
+                         [(ngModel)]="newSupplierId" (ngModelChange)="loadGrns()" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">Invoice date</label>
                   <input class="form-control" type="date" name="id" [(ngModel)]="newInvoiceDate" required>
                 </div>
-                <div class="col">
-                  <label class="form-label small mb-1">Due date (optional)</label>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">Due date <span class="text-muted">(opt)</span></label>
                   <input class="form-control" type="date" name="dd" [(ngModel)]="newDueDate">
                 </div>
-              </div>
-              <div class="row g-2 mb-2">
-                <div class="col">
-                  <label class="form-label small mb-1">Currency</label>
-                  <input class="form-control" name="cur" [(ngModel)]="newCurrency" required>
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">Currency</label>
+                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
                 </div>
-                <div class="col">
-                  <label class="form-label small mb-1">Subtotal</label>
-                  <input class="form-control" type="number" step="0.0001" min="0"
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">Subtotal</label>
+                  <input class="form-control text-end" type="number" step="0.0001" min="0"
                          name="sub" [(ngModel)]="newSubtotal" required>
                 </div>
-                <div class="col">
-                  <label class="form-label small mb-1">Tax</label>
-                  <input class="form-control" type="number" step="0.0001" min="0"
+                <div class="col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">Tax</label>
+                  <input class="form-control text-end" type="number" step="0.0001" min="0"
                          name="tax" [(ngModel)]="newTax">
                 </div>
               </div>
+            </fieldset>
 
-              <fieldset class="border rounded p-2 mb-2">
-                <legend class="float-none w-auto small px-1">Allocations</legend>
-                @for (row of allocations; track $index) {
-                  <div class="row g-2 mb-2 align-items-end">
-                    <div class="col">
-                      <label class="form-label small mb-1">GRN</label>
-                      <select class="form-select form-select-sm"
-                              [name]="'gid' + $index" [(ngModel)]="row.grnId">
-                        <option [ngValue]="null">— pick a GRN —</option>
-                        @for (g of grnOptions(); track g.id) {
-                          <option [ngValue]="g.id">{{ g.number }} ({{ g.totalAmount | number:'1.0-2' }})</option>
-                        }
-                      </select>
-                    </div>
-                    <div class="col">
-                      <label class="form-label small mb-1">Amount</label>
-                      <input class="form-control form-control-sm" type="number" step="0.0001" min="0"
-                             [name]="'gam' + $index" [(ngModel)]="row.amount">
-                    </div>
-                    <div class="col-auto">
-                      <button type="button" class="btn btn-sm btn-outline-secondary"
-                              (click)="removeAllocation($index)">Remove</button>
-                    </div>
-                  </div>
-                }
-                <button type="button" class="btn btn-sm btn-outline-primary"
-                        (click)="addAllocation()">+ Add allocation</button>
-              </fieldset>
-
-              <div class="d-flex justify-content-between small text-muted mb-2">
-                <span>Total: <strong>{{ headerTotal() | number:'1.2-2' }}</strong></span>
-                <span>Allocated: <strong>{{ allocationsSum() | number:'1.2-2' }}</strong></span>
-                <span [class.text-danger]="!withinTolerance()">
-                  Diff: {{ headerTotal() - allocationsSum() | number:'1.2-2' }}
-                </span>
+            <fieldset class="form-fieldset">
+              <legend class="form-fieldset__legend d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-link-45deg text-secondary"></i> Match to GRNs</span>
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="addAllocation()">
+                  <i class="bi bi-plus-lg me-1"></i>Add allocation
+                </button>
+              </legend>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0 line-table">
+                  <thead>
+                    <tr><th>GRN</th><th class="text-end">Amount</th><th class="actions-col"></th></tr>
+                  </thead>
+                  <tbody>
+                    @for (row of allocations; track $index) {
+                      <tr>
+                        <td>
+                          <select class="form-select form-select-sm"
+                                  [name]="'gid' + $index" [(ngModel)]="row.grnId">
+                            <option [ngValue]="null">— pick a GRN —</option>
+                            @for (g of grnOptions(); track g.id) {
+                              <option [ngValue]="g.id">{{ g.number }} ({{ g.totalAmount | number:'1.0-2' }})</option>
+                            }
+                          </select>
+                        </td>
+                        <td>
+                          <input class="form-control form-control-sm text-end" type="number" step="0.0001" min="0"
+                                 [name]="'gam' + $index" [(ngModel)]="row.amount">
+                        </td>
+                        <td class="actions-col">
+                          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="removeAllocation($index)">
+                            <i class="bi bi-x-lg"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
               </div>
 
-              <button class="btn btn-primary w-100" [disabled]="busy() || f.invalid">
+              <div class="alloc-summary">
+                <div class="alloc-summary__cell">
+                  <span class="alloc-summary__label">Total</span>
+                  <span class="alloc-summary__value">{{ headerTotal() | number:'1.2-2' }}</span>
+                </div>
+                <div class="alloc-summary__cell">
+                  <span class="alloc-summary__label">Allocated</span>
+                  <span class="alloc-summary__value">{{ allocationsSum() | number:'1.2-2' }}</span>
+                </div>
+                <div class="alloc-summary__cell">
+                  <span class="alloc-summary__label">Diff</span>
+                  <span class="alloc-summary__value" [class.text-danger]="!withinTolerance()">
+                    {{ headerTotal() - allocationsSum() | number:'1.2-2' }}
+                  </span>
+                </div>
+              </div>
+            </fieldset>
+
+            <div class="d-flex gap-2 pt-2 border-top">
+              <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                      [disabled]="busy() || f.invalid">
+                @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                @else { <i class="bi bi-receipt-cutoff"></i> }
                 Create draft invoice
               </button>
-            </form>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    }
+
+    <div class="row g-3 g-md-4">
+      <div class="col-12 col-lg-5">
+        <div class="card border-0 shadow-sm overflow-hidden">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">Invoices</h2>
+            <span class="badge text-bg-light text-secondary">{{ invoices().length }}</span>
           </div>
+          @if (invoices().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-receipt-cutoff"></i></div>
+              <p class="small text-secondary mb-0">No invoices yet.</p>
+            </div>
+          } @else {
+            <ul class="list-unstyled mb-0 si-list">
+              @for (i of invoices(); track i.id) {
+                <li>
+                  <button type="button" class="si-row"
+                          [class.is-active]="selected()?.id === i.id"
+                          (click)="select(i)">
+                    <div class="flex-grow-1 min-w-0">
+                      <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge text-bg-light border text-secondary font-monospace">{{ i.number }}</span>
+                        <span class="status-badge status-badge--{{ i.status.toLowerCase() }}">
+                          <span class="status-badge__dot"></span>{{ statusLabel(i.status) }}
+                        </span>
+                      </div>
+                      <p class="small text-secondary mb-0">
+                        Supplier #{{ i.supplierId }} · <span class="font-monospace">{{ i.supplierInvoiceNo }}</span> · due {{ i.dueDate | date:'mediumDate' }}
+                      </p>
+                    </div>
+                    <div class="text-end">
+                      <div class="fw-bold text-dark">{{ i.totalAmount | number:'1.2-2' }}</div>
+                      @if (i.paidAmount > 0) {
+                        <div class="small text-success">paid {{ i.paidAmount | number:'1.2-2' }}</div>
+                      }
+                    </div>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
         </div>
       </div>
 
-      <div class="col-12 col-lg-8">
+      <div class="col-12 col-lg-7">
         @if (selected(); as inv) {
-          <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <span class="fw-semibold">{{ inv.number }} ({{ inv.supplierInvoiceNo }}) — {{ inv.status }}</span>
-              <div class="btn-group">
-                @if (inv.status === 'DRAFT') {
-                  <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="post(inv)">Post</button>
-                  <button class="btn btn-sm btn-outline-danger" [disabled]="busy()" (click)="cancel(inv)">Cancel</button>
-                }
-                @if (inv.status === 'POSTED') {
-                  <button class="btn btn-sm btn-outline-danger" [disabled]="busy()" (click)="cancel(inv)">Cancel</button>
-                }
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div>
+                  <p class="small text-secondary mb-1">
+                    Supplier #{{ inv.supplierId }} · <span class="font-monospace">{{ inv.supplierInvoiceNo }}</span>
+                  </p>
+                  <h2 class="h4 fw-bold mb-1 text-dark">{{ inv.number }}</h2>
+                  <span class="status-badge status-badge--{{ inv.status.toLowerCase() }}">
+                    <span class="status-badge__dot"></span>{{ statusLabel(inv.status) }}
+                  </span>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                  @if (inv.status === 'DRAFT') {
+                    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="post(inv)">
+                      <i class="bi bi-send"></i> Post
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(inv)">
+                      <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  }
+                  @if (inv.status === 'POSTED') {
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(inv)">
+                      <i class="bi bi-slash-circle"></i> Cancel
+                    </button>
+                  }
+                </div>
               </div>
-            </div>
-            <div class="card-body">
-              <dl class="row mb-3">
-                <dt class="col-sm-3">Supplier</dt><dd class="col-sm-9">#{{ inv.supplierId }}</dd>
-                <dt class="col-sm-3">Invoice date</dt><dd class="col-sm-9">{{ inv.invoiceDate }}</dd>
-                <dt class="col-sm-3">Due date</dt><dd class="col-sm-9">{{ inv.dueDate }}</dd>
-                <dt class="col-sm-3">Currency</dt><dd class="col-sm-9">{{ inv.currencyCode }}</dd>
-                <dt class="col-sm-3">Subtotal</dt><dd class="col-sm-9">{{ inv.subtotalAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-3">Tax</dt><dd class="col-sm-9">{{ inv.taxAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-3">Total</dt>
-                <dd class="col-sm-9 fw-semibold">{{ inv.totalAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-3">Paid</dt><dd class="col-sm-9">{{ inv.paidAmount | number:'1.2-2' }}</dd>
+
+              <div class="row g-2 totals-row mb-3">
+                <div class="col-6 col-md-3">
+                  <p class="totals-row__label">Subtotal</p>
+                  <p class="totals-row__value">{{ inv.subtotalAmount | number:'1.2-2' }}</p>
+                </div>
+                <div class="col-6 col-md-3">
+                  <p class="totals-row__label">Tax</p>
+                  <p class="totals-row__value">{{ inv.taxAmount | number:'1.2-2' }}</p>
+                </div>
+                <div class="col-6 col-md-3">
+                  <p class="totals-row__label">Total</p>
+                  <p class="totals-row__value totals-row__value--strong">{{ inv.totalAmount | number:'1.2-2' }}</p>
+                </div>
+                <div class="col-6 col-md-3">
+                  <p class="totals-row__label">Paid</p>
+                  <p class="totals-row__value text-success">{{ inv.paidAmount | number:'1.2-2' }}</p>
+                </div>
+              </div>
+
+              <dl class="row small mb-0">
+                <dt class="col-4 text-secondary">Invoice date</dt>
+                <dd class="col-8 mb-1">{{ inv.invoiceDate | date:'mediumDate' }}</dd>
+                <dt class="col-4 text-secondary">Due date</dt>
+                <dd class="col-8 mb-1">{{ inv.dueDate | date:'mediumDate' }}</dd>
+                <dt class="col-4 text-secondary">Currency</dt>
+                <dd class="col-8 mb-1 font-monospace">{{ inv.currencyCode }}</dd>
                 @if (inv.postedAt) {
-                  <dt class="col-sm-3">Posted</dt>
-                  <dd class="col-sm-9">by #{{ inv.postedBy }} at {{ inv.postedAt }}</dd>
+                  <dt class="col-4 text-secondary">Posted</dt>
+                  <dd class="col-8 mb-1">by #{{ inv.postedBy }} at {{ inv.postedAt | date:'medium' }}</dd>
                 }
               </dl>
-              <h5 class="h6">Allocations</h5>
-              <table class="table table-sm align-middle">
-                <thead><tr><th>GRN id</th><th class="text-end">Amount</th></tr></thead>
+            </div>
+          </div>
+
+          <div class="card border-0 shadow-sm overflow-hidden">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h3 class="h6 fw-bold mb-0 text-dark">Allocations to GRNs</h3>
+              <span class="badge text-bg-light text-secondary">{{ inv.allocations.length }}</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0 simple-table">
+                <thead>
+                  <tr><th>GRN</th><th class="text-end">Amount</th></tr>
+                </thead>
                 <tbody>
                   @for (a of inv.allocations; track a.grnId) {
                     <tr>
-                      <td>#{{ a.grnId }}</td>
-                      <td class="text-end">{{ a.amount | number:'1.2-2' }}</td>
+                      <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ a.grnId }}</span></td>
+                      <td class="text-end fw-semibold">{{ a.amount | number:'1.2-2' }}</td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="2" class="text-muted">No allocations.</td></tr>
+                    <tr><td colspan="2" class="text-center text-secondary py-4">No allocations.</td></tr>
                   }
                 </tbody>
               </table>
             </div>
           </div>
         } @else {
-          <div class="alert alert-secondary">Select an invoice, or create one and match it to its GRNs.</div>
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
+              <h2 class="h6 fw-bold mb-1 text-dark">Pick a supplier invoice</h2>
+              <p class="small text-secondary mb-0">Or create one and match it to its GRNs.</p>
+            </div>
+          </div>
         }
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    :host { display: block; }
+    .min-w-0 { min-width: 0; }
+
+    .form-fieldset {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem 1.25rem;
+    }
+    .form-fieldset__legend {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #374151; padding: 0 0.5rem; width: 100%; margin-bottom: 0.5rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+
+    .line-table thead th {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; border-bottom: 1px solid #e5e7eb; padding: 0.5rem 0.5rem;
+    }
+    .line-table tbody td { padding: 0.4rem 0.5rem; vertical-align: middle; }
+    .line-table .actions-col { width: 1%; white-space: nowrap; }
+
+    .alloc-summary {
+      display: flex; gap: 1rem; padding: 0.75rem 1rem; margin-top: 0.75rem;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+    }
+    .alloc-summary__cell { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+    .alloc-summary__label {
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280;
+    }
+    .alloc-summary__value { font-size: 0.95rem; font-weight: 600; color: #111827; }
+
+    .si-list { max-height: 70vh; overflow-y: auto; }
+    .si-row {
+      width: 100%; display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1rem; background: #fff; border: none;
+      border-bottom: 1px solid #f3f4f6; text-align: left;
+      transition: background 0.1s ease;
+    }
+    .si-row:hover { background: #f8fafc; }
+    .si-row.is-active { background: #eef4ff; border-left: 3px solid #1d4ed8; padding-left: calc(1rem - 3px); }
+    .si-row:last-child { border-bottom: none; }
+
+    .simple-table thead th {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table tbody tr:hover { background: #f8fafc; }
+
+    .totals-row .totals-row__label {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; margin-bottom: 0.15rem;
+    }
+    .totals-row .totals-row__value { font-size: 1.05rem; font-weight: 600; color: #111827; margin-bottom: 0; }
+    .totals-row .totals-row__value--strong { font-size: 1.4rem; color: #0d2a5b; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.25rem 0.625rem; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-badge--draft           { background: #f3f4f6; color: #4b5563; }
+    .status-badge--draft .status-badge__dot           { background: #9ca3af; }
+    .status-badge--posted          { background: #e0ecff; color: #1d4ed8; }
+    .status-badge--posted .status-badge__dot          { background: #3b82f6; }
+    .status-badge--partially_paid  { background: #fef3c7; color: #92400e; }
+    .status-badge--partially_paid .status-badge__dot  { background: #f59e0b; }
+    .status-badge--paid            { background: #d1fae5; color: #047857; }
+    .status-badge--paid .status-badge__dot            { background: #10b981; }
+    .status-badge--cancelled       { background: #fee2e2; color: #b91c1c; }
+    .status-badge--cancelled .status-badge__dot       { background: #f43f5e; }
+
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: #d1fae5; color: #047857; font-size: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+  `]
 })
 export class InvoicesComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
 
-  readonly invoices = signal<SupplierInvoice[]>([]);
-  readonly selected = signal<SupplierInvoice | null>(null);
-  readonly grnOptions = signal<Grn[]>([]);
-  readonly busy = signal<boolean>(false);
-  readonly error = signal<string | null>(null);
-  readonly info = signal<string | null>(null);
+  protected readonly invoices = signal<SupplierInvoice[]>([]);
+  protected readonly selected = signal<SupplierInvoice | null>(null);
+  protected readonly grnOptions = signal<Grn[]>([]);
+  protected readonly busy = signal<boolean>(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly info = signal<string | null>(null);
+  protected readonly showForm = signal(false);
 
-  readonly branchId = computed(() =>
+  protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  // form state
-  newNumber = '';
-  newSupplierInvoiceNo = '';
-  newSupplierId: number | null = null;
-  newInvoiceDate = new Date().toISOString().slice(0, 10);
-  newDueDate: string | null = null;
-  newCurrency = 'TZS';
-  newSubtotal: number | null = null;
-  newTax: number | null = 0;
-  allocations: AllocRow[] = [{ grnId: null, amount: null }];
+  protected newNumber = '';
+  protected newSupplierInvoiceNo = '';
+  protected newSupplierId: number | null = null;
+  protected newInvoiceDate = new Date().toISOString().slice(0, 10);
+  protected newDueDate: string | null = null;
+  protected newCurrency = 'TZS';
+  protected newSubtotal: number | null = null;
+  protected newTax: number | null = 0;
+  protected allocations: AllocRow[] = [{ grnId: null, amount: null }];
 
-  readonly tolerance = 0.005;
+  protected readonly tolerance = 0.005;
+
+  ngOnInit(): void { this.refresh(); }
+
+  toggleForm(): void { this.showForm.update(v => !v); }
+
+  statusLabel(status: string): string {
+    return status === 'PARTIALLY_PAID' ? 'PART-PAID' : status;
+  }
 
   headerTotal(): number {
     return (this.newSubtotal ?? 0) + (this.newTax ?? 0);
@@ -237,10 +447,6 @@ export class InvoicesComponent implements OnInit {
     const total = this.headerTotal();
     if (total === 0) return this.allocationsSum() === 0;
     return Math.abs(total - this.allocationsSum()) <= Math.abs(total) * this.tolerance;
-  }
-
-  ngOnInit(): void {
-    this.refresh();
   }
 
   refresh(): void {
@@ -310,6 +516,7 @@ export class InvoicesComponent implements OnInit {
     this.newSubtotal = null;
     this.newTax = 0;
     this.allocations = [{ grnId: null, amount: null }];
+    this.showForm.set(false);
   }
 
   post(inv: SupplierInvoice): void {
@@ -317,11 +524,11 @@ export class InvoicesComponent implements OnInit {
   }
 
   cancel(inv: SupplierInvoice): void {
-    if (!window.confirm(`Cancel ${inv.number}?`)) return;
+    if (!globalThis.confirm(`Cancel ${inv.number}?`)) return;
     this.run(this.procurement.cancelSupplierInvoice(inv.id), `Invoice cancelled.`);
   }
 
-  private run(op: import('rxjs').Observable<SupplierInvoice>, successMessage: string): void {
+  private run(op: Observable<SupplierInvoice>, successMessage: string): void {
     this.busy.set(true);
     this.error.set(null);
     this.info.set(null);
@@ -332,10 +539,7 @@ export class InvoicesComponent implements OnInit {
         this.selected.set(inv);
         this.refresh();
       },
-      error: err => {
-        this.busy.set(false);
-        this.showError(err);
-      }
+      error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 

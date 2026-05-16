@@ -38,6 +38,25 @@ services:
       interval: 10s
       retries: 10
 
+  phpmyadmin:
+    # Web UI for the MariaDB above. Reachable at http://localhost:8080.
+    # Auto-logs in as the orbix user; switch to root on the login screen
+    # if you need to create users or databases.
+    image: phpmyadmin:5
+    container_name: orbix-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: orbix
+      PMA_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
+      UPLOAD_LIMIT: 256M
+    ports:
+      - "8080:80"
+
   postgres:
     image: postgres:15
     container_name: orbix-postgres

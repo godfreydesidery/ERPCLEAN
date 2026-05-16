@@ -1,5 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
@@ -9,85 +11,184 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
 @Component({
   selector: 'orbix-uom',
   standalone: true,
-  imports: [FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <h2 class="h3 mb-4">Units of measure</h2>
+    <header class="mb-4">
+      <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
+        <a routerLink=".." class="text-decoration-none text-secondary">Catalog</a> &rsaquo; Units of measure
+      </p>
+      <h1 class="h3 fw-bold mb-1 text-dark">Units of measure</h1>
+      <p class="text-secondary mb-0 small">Register the units used for stock, sales and weighing.</p>
+    </header>
 
     @if (error()) {
-      <div class="alert alert-danger py-2">{{ error() }}</div>
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
+      </div>
     }
 
-    <table class="table table-sm align-middle" style="max-width: 640px">
-      <thead>
-        <tr><th>Code</th><th>Name</th><th>Dimension</th><th>Base</th><th></th></tr>
-      </thead>
-      <tbody>
-        @for (uom of uoms(); track uom.id) {
-          <tr>
-            <td>{{ uom.code }}</td>
-            <td>{{ uom.name }}</td>
-            <td>{{ uom.dimension }}</td>
-            <td>{{ uom.base ? 'yes' : 'no' }}</td>
-            <td class="text-end">
-              <button class="btn btn-sm btn-outline-secondary" (click)="edit(uom)"
-                      [disabled]="busy()">Edit</button>
-            </td>
-          </tr>
-        } @empty {
-          <tr><td colspan="5" class="text-muted">No units yet.</td></tr>
-        }
-      </tbody>
-    </table>
-
-    <div class="card shadow-sm" style="max-width: 640px">
-      <div class="card-header fw-semibold">{{ editingId() ? 'Edit unit' : 'New unit' }}</div>
-      <div class="card-body">
-        <form (ngSubmit)="submit()" #f="ngForm" class="row g-2">
-          <div class="col-md-3">
-            <label class="form-label">Code</label>
-            <input class="form-control" name="code" [(ngModel)]="form.code" required
-                   [disabled]="!!editingId()">
+    <div class="row g-3 g-md-4">
+      <!-- List -->
+      <div class="col-12 col-lg-7">
+        <div class="card border-0 shadow-sm overflow-hidden">
+          <div class="card-header bg-white border-bottom p-3">
+            <h2 class="h6 fw-bold mb-0 text-dark">Existing units</h2>
           </div>
-          <div class="col-md-4">
-            <label class="form-label">Name</label>
-            <input class="form-control" name="name" [(ngModel)]="form.name" required>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Dimension</label>
-            <select class="form-select" name="dim" [(ngModel)]="form.dimension" required>
-              @for (d of dimensions; track d) { <option [value]="d">{{ d }}</option> }
-            </select>
-          </div>
-          <div class="col-md-2 d-flex align-items-end">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="base" name="base"
-                     [(ngModel)]="form.base">
-              <label class="form-check-label" for="base">Base</label>
+          @if (uoms().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-rulers"></i></div>
+              <p class="small text-secondary mb-0">No units defined yet. Add one to get started.</p>
             </div>
-          </div>
-          <div class="col-12 d-flex gap-2">
-            <button class="btn btn-primary" [disabled]="busy() || f.invalid">
-              {{ editingId() ? 'Save' : 'Create' }}
-            </button>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0 simple-table">
+                <thead>
+                  <tr>
+                    <th>Code</th><th>Name</th><th>Dimension</th><th>Base</th><th class="text-end"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (uom of uoms(); track uom.id) {
+                    <tr [class.table-active]="editingId() === uom.id">
+                      <td><span class="badge text-bg-light border text-secondary font-monospace">{{ uom.code }}</span></td>
+                      <td class="fw-semibold text-dark">{{ uom.name }}</td>
+                      <td><span class="dim-pill dim-pill--{{ uom.dimension.toLowerCase() }}">{{ uom.dimension }}</span></td>
+                      <td>
+                        @if (uom.base) {
+                          <i class="bi bi-check-circle-fill text-success"></i>
+                        } @else {
+                          <span class="text-muted small">—</span>
+                        }
+                      </td>
+                      <td class="text-end">
+                        <button class="btn btn-sm btn-outline-secondary" (click)="edit(uom)" [disabled]="busy()">
+                          <i class="bi bi-pencil"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div class="col-12 col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">
+              {{ editingId() ? 'Edit unit' : 'New unit' }}
+            </h2>
             @if (editingId()) {
-              <button type="button" class="btn btn-outline-secondary" (click)="cancel()">Cancel</button>
+              <span class="badge text-bg-light text-secondary">Editing #{{ editingId() }}</span>
             }
           </div>
-        </form>
+          <div class="card-body p-3">
+            <form (ngSubmit)="submit()" #f="ngForm" class="d-flex flex-column gap-3">
+              <div>
+                <label class="form-label small fw-semibold text-secondary">Code</label>
+                <input class="form-control" name="code" [(ngModel)]="form.code" required
+                       [disabled]="!!editingId()" placeholder="e.g. KG">
+              </div>
+              <div>
+                <label class="form-label small fw-semibold text-secondary">Name</label>
+                <input class="form-control" name="name" [(ngModel)]="form.name" required
+                       placeholder="e.g. Kilogram">
+              </div>
+              <div>
+                <label class="form-label small fw-semibold text-secondary">Dimension</label>
+                <select class="form-select" name="dim" [(ngModel)]="form.dimension" required>
+                  @for (d of dimensions; track d) { <option [value]="d">{{ d }}</option> }
+                </select>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="base" name="base"
+                       [(ngModel)]="form.base">
+                <label class="form-check-label small" for="base">
+                  Base unit of its dimension
+                </label>
+              </div>
+              <div class="d-flex gap-2 pt-2 border-top">
+                <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                        [disabled]="busy() || f.invalid">
+                  @if (busy()) {
+                    <span class="spinner-border spinner-border-sm"></span>
+                  } @else {
+                    <i class="bi" [class.bi-save]="editingId()" [class.bi-plus-lg]="!editingId()"></i>
+                  }
+                  {{ editingId() ? 'Save changes' : 'Create unit' }}
+                </button>
+                @if (editingId()) {
+                  <button type="button" class="btn btn-outline-secondary" (click)="cancel()">Cancel</button>
+                }
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    :host { display: block; }
+
+    .simple-table thead th {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table tbody tr:hover { background: #f8fafc; }
+    .simple-table tr.table-active { background: #eef4ff !important; }
+
+    .dim-pill {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .dim-pill--count  { background: #e0ecff; color: #1d4ed8; }
+    .dim-pill--weight { background: #fef3c7; color: #92400e; }
+    .dim-pill--volume { background: #d1fae5; color: #047857; }
+    .dim-pill--length { background: #ede9fe; color: #6d28d9; }
+
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: #eef2ff; color: #6366f1; font-size: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8;
+      box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+  `]
 })
 export class UomComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
 
-  readonly uoms = signal<Uom[]>([]);
-  readonly editingId = signal<number | null>(null);
-  readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
+  protected readonly uoms = signal<Uom[]>([]);
+  protected readonly editingId = signal<number | null>(null);
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
 
-  readonly dimensions = UOM_DIMENSIONS;
-  form: { code: string; name: string; dimension: UomDimension; base: boolean } = blank();
+  protected readonly dimensions = UOM_DIMENSIONS;
+  protected form: { code: string; name: string; dimension: UomDimension; base: boolean } = blank();
 
   ngOnInit(): void {
     this.load();

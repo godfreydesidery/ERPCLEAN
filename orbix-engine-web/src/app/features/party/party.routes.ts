@@ -1,7 +1,10 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'customers' },
+  {
+    path: '',
+    loadComponent: () => import('./party.component').then(m => m.PartyComponent)
+  },
   {
     path: 'customers',
     loadComponent: () => import('./customers.component').then(m => m.CustomersComponent)
