@@ -1,5 +1,5 @@
--- Emulated sequences for the F2.3 stock count / transfer aggregates.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('stock_count_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('stock_count_line_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('stock_transfer_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('stock_transfer_line_seq', 1);
+-- Sequences for the F2.3 stock count / transfer aggregates.
+CREATE SEQUENCE stock_count_seq         START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE stock_count_line_seq    START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE stock_transfer_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE stock_transfer_line_seq START WITH 1 INCREMENT BY 50;

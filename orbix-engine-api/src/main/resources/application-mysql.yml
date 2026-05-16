@@ -1,6 +1,16 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/orbix_erp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    # Default points at the Dockerised MariaDB on port 3307 (docker-compose.yml
+    # maps the container's 3306 to host 3307 to avoid clashing with a host-
+    # installed MariaDB / MySQL on 3306). Override DB_URL for other setups.
+    #
+    # connectionTimeZone=LOCAL — driver uses the JVM's local zone, matching the
+    # container which is in UTC. The container also sets
+    # explicit_defaults_for_timestamp=1 in command flags, so TIMESTAMP columns
+    # behave the modern way (NULLable; no implicit DEFAULT CURRENT_TIMESTAMP /
+    # ON UPDATE CURRENT_TIMESTAMP). On a legacy server, add
+    # `&sessionVariables=explicit_defaults_for_timestamp=ON` to the URL.
+    url: ${DB_URL:jdbc:mysql://localhost:3307/orbix_erp?useSSL=false&connectionTimeZone=LOCAL&allowPublicKeyRetrieval=true}
     username: ${DB_USER:orbix}
     password: ${DB_PASSWORD:orbixlocal}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -8,7 +18,11 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 2
   jpa:
-    database-platform: org.hibernate.dialect.MySQLDialect
+    # MariaDB 10.3+ supports native CREATE SEQUENCE; vanilla MySQL 8 doesn't.
+    # The mysql/ Flyway dir targets MariaDB (uses CREATE SEQUENCE for sequence
+    # creation), so use MariaDBDialect so Hibernate queries sequences via
+    # NEXTVAL FOR rather than the table-emulated next_val column lookup.
+    database-platform: org.hibernate.dialect.MariaDBDialect
   flyway:
     locations:
       - classpath:db/migration/common

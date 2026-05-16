@@ -103,19 +103,16 @@ public class DevSeed implements CommandLineRunner {
     }
 
     private Long nextVal(String sequenceName) {
-        // DB-agnostic next-value lookup: works for both MySQL's emulated
-        // hibernate_sequence table and PostgreSQL's native sequences.
+        // DB-agnostic next-value lookup. MariaDB / SQL-standard: NEXT VALUE
+        // FOR seq_name (no quotes — seq_name is an identifier). Postgres:
+        // nextval('seq_name') (function call with a string literal). Try
+        // MariaDB / standard form first, then Postgres.
         try {
             return jdbc.queryForObject(
-                "SELECT nextval('" + sequenceName + "')", Long.class);
+                "SELECT NEXT VALUE FOR " + sequenceName, Long.class);
         } catch (Exception ignored) {
-            Long current = jdbc.queryForObject(
-                "SELECT next_val FROM hibernate_sequence WHERE sequence_name = ?",
-                Long.class, sequenceName);
-            jdbc.update(
-                "UPDATE hibernate_sequence SET next_val = next_val + 1 WHERE sequence_name = ?",
-                sequenceName);
-            return current;
+            return jdbc.queryForObject(
+                "SELECT nextval('" + sequenceName + "')", Long.class);
         }
     }
 }

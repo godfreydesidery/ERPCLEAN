@@ -13,14 +13,12 @@
 --     currency totals and the existing F6.1 idempotency / projection logic.
 -- Pre-existing rows (dev DBs only — this is a clean-build project) backfill
 -- to tender_amount = amount and fx_rate_snapshot = 1 via the column DEFAULTs.
+--
+-- The cash_book PK swap is dialect-specific (MySQL silently ignores the
+-- pk_cash_book name so DROP CONSTRAINT pk_cash_book fails on MySQL; Postgres
+-- preserves the named constraint). The dialect-aware swap lives in
+-- mysql/V44_1__cash_book_pk_swap.sql + postgres/V44_1__cash_book_pk_swap.sql.
 
 ALTER TABLE cash_entry ADD COLUMN fx_rate_snapshot DECIMAL(20, 8) NOT NULL DEFAULT 1;
 ALTER TABLE cash_entry ADD COLUMN tender_amount    DECIMAL(18, 4);
 UPDATE cash_entry SET tender_amount = amount WHERE tender_amount IS NULL;
-
--- cash_book PK extension. currency_code is already a NOT NULL column on the
--- table (added in V40); F6.1 stored functional currency there so existing
--- rows survive the PK swap as-is.
-ALTER TABLE cash_book DROP CONSTRAINT pk_cash_book;
-ALTER TABLE cash_book ADD CONSTRAINT pk_cash_book
-    PRIMARY KEY (branch_id, account, currency_code, business_date);

@@ -1,3 +1,3 @@
--- Emulated sequences for the F3.2 GRN aggregate.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('grn_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('grn_line_seq', 1);
+-- Sequences for the F3.2 GRN aggregate.
+CREATE SEQUENCE grn_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE grn_line_seq START WITH 1 INCREMENT BY 50;

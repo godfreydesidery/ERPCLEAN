@@ -1,3 +1,3 @@
 -- Phase 1.1 sequences.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('section_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('fx_rate_seq', 1);
+CREATE SEQUENCE section_seq START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE fx_rate_seq START WITH 1 INCREMENT BY 50;

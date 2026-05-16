@@ -1,3 +1,3 @@
--- Emulated sequences for the F4.3 sales_receipt aggregate.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('sales_receipt_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('receipt_allocation_seq', 1);
+-- Sequences for the F4.3 sales_receipt aggregate.
+CREATE SEQUENCE sales_receipt_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE receipt_allocation_seq START WITH 1 INCREMENT BY 50;
