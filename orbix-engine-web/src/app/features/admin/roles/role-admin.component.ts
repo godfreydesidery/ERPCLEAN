@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
@@ -10,200 +11,360 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
 @Component({
   selector: 'orbix-role-admin',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <h2 class="h3 mb-4">Roles &amp; permissions</h2>
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
+          <a routerLink=".." class="text-decoration-none text-secondary">Admin</a> &rsaquo; Roles &amp; permissions
+        </p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Roles &amp; permissions</h1>
+        <p class="text-secondary mb-0 small">{{ roles().length }} role{{ roles().length === 1 ? '' : 's' }} configured.</p>
+      </div>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleNewRole()">
+        <i class="bi" [class.bi-plus-lg]="!showNewRole()" [class.bi-x-lg]="showNewRole()"></i>
+        {{ showNewRole() ? 'Close form' : 'New role' }}
+      </button>
+    </header>
 
     @if (error()) {
-      <div class="alert alert-danger py-2">{{ error() }}</div>
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
     }
 
-    <div class="row g-4">
-      <!-- Roles list + create -->
-      <div class="col-12 col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-header fw-semibold">Roles</div>
-          <div class="list-group list-group-flush">
-            @for (role of roles(); track role.id) {
-              <button type="button"
-                      class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      [class.active]="selected()?.id === role.id"
-                      (click)="selectRole(role.id)">
-                <span>
-                  <span class="fw-semibold">{{ role.name }}</span>
-                  <small class="d-block text-muted">{{ role.code }}</small>
-                </span>
-                <span>
-                  @if (role.isSystem) {
-                    <span class="badge text-bg-secondary me-1">system</span>
-                  }
-                  <span class="badge text-bg-light">{{ role.permissionCount }}</span>
-                </span>
-              </button>
-            } @empty {
-              <div class="list-group-item text-muted">No roles yet.</div>
-            }
-          </div>
+    @if (showNewRole()) {
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <h2 class="h6 fw-bold mb-0 text-dark">New role</h2>
+          <button class="btn-close btn-sm" (click)="toggleNewRole()"></button>
         </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-semibold">New role</div>
-          <div class="card-body">
-            <form (ngSubmit)="createRole()" #cf="ngForm">
-              <div class="mb-2">
-                <label class="form-label">Code</label>
-                <input class="form-control" name="code" [(ngModel)]="newCode" required
-                       placeholder="e.g. SALES_MANAGER">
+        <div class="card-body p-3">
+          <form (ngSubmit)="createRole()" #cf="ngForm" class="d-flex flex-column gap-3">
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold text-secondary">Code</label>
+                <input class="form-control font-monospace text-uppercase" name="code"
+                       [(ngModel)]="newCode" required placeholder="SALES_MANAGER">
               </div>
-              <div class="mb-2">
-                <label class="form-label">Name</label>
+              <div class="col-md-8">
+                <label class="form-label small fw-semibold text-secondary">Name</label>
                 <input class="form-control" name="name" [(ngModel)]="newName" required>
               </div>
-              <div class="mb-2">
-                <label class="form-label">Description</label>
+              <div class="col-12">
+                <label class="form-label small fw-semibold text-secondary">Description</label>
                 <textarea class="form-control" name="desc" rows="2" [(ngModel)]="newDescription"></textarea>
               </div>
-              <button class="btn btn-primary w-100" [disabled]="saving() || cf.invalid">Create role</button>
-            </form>
+            </div>
+            <div class="d-flex gap-2 pt-2 border-top">
+              <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                      [disabled]="saving() || cf.invalid">
+                @if (saving()) { <span class="spinner-border spinner-border-sm"></span> }
+                @else { <i class="bi bi-plus-lg"></i> }
+                Create role
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleNewRole()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    }
+
+    <div class="row g-3 g-md-4">
+      <!-- Roles list -->
+      <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm overflow-hidden">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">Roles</h2>
+            <span class="badge text-bg-light text-secondary">{{ roles().length }}</span>
           </div>
+          @if (roles().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-shield-lock"></i></div>
+              <p class="small text-secondary mb-0">No roles yet.</p>
+            </div>
+          } @else {
+            <ul class="list-unstyled mb-0 rl-list">
+              @for (role of roles(); track role.id) {
+                <li>
+                  <button type="button" class="rl-row"
+                          [class.is-active]="selected()?.id === role.id"
+                          (click)="selectRole(role.id)">
+                    <div class="flex-grow-1 min-w-0">
+                      <p class="fw-semibold text-dark mb-0 text-truncate">{{ role.name }}</p>
+                      <p class="small text-secondary mb-0 font-monospace">{{ role.code }}</p>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                      @if (role.isSystem) {
+                        <span class="badge text-bg-primary-subtle text-primary">SYSTEM</span>
+                      }
+                      <span class="badge text-bg-light text-secondary">{{ role.permissionCount }} perms</span>
+                    </div>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
         </div>
       </div>
 
       <!-- Selected role detail -->
       <div class="col-12 col-lg-8">
         @if (selected(); as role) {
-          <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <span class="fw-semibold">{{ role.code }}</span>
-              @if (!role.isSystem) {
-                <button class="btn btn-sm btn-outline-danger" (click)="deleteRole(role)"
-                        [disabled]="saving()">Delete role</button>
-              }
-            </div>
-            <div class="card-body">
+          <!-- Role header -->
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div>
+                  <p class="small text-secondary mb-1 font-monospace">{{ role.code }}</p>
+                  <h2 class="h4 fw-bold mb-1 text-dark">{{ role.name }}</h2>
+                  @if (role.isSystem) {
+                    <span class="badge text-bg-primary-subtle text-primary">SYSTEM ROLE</span>
+                  }
+                </div>
+                @if (!role.isSystem) {
+                  <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                          (click)="deleteRole(role)" [disabled]="saving()">
+                    <i class="bi bi-trash"></i> Delete role
+                  </button>
+                }
+              </div>
+
               @if (role.isSystem) {
-                <div class="alert alert-secondary py-2">
-                  System role — name, description and permissions are locked.
+                <div class="alert alert-info py-2 mb-3 d-flex align-items-start gap-2 small">
+                  <i class="bi bi-info-circle-fill mt-1"></i>
+                  <div>System role — name, description and permissions are locked.</div>
                 </div>
               }
 
-              <!-- Details -->
-              <form (ngSubmit)="saveDetails(role)" #df="ngForm" class="mb-4">
-                <div class="mb-2">
-                  <label class="form-label">Name</label>
+              <form (ngSubmit)="saveDetails(role)" #df="ngForm" class="d-flex flex-column gap-2">
+                <div>
+                  <label class="form-label small fw-semibold text-secondary">Name</label>
                   <input class="form-control" name="ename" [(ngModel)]="editName" required
                          [disabled]="role.isSystem">
                 </div>
-                <div class="mb-2">
-                  <label class="form-label">Description</label>
+                <div>
+                  <label class="form-label small fw-semibold text-secondary">Description</label>
                   <textarea class="form-control" name="edesc" rows="2" [(ngModel)]="editDescription"
                             [disabled]="role.isSystem"></textarea>
                 </div>
                 @if (!role.isSystem) {
-                  <button class="btn btn-outline-primary btn-sm" [disabled]="saving() || df.invalid">
-                    Save details
-                  </button>
+                  <div class="d-flex">
+                    <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
+                            [disabled]="saving() || df.invalid">
+                      <i class="bi bi-save"></i> Save details
+                    </button>
+                  </div>
                 }
               </form>
+            </div>
+          </div>
 
-              <!-- Permissions -->
-              <h3 class="h6">Permissions</h3>
+          <!-- Permissions -->
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h3 class="h6 fw-bold mb-0 text-dark">Permissions</h3>
+              <span class="badge text-bg-light text-secondary">{{ selectedPermissionsCount() }} selected</span>
+            </div>
+            <div class="card-body p-3">
               @for (group of permissionGroups(); track group.module) {
-                <div class="mb-3">
-                  <div class="text-uppercase text-muted small fw-semibold mb-1">{{ group.module }}</div>
-                  <div class="row">
+                <div class="mb-3 perm-group">
+                  <div class="perm-group-header">
+                    <span class="perm-group-label">{{ group.module }}</span>
+                  </div>
+                  <div class="row g-2">
                     @for (perm of group.perms; track perm.id) {
                       <div class="col-12 col-md-6">
-                        <div class="form-check">
+                        <label class="perm-check" [for]="'perm-' + perm.id"
+                               [class.is-checked]="isChecked(perm.id)"
+                               [class.is-disabled]="role.isSystem">
                           <input class="form-check-input" type="checkbox" [id]="'perm-' + perm.id"
                                  [checked]="isChecked(perm.id)" [disabled]="role.isSystem"
                                  (change)="togglePermission(perm.id)">
-                          <label class="form-check-label" [for]="'perm-' + perm.id">
-                            <span class="fw-semibold">{{ perm.code }}</span>
-                            <small class="d-block text-muted">{{ perm.description }}</small>
-                          </label>
-                        </div>
+                          <span class="flex-grow-1 min-w-0">
+                            <span class="perm-code">{{ perm.code }}</span>
+                            <span class="perm-desc">{{ perm.description }}</span>
+                          </span>
+                        </label>
                       </div>
                     }
                   </div>
                 </div>
               }
               @if (!role.isSystem) {
-                <button class="btn btn-outline-primary btn-sm mb-4" (click)="savePermissions(role)"
-                        [disabled]="saving()">Save permissions</button>
+                <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
+                        (click)="savePermissions(role)" [disabled]="saving()">
+                  <i class="bi bi-save"></i> Save permissions
+                </button>
               }
+            </div>
+          </div>
 
-              <!-- Grants -->
-              <h3 class="h6">Granted to</h3>
-              <table class="table table-sm align-middle">
+          <!-- Grants -->
+          <div class="card border-0 shadow-sm overflow-hidden">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h3 class="h6 fw-bold mb-0 text-dark">Granted to</h3>
+              <span class="badge text-bg-light text-secondary">{{ grants().length }}</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0 simple-table">
                 <thead>
-                  <tr><th>User</th><th>Branch</th><th>Granted</th><th></th></tr>
+                  <tr>
+                    <th>User</th><th>Branch</th><th>Granted</th><th class="text-end actions-col"></th>
+                  </tr>
                 </thead>
                 <tbody>
                   @for (grant of grants(); track grant.id) {
                     <tr>
                       <td>
-                        <span class="fw-semibold">{{ grant.displayName }}</span>
-                        <small class="text-muted">&#64;{{ grant.username }}</small>
+                        <p class="fw-semibold text-dark mb-0">{{ grant.displayName }}</p>
+                        <p class="small text-secondary mb-0">&#64;{{ grant.username }}</p>
                       </td>
-                      <td>{{ grant.branchId ?? 'company-wide' }}</td>
-                      <td>{{ grant.grantedAt | date:'short' }}</td>
-                      <td class="text-end">
-                        <button class="btn btn-sm btn-outline-danger" (click)="revoke(grant)"
-                                [disabled]="saving()">Revoke</button>
+                      <td class="small text-secondary">
+                        @if (grant.branchId !== null) { #{{ grant.branchId }} }
+                        @else { <em>company-wide</em> }
+                      </td>
+                      <td class="small text-secondary">{{ grant.grantedAt | date:'short' }}</td>
+                      <td class="text-end actions-col">
+                        <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                                (click)="revoke(grant)" [disabled]="saving()">
+                          <i class="bi bi-x-circle"></i> Revoke
+                        </button>
                       </td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="4" class="text-muted">Not granted to anyone yet.</td></tr>
+                    <tr><td colspan="4" class="text-center text-secondary py-4">Not granted to anyone yet.</td></tr>
                   }
                 </tbody>
               </table>
+            </div>
 
-              <form (ngSubmit)="grant(role)" #gf="ngForm" class="row g-2 align-items-end">
-                <div class="col-12 col-sm-6">
-                  <label class="form-label">Username</label>
-                  <input class="form-control" name="guser" [(ngModel)]="grantUsername" required>
-                </div>
-                <div class="col-8 col-sm-3">
-                  <label class="form-label">Branch id <small class="text-muted">(optional)</small></label>
-                  <input class="form-control" name="gbranch" type="number" [(ngModel)]="grantBranchId">
-                </div>
-                <div class="col-4 col-sm-3">
-                  <button class="btn btn-primary w-100" [disabled]="saving() || gf.invalid">Grant</button>
+            <div class="card-footer bg-white border-top p-3">
+              <form (ngSubmit)="grant(role)" #gf="ngForm" class="d-flex flex-column gap-2">
+                <p class="small fw-semibold text-secondary mb-0">Grant role</p>
+                <div class="row g-2 align-items-end">
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold text-secondary">Username</label>
+                    <input class="form-control" name="guser" [(ngModel)]="grantUsername" required>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-secondary">
+                      Branch ID <span class="text-muted">(opt)</span>
+                    </label>
+                    <input class="form-control" name="gbranch" type="number" [(ngModel)]="grantBranchId">
+                  </div>
+                  <div class="col-md-3">
+                    <button class="btn btn-primary w-100 d-inline-flex justify-content-center align-items-center gap-1"
+                            [disabled]="saving() || gf.invalid">
+                      <i class="bi bi-person-plus"></i> Grant
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
           </div>
         } @else {
-          <div class="text-muted">Select a role to view its permissions and grants.</div>
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
+              <h2 class="h6 fw-bold mb-1 text-dark">Pick a role</h2>
+              <p class="small text-secondary mb-0">Or create a new one to assign permissions.</p>
+            </div>
+          </div>
         }
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    :host { display: block; }
+    .min-w-0 { min-width: 0; }
+
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+
+    .rl-list { max-height: 70vh; overflow-y: auto; }
+    .rl-row {
+      width: 100%; display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1rem; background: #fff; border: none;
+      border-bottom: 1px solid #f3f4f6; text-align: left;
+      transition: background 0.1s ease;
+    }
+    .rl-row:hover { background: #f8fafc; }
+    .rl-row.is-active { background: #eef4ff; border-left: 3px solid #1d4ed8; padding-left: calc(1rem - 3px); }
+    .rl-row:last-child { border-bottom: none; }
+
+    .perm-group { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.75rem 1rem; }
+    .perm-group-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin: -0.5rem -0.5rem 0.5rem; padding: 0.25rem 0.5rem;
+    }
+    .perm-group-label {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #1d4ed8;
+    }
+
+    .perm-check {
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      padding: 0.5rem 0.75rem; border-radius: 8px;
+      background: #fff; border: 1px solid #e5e7eb;
+      cursor: pointer;
+      transition: border-color 0.1s ease, background 0.1s ease;
+    }
+    .perm-check:hover { border-color: #cbd5e1; }
+    .perm-check.is-checked { border-color: #1d4ed8; background: #eef4ff; }
+    .perm-check.is-disabled { cursor: not-allowed; opacity: 0.7; }
+    .perm-check input { margin-top: 0.2rem; flex-shrink: 0; }
+
+    .perm-code {
+      display: block; font-size: 0.78rem; font-weight: 600;
+      color: #111827; font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+    .perm-desc { display: block; font-size: 0.72rem; color: #6b7280; }
+
+    .simple-table thead th {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table tbody tr:hover { background: #f8fafc; }
+    .simple-table .actions-col { width: 1%; white-space: nowrap; }
+
+    .text-bg-primary-subtle { background: #e0ecff; color: #1d4ed8; }
+
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: #ffe4e6; color: #be123c; font-size: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+  `]
 })
 export class RoleAdminComponent implements OnInit {
   private readonly api = inject(RoleAdminService);
 
-  readonly roles = signal<RoleSummary[]>([]);
-  readonly permissions = signal<Permission[]>([]);
-  readonly selected = signal<RoleDetail | null>(null);
-  readonly grants = signal<RoleGrant[]>([]);
-  readonly saving = signal(false);
-  readonly error = signal<string | null>(null);
+  protected readonly roles = signal<RoleSummary[]>([]);
+  protected readonly permissions = signal<Permission[]>([]);
+  protected readonly selected = signal<RoleDetail | null>(null);
+  protected readonly grants = signal<RoleGrant[]>([]);
+  protected readonly saving = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly showNewRole = signal(false);
 
   private readonly selectedPermissionIds = signal<Set<number>>(new Set());
 
-  newCode = '';
-  newName = '';
-  newDescription = '';
+  protected newCode = '';
+  protected newName = '';
+  protected newDescription = '';
 
-  editName = '';
-  editDescription = '';
+  protected editName = '';
+  protected editDescription = '';
 
-  grantUsername = '';
-  grantBranchId: number | null = null;
+  protected grantUsername = '';
+  protected grantBranchId: number | null = null;
 
-  readonly permissionGroups = computed(() => {
+  protected readonly permissionGroups = computed(() => {
     const groups = new Map<string, Permission[]>();
     for (const perm of this.permissions()) {
       const list = groups.get(perm.module) ?? [];
@@ -213,6 +374,8 @@ export class RoleAdminComponent implements OnInit {
     return [...groups.entries()].map(([module, perms]) => ({ module, perms }));
   });
 
+  protected readonly selectedPermissionsCount = computed(() => this.selectedPermissionIds().size);
+
   ngOnInit(): void {
     this.loadRoles();
     this.api.listPermissions().subscribe({
@@ -220,6 +383,8 @@ export class RoleAdminComponent implements OnInit {
       error: err => this.showError(err)
     });
   }
+
+  toggleNewRole(): void { this.showNewRole.update(v => !v); }
 
   isChecked(permissionId: number): boolean {
     return this.selectedPermissionIds().has(permissionId);
@@ -261,6 +426,7 @@ export class RoleAdminComponent implements OnInit {
       this.newCode = '';
       this.newName = '';
       this.newDescription = '';
+      this.showNewRole.set(false);
       this.loadRoles();
       this.applySelected(role);
     });
@@ -334,14 +500,8 @@ export class RoleAdminComponent implements OnInit {
     this.saving.set(true);
     this.error.set(null);
     source.subscribe({
-      next: value => {
-        this.saving.set(false);
-        onSuccess(value);
-      },
-      error: err => {
-        this.saving.set(false);
-        this.showError(err);
-      }
+      next: value => { this.saving.set(false); onSuccess(value); },
+      error: err => { this.saving.set(false); this.showError(err); }
     });
   }
 
