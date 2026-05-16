@@ -258,7 +258,13 @@ export class LoginComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     this.auth.login(this.username, this.password).subscribe({
-      next: () => this.router.navigate(['/']),
+      next: resp => {
+        if (resp.user.mustChangePassword) {
+          void this.router.navigate(['/change-password']);
+        } else {
+          void this.router.navigate(['/']);
+        }
+      },
       error: (err: HttpErrorResponse) => {
         this.loading.set(false);
         const envelope = err.error as ApiResponse<unknown> | null;

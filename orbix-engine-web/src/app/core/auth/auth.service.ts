@@ -11,6 +11,7 @@ export interface UserSummary {
   displayName: string;
   defaultCompanyId: number | null;
   defaultBranchId: number | null;
+  mustChangePassword: boolean;
 }
 
 export interface LoginResponse {

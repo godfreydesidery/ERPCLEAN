@@ -6,6 +6,10 @@ export const routes: Routes = [
     loadComponent: () => import('./admin.component').then(m => m.AdminComponent)
   },
   {
+    path: 'users',
+    loadComponent: () => import('./users/user-admin.component').then(m => m.UserAdminComponent)
+  },
+  {
     path: 'roles',
     loadComponent: () => import('./roles/role-admin.component').then(m => m.RoleAdminComponent)
   },

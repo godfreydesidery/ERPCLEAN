@@ -146,7 +146,8 @@ public class AuthServiceImpl implements AuthService {
                 user.getUsername(),
                 user.getDisplayName(),
                 user.getDefaultCompanyId(),
-                user.getDefaultBranchId()
+                user.getDefaultBranchId(),
+                user.isMustChangePassword()
             )
         );
     }

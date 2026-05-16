@@ -12,6 +12,7 @@ public record LoginResponseDto(
         String username,
         String displayName,
         Long defaultCompanyId,
-        Long defaultBranchId
+        Long defaultBranchId,
+        boolean mustChangePassword
     ) {}
 }
