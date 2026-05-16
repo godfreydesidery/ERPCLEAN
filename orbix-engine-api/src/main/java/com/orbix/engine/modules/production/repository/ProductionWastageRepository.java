@@ -36,4 +36,31 @@ public interface ProductionWastageRepository extends JpaRepository<ProductionWas
                                               @Param("branchId") Long branchId,
                                               @Param("from") Instant from,
                                               @Param("to") Instant to);
+
+    /**
+     * F8.4 / US-RPT-012 — wastage rollup grouped by (section, category, item)
+     * over an Instant range for the chef-manager dashboard. Returns
+     * {@code Object[]{sectionId, category, itemId, qty, count}}; the service
+     * multiplies qty × item.avg_cost and folds across items to derive
+     * per-(section, category) totals.
+     */
+    @Query("""
+        select pb.sectionId, w.category, w.itemId, sum(w.qty), count(w.id)
+          from ProductionWastage w
+          join com.orbix.engine.modules.production.domain.entity.ProductionBatch pb
+            on pb.id = w.productionBatchId
+         where pb.companyId = :companyId
+           and (:branchId is null or pb.branchId = :branchId)
+           and (:sectionId is null or pb.sectionId = :sectionId)
+           and (:category is null or w.category = :category)
+           and w.recordedAt >= :from
+           and w.recordedAt < :to
+         group by pb.sectionId, w.category, w.itemId
+        """)
+    List<Object[]> aggregateBySectionCategoryItem(@Param("companyId") Long companyId,
+                                                   @Param("branchId") Long branchId,
+                                                   @Param("sectionId") Long sectionId,
+                                                   @Param("category") WastageCategory category,
+                                                   @Param("from") Instant from,
+                                                   @Param("to") Instant to);
 }
