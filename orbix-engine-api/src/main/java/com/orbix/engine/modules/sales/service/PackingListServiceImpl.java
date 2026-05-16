@@ -3,6 +3,7 @@ package com.orbix.engine.modules.sales.service;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.sales.domain.dto.CreatePackingListRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.PackingListDto;
 import com.orbix.engine.modules.sales.domain.entity.PackingList;
@@ -35,6 +36,7 @@ public class PackingListServiceImpl implements PackingListService {
     private final SalesInvoiceRepository invoices;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -42,6 +44,7 @@ public class PackingListServiceImpl implements PackingListService {
     public PackingListDto createDraft(CreatePackingListRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (packingLists.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException(
@@ -119,9 +122,10 @@ public class PackingListServiceImpl implements PackingListService {
     @Transactional(readOnly = true)
     public List<PackingListDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<PackingList> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<PackingList> rows = scope == null
             ? packingLists.findByCompanyIdOrderByIdDesc(companyId)
-            : packingLists.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : packingLists.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(p -> PackingListDto.from(p, lines.findByPackingListIdOrderByIdAsc(p.getId())))
             .toList();
@@ -140,6 +144,7 @@ public class PackingListServiceImpl implements PackingListService {
         if (!Objects.equals(pl.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Packing list not found: " + id);
         }
+        branchScope.requireAccess(pl.getBranchId());
         return pl;
     }
 }

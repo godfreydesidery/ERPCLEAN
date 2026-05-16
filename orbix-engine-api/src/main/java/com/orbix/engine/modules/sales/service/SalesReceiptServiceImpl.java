@@ -10,6 +10,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
 import com.orbix.engine.modules.sales.domain.entity.ReceiptAllocation;
@@ -48,6 +49,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     private final CashLedgerService cashLedger;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -55,6 +57,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     public SalesReceiptDto createDraft(CreateSalesReceiptRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (receipts.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException(
@@ -173,9 +176,10 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     @Transactional(readOnly = true)
     public List<SalesReceiptDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<SalesReceipt> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<SalesReceipt> rows = scope == null
             ? receipts.findByCompanyIdOrderByIdDesc(companyId)
-            : receipts.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : receipts.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(r -> SalesReceiptDto.from(r, allocations.findBySalesReceiptId(r.getId())))
             .toList();
@@ -233,6 +237,7 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
         if (!Objects.equals(receipt.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Sales receipt not found: " + id);
         }
+        branchScope.requireAccess(receipt.getBranchId());
         return receipt;
     }
 }

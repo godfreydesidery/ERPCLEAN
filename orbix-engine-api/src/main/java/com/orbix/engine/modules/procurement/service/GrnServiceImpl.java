@@ -7,6 +7,7 @@ import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
 import com.orbix.engine.modules.procurement.domain.entity.Grn;
@@ -57,6 +58,7 @@ public class GrnServiceImpl implements GrnService {
     private final StockBatchService stockBatchService;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -64,6 +66,7 @@ public class GrnServiceImpl implements GrnService {
     public GrnDto createDraft(CreateGrnRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (grns.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException("GRN number already exists for this branch: " + number);
@@ -253,9 +256,10 @@ public class GrnServiceImpl implements GrnService {
     @Transactional(readOnly = true)
     public List<GrnDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<Grn> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<Grn> rows = scope == null
             ? grns.findByCompanyIdOrderByIdDesc(companyId)
-            : grns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : grns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(g -> GrnDto.from(g, grnLines.findByGrnIdOrderByIdAsc(g.getId())))
             .toList();
@@ -274,6 +278,7 @@ public class GrnServiceImpl implements GrnService {
         if (!Objects.equals(grn.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("GRN not found: " + id);
         }
+        branchScope.requireAccess(grn.getBranchId());
         return grn;
     }
 

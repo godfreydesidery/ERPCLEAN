@@ -7,6 +7,7 @@ import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
@@ -46,6 +47,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     private final VatGroupRepository vatGroups;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.procurement.lpo-auto-approval-threshold}")
     private BigDecimal autoApprovalThreshold;
@@ -56,6 +58,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     public LpoOrderDto createDraft(CreateLpoOrderRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (orders.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException("LPO number already exists for this branch: " + number);
@@ -131,9 +134,10 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Transactional(readOnly = true)
     public List<LpoOrderDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<LpoOrder> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<LpoOrder> rows = scope == null
             ? orders.findByCompanyIdOrderByIdDesc(companyId)
-            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(o -> LpoOrderDto.from(o, lines.findByLpoOrderIdOrderByLineNoAsc(o.getId())))
             .toList();
@@ -190,6 +194,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
         if (!Objects.equals(order.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("LPO not found: " + id);
         }
+        branchScope.requireAccess(order.getBranchId());
         return order;
     }
 

@@ -8,6 +8,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.sales.domain.dto.CreateCustomerReturnRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerCreditNoteDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerReturnDto;
@@ -56,6 +57,7 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     private final DayGuard dayGuard;
     private final EventPublisher events;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
@@ -63,6 +65,7 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     public CustomerReturnDto createDraft(CreateCustomerReturnRequestDto request) {
         Long companyId = context.companyId();
         Long actorId = context.userId();
+        branchScope.requireAccess(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (returns.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException(
@@ -178,9 +181,10 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     @Transactional(readOnly = true)
     public List<CustomerReturnDto> list(Long branchId) {
         Long companyId = context.companyId();
-        List<CustomerReturn> rows = branchId == null
+        Long scope = branchScope.requireReadable(branchId);
+        List<CustomerReturn> rows = scope == null
             ? returns.findByCompanyIdOrderByIdDesc(companyId)
-            : returns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, branchId);
+            : returns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
         return rows.stream()
             .map(r -> CustomerReturnDto.from(r, lines.findByCustomerReturnIdOrderByLineNoAsc(r.getId())))
             .toList();
@@ -238,6 +242,7 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
         if (!Objects.equals(ret.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Customer return not found: " + id);
         }
+        branchScope.requireAccess(ret.getBranchId());
         return ret;
     }
 
