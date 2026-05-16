@@ -5,8 +5,17 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
 import { RoleAdminService } from './role-admin.service';
 import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.models';
+
+/** A user with one or more active grants of the selected role, rolled up. */
+interface GrantGroup {
+  userId: number;
+  username: string;
+  displayName: string;
+  scopes: { id: number; label: string }[];
+}
 
 @Component({
   selector: 'orbix-role-admin',
@@ -203,10 +212,28 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
 
           <!-- Granted to (read-only — manage from /admin/users) -->
           <div class="card border-0 shadow-sm overflow-hidden">
-            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-              <h3 class="h6 fw-bold mb-0 text-dark">Granted to</h3>
-              <span class="badge text-bg-light text-secondary">{{ grants().length }}</span>
+            <div class="card-header bg-white border-bottom p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div class="d-flex align-items-center gap-2 min-w-0">
+                <h3 class="h6 fw-bold mb-0 text-dark">Granted to</h3>
+                <span class="badge text-bg-light text-secondary">
+                  {{ filteredGrantGroups().length }} user{{ filteredGrantGroups().length === 1 ? '' : 's' }}
+                  @if (filteredGrantGroups().length !== grantGroups().length) { / {{ grantGroups().length }} }
+                </span>
+                <span class="badge text-bg-primary-subtle text-primary">
+                  {{ grants().length }} grant{{ grants().length === 1 ? '' : 's' }}
+                </span>
+              </div>
+              @if (grantGroups().length >= 5) {
+                <div class="grants-search">
+                  <i class="bi bi-search"></i>
+                  <input type="search" class="form-control form-control-sm"
+                         placeholder="Filter user / branch"
+                         [(ngModel)]="grantSearchTerm"
+                         (ngModelChange)="grantSearchSignal.set(grantSearchTerm)">
+                </div>
+              }
             </div>
+
             <div class="alert alert-info d-flex align-items-start gap-2 m-3 mb-0 py-2">
               <i class="bi bi-info-circle-fill mt-1"></i>
               <div class="flex-grow-1 small">
@@ -215,31 +242,53 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
                 — open a user, then toggle roles in the Roles section.
               </div>
             </div>
+
             @if (grants().length === 0) {
               <div class="p-4 text-center small text-secondary">Not granted to anyone yet.</div>
+            } @else if (filteredGrantGroups().length === 0) {
+              <div class="p-4 text-center small text-secondary">No users match "{{ grantSearchTerm }}".</div>
             } @else {
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 simple-table">
-                  <thead>
-                    <tr><th>User</th><th>Branch</th><th>Granted</th></tr>
-                  </thead>
-                  <tbody>
-                    @for (grant of grants(); track grant.id) {
-                      <tr>
-                        <td>
-                          <p class="fw-semibold text-dark mb-0">{{ grant.displayName }}</p>
-                          <p class="small text-secondary mb-0">&#64;{{ grant.username }}</p>
-                        </td>
-                        <td class="small text-secondary">
-                          @if (grant.branchId !== null) { #{{ grant.branchId }} }
-                          @else { <em>company-wide</em> }
-                        </td>
-                        <td class="small text-secondary">{{ grant.grantedAt | date:'short' }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
+              <ul class="list-unstyled mb-0 gt-list">
+                @for (g of pagedGrantGroups(); track g.userId) {
+                  <li class="gt-row">
+                    <a class="d-flex align-items-center gap-3 text-decoration-none flex-grow-1 min-w-0"
+                       [routerLink]="['/admin/users', g.userId]">
+                      <span class="u-avatar">{{ initials(g.displayName) }}</span>
+                      <div class="flex-grow-1 min-w-0">
+                        <p class="fw-semibold text-dark mb-0 text-truncate">{{ g.displayName }}</p>
+                        <p class="small text-secondary mb-0 font-monospace">&#64;{{ g.username }}</p>
+                      </div>
+                      <div class="d-flex flex-wrap gap-1 align-items-center">
+                        @for (scope of g.scopes; track scope.id) {
+                          <span class="gt-chip">{{ scope.label }}</span>
+                        }
+                      </div>
+                      <i class="bi bi-chevron-right text-secondary"></i>
+                    </a>
+                  </li>
+                }
+              </ul>
+
+              @if (filteredGrantGroups().length > grantsPageSize) {
+                <div class="card-footer bg-white border-top p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <small class="text-secondary">
+                    Page {{ grantsPage() + 1 }} of {{ totalGrantPages() }} ·
+                    {{ filteredGrantGroups().length }} user{{ filteredGrantGroups().length === 1 ? '' : 's' }}
+                  </small>
+                  <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            [disabled]="grantsPage() === 0"
+                            (click)="grantsPage.set(grantsPage() - 1)">
+                      <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            [disabled]="grantsPage() + 1 >= totalGrantPages()"
+                            (click)="grantsPage.set(grantsPage() + 1)">
+                      Next <i class="bi bi-chevron-right"></i>
+                    </button>
+                  </div>
+                </div>
+              }
             }
           </div>
         } @else {
@@ -317,18 +366,56 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
       background: #ffe4e6; color: #be123c; font-size: 1.75rem;
       display: flex; align-items: center; justify-content: center;
     }
+
+    /* ---- Granted-to list ---- */
+    .grants-search { position: relative; min-width: 220px; }
+    .grants-search i {
+      position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+      color: #9ca3af; pointer-events: none; font-size: 0.85rem;
+    }
+    .grants-search .form-control { padding-left: 2.1rem; }
+
+    .gt-list { max-height: 60vh; overflow-y: auto; }
+    .gt-row {
+      padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6;
+      transition: background 0.1s ease;
+    }
+    .gt-row:hover { background: #f8fafc; }
+    .gt-row:last-child { border-bottom: none; }
+
+    .u-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #e8eef9; color: #1a4fb5;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 0.85rem; flex-shrink: 0;
+    }
+
+    .gt-chip {
+      display: inline-block; padding: 0.2rem 0.55rem;
+      background: #eef4ff; color: #1d4ed8;
+      border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600;
+    }
   `]
 })
 export class RoleAdminComponent implements OnInit {
   private readonly api = inject(RoleAdminService);
+  private readonly branchService = inject(BranchService);
 
   protected readonly roles = signal<RoleSummary[]>([]);
   protected readonly permissions = signal<Permission[]>([]);
   protected readonly selected = signal<RoleDetail | null>(null);
   protected readonly grants = signal<RoleGrant[]>([]);
+  protected readonly branches = signal<AccessibleBranch[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly showNewRole = signal(false);
+
+  // ---- Granted-to filtering + pagination state ---------------------------
+  protected readonly grantSearchSignal = signal('');
+  protected grantSearchTerm = '';
+  protected readonly grantsPage = signal(0);
+  protected readonly grantsPageSize = 25;
 
   private readonly selectedPermissionIds = signal<Set<number>>(new Set());
 
@@ -352,12 +439,68 @@ export class RoleAdminComponent implements OnInit {
 
   protected readonly selectedPermissionsCount = computed(() => this.selectedPermissionIds().size);
 
+  /** All grants rolled up by user, with branch names resolved. */
+  protected readonly grantGroups = computed<GrantGroup[]>(() => {
+    const branchById = new Map(this.branches().map(b => [b.id, b]));
+    const byUser = new Map<number, GrantGroup>();
+    for (const g of this.grants()) {
+      const existing = byUser.get(g.userId);
+      const label = g.branchId === null
+        ? 'Company-wide'
+        : (branchById.get(g.branchId)?.name ?? '#' + g.branchId);
+      const scope = { id: g.id, label };
+      if (existing) {
+        existing.scopes.push(scope);
+      } else {
+        byUser.set(g.userId, {
+          userId: g.userId,
+          username: g.username,
+          displayName: g.displayName,
+          scopes: [scope]
+        });
+      }
+    }
+    return [...byUser.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  });
+
+  protected readonly filteredGrantGroups = computed<GrantGroup[]>(() => {
+    const q = this.grantSearchSignal().trim().toLowerCase();
+    if (!q) return this.grantGroups();
+    return this.grantGroups().filter(g =>
+      g.username.toLowerCase().includes(q)
+      || g.displayName.toLowerCase().includes(q)
+      || g.scopes.some(s => s.label.toLowerCase().includes(q)));
+  });
+
+  protected readonly totalGrantPages = computed(() =>
+    Math.max(1, Math.ceil(this.filteredGrantGroups().length / this.grantsPageSize)));
+
+  protected readonly pagedGrantGroups = computed(() => {
+    const page = Math.min(this.grantsPage(), this.totalGrantPages() - 1);
+    const start = page * this.grantsPageSize;
+    return this.filteredGrantGroups().slice(start, start + this.grantsPageSize);
+  });
+
   ngOnInit(): void {
     this.loadRoles();
     this.api.listPermissions().subscribe({
       next: perms => this.permissions.set(perms),
       error: err => this.showError(err)
     });
+    this.branchService.listBranches().subscribe({
+      next: list => this.branches.set(list),
+      error: () => this.branches.set([])
+    });
+  }
+
+  initials(displayName: string | null): string {
+    if (!displayName) return '?';
+    const parts = displayName.trim().split(/\s+/).filter(p => p.length > 0);
+    if (parts.length === 0) return '?';
+    const first = parts[0].charAt(0);
+    if (parts.length === 1) return first.toUpperCase();
+    const last = parts.at(-1) ?? '';
+    return (first + last.charAt(0)).toUpperCase();
   }
 
   toggleNewRole(): void { this.showNewRole.update(v => !v); }
@@ -378,6 +521,10 @@ export class RoleAdminComponent implements OnInit {
 
   selectRole(id: number): void {
     this.error.set(null);
+    // Reset the Granted-to filter/pagination when switching roles.
+    this.grantSearchTerm = '';
+    this.grantSearchSignal.set('');
+    this.grantsPage.set(0);
     this.api.getRole(id).subscribe({
       next: role => {
         this.selected.set(role);

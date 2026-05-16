@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -27,7 +27,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 @Component({
   selector: 'orbix-user-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -181,7 +181,64 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
             </p>
           </div>
         } @else {
-          <ul class="list-unstyled mb-0 u-list">
+          <!-- Desktop: tabular -->
+          <div class="table-responsive d-none d-md-block">
+            <table class="table table-hover align-middle mb-0 simple-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Default branch</th>
+                  <th>Last login</th>
+                  <th class="text-end actions-col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (u of filtered(); track u.id) {
+                  <tr class="u-table-row"
+                      [routerLink]="['/admin/users', u.id]"
+                      tabindex="0">
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="u-avatar">{{ initials(u.displayName) }}</span>
+                        <div class="min-w-0">
+                          <p class="fw-semibold text-dark mb-0 text-truncate">{{ u.displayName }}</p>
+                          <p class="small text-secondary mb-0 font-monospace">&#64;{{ u.username }}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="small text-secondary text-truncate">{{ u.email ?? '—' }}</td>
+                    <td>
+                      <div class="d-flex flex-wrap gap-1">
+                        <span class="status-badge status-badge--{{ u.status.toLowerCase() }}">
+                          <span class="status-badge__dot"></span>{{ u.status }}
+                        </span>
+                        @if (u.locked) {
+                          <span class="badge text-bg-danger-subtle text-danger small">
+                            <i class="bi bi-lock-fill"></i> Locked
+                          </span>
+                        }
+                        @if (u.mustChangePassword) {
+                          <span class="badge text-bg-warning-subtle text-warning small">
+                            <i class="bi bi-key-fill"></i> Reset
+                          </span>
+                        }
+                      </div>
+                    </td>
+                    <td class="small text-secondary">{{ branchLabel(u.defaultBranchId) }}</td>
+                    <td class="small text-secondary">{{ u.lastLoginAt ? (u.lastLoginAt | date:'short') : '—' }}</td>
+                    <td class="text-end actions-col">
+                      <i class="bi bi-chevron-right text-secondary"></i>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile: card list (tables are painful on small screens) -->
+          <ul class="list-unstyled mb-0 u-list d-md-none">
             @for (u of filtered(); track u.id) {
               <li>
                 <a class="u-row text-decoration-none"
@@ -253,6 +310,24 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       .status-pill { flex-shrink: 0; }
     }
 
+    /* ---- Desktop table ---- */
+    .simple-table thead th {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+      padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td {
+      padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle;
+    }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table .actions-col { width: 1%; white-space: nowrap; }
+
+    .u-table-row { cursor: pointer; transition: background 0.1s ease; }
+    .u-table-row:hover { background: #f8fafc !important; }
+    .u-table-row:focus-visible { outline: 2px solid #1d4ed8; outline-offset: -2px; }
+    .u-table-row:hover .bi-chevron-right { color: #1d4ed8 !important; }
+
+    /* ---- Mobile card list ---- */
     .u-list { }
     .u-row {
       width: 100%; display: flex; align-items: center; gap: 0.75rem;
@@ -367,6 +442,13 @@ export class UserAdminComponent implements OnInit {
     if (parts.length === 1) return first.toUpperCase();
     const last = parts.at(-1) ?? '';
     return (first + last.charAt(0)).toUpperCase();
+  }
+
+  /** Resolve a default-branch id to its name; falls back to "—" when null. */
+  branchLabel(branchId: number | null): string {
+    if (branchId === null) return '—';
+    const b = this.branches().find(x => x.id === branchId);
+    return b ? b.name : '#' + branchId;
   }
 
   toggleNewForm(): void {

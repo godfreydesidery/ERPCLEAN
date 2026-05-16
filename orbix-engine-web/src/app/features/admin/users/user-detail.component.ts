@@ -197,7 +197,7 @@ import {
                         <span class="grant-chip">
                           <i class="bi bi-check2 me-1"></i>
                           @if (g.branchId === null) { Company-wide }
-                          @else { Branch #{{ g.branchId }} }
+                          @else { Branch · {{ branchLabel(g.branchId) }} }
                           <button type="button" class="grant-chip__x"
                                   [disabled]="busy()"
                                   (click)="onRevoke(user, g)"
@@ -427,6 +427,12 @@ export class UserDetailComponent implements OnInit {
 
   hasBranch(grants: RoleGrantSummary[], branchId: number): boolean {
     return grants.some(g => g.branchId === branchId);
+  }
+
+  /** Resolve a branch id to its display name; falls back to {@code #id} if unknown. */
+  branchLabel(branchId: number): string {
+    const b = this.branches().find(x => x.id === branchId);
+    return b ? b.name : '#' + branchId;
   }
 
   onGrant(user: UserDetail, role: RoleSummary): void {
