@@ -34,7 +34,7 @@ interface NavGroup {
 
         <a class="topbar-brand" routerLink="/dashboard" (click)="closeSidebar()">
           <span class="brand-mark-sm">O</span>
-          <span class="brand-word d-none d-sm-inline">ORBIX ENGINE</span>
+          <span class="brand-word d-none d-sm-inline">ORBIX ERP</span>
         </a>
 
         <div class="topbar-spacer"></div>
@@ -347,37 +347,37 @@ export class ShellComponent implements OnInit {
     {
       label: 'Overview',
       items: [
-        { label: 'Dashboard',    route: '/dashboard',  icon: 'bi-speedometer2' }
+        { label: 'Dashboard', route: '/dashboard', icon: 'bi-speedometer2' }
       ]
     },
     {
       label: 'Operations',
       items: [
-        { label: 'Business day', route: '/day',         icon: 'bi-calendar-check' },
-        { label: 'Catalog',      route: '/catalog',     icon: 'bi-box-seam' },
-        { label: 'Parties',      route: '/party',       icon: 'bi-people' },
-        { label: 'Stock',        route: '/stock',       icon: 'bi-clipboard-data' },
-        { label: 'Production',   route: '/production',  icon: 'bi-gear' }
+        { label: 'Business day', route: '/day', icon: 'bi-calendar-check' },
+        { label: 'Catalog', route: '/catalog', icon: 'bi-box-seam' },
+        { label: 'Parties', route: '/party', icon: 'bi-people' },
+        { label: 'Stock', route: '/stock', icon: 'bi-clipboard-data' },
+        { label: 'Production', route: '/production', icon: 'bi-gear' }
       ]
     },
     {
       label: 'Commerce',
       items: [
-        { label: 'Sales',        route: '/sales',       icon: 'bi-cart-check' },
-        { label: 'Procurement',  route: '/procurement', icon: 'bi-truck' }
+        { label: 'Sales', route: '/sales', icon: 'bi-cart-check' },
+        { label: 'Procurement', route: '/procurement', icon: 'bi-truck' }
       ]
     },
     {
       label: 'Finance',
       items: [
-        { label: 'Debt',         route: '/debt',        icon: 'bi-credit-card' },
-        { label: 'Reports',      route: '/reports',     icon: 'bi-bar-chart-line' }
+        { label: 'Debt', route: '/debt', icon: 'bi-credit-card' },
+        { label: 'Reports', route: '/reports', icon: 'bi-bar-chart-line' }
       ]
     },
     {
       label: 'Settings',
       items: [
-        { label: 'Admin',        route: '/admin',       icon: 'bi-sliders' }
+        { label: 'Admin', route: '/admin', icon: 'bi-sliders' }
       ]
     }
   ] as const;

@@ -16,7 +16,7 @@ import { ApiResponse } from '../../core/api/api-response';
           <div class="card-body p-4 p-md-5">
             <div class="text-center mb-4">
               <div class="brand-mark mx-auto mb-3">O</div>
-              <h1 class="h4 fw-semibold mb-1 brand-title">ORBIX ENGINE</h1>
+              <h1 class="h4 fw-semibold mb-1 brand-title">ORBIX ERP</h1>
               <p class="text-muted small mb-0">Sign in to continue</p>
             </div>
 
