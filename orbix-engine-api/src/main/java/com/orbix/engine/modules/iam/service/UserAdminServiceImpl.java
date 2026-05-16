@@ -54,8 +54,15 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional(readOnly = true)
     public List<UserSummaryDto> listUsers() {
+        Long callerId = context.userId();
         Long companyId = context.companyId();
-        return users.findByDefaultCompanyIdOrderByIdAsc(companyId).stream()
+        // Company-wide admins see every user. Branch-scoped admins see only
+        // users with a grant covering their active branch — plus orphans
+        // (users with no grants yet, awaiting role assignment).
+        List<AppUser> rows = userRoles.hasAnyCompanyWideGrant(callerId, companyId)
+            ? users.findByDefaultCompanyIdOrderByIdAsc(companyId)
+            : users.findVisibleInBranch(companyId, context.branchId());
+        return rows.stream()
             .map(UserSummaryDto::from)
             .toList();
     }
@@ -211,11 +218,19 @@ public class UserAdminServiceImpl implements UserAdminService {
     // -----------------------------------------------------------------------
 
     private AppUser requireUser(Long userId) {
+        Long callerId = context.userId();
         Long companyId = context.companyId();
         AppUser user = users.findById(userId)
             .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
         if (!Objects.equals(user.getDefaultCompanyId(), companyId)) {
             throw new AccessDeniedException("User " + userId + " is not in your company");
+        }
+        // Branch-scoped admins can only act on users visible in their branch.
+        // Company-wide admins bypass this.
+        if (!userRoles.hasAnyCompanyWideGrant(callerId, companyId)
+            && !userRoles.isUserVisibleInBranch(userId, companyId, context.branchId())) {
+            throw new AccessDeniedException(
+                "User " + userId + " is not in your branch scope");
         }
         return user;
     }
