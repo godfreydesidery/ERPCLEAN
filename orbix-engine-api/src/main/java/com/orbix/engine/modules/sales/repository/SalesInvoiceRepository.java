@@ -50,4 +50,42 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     List<SalesInvoice> findPostedOnDate(@Param("companyId") Long companyId,
                                         @Param("branchId") Long branchId,
                                         @Param("businessDate") LocalDate businessDate);
+
+    /**
+     * F8.7 / US-RPT-007 — POSTED + PARTIALLY_PAID + PAID + VOIDED invoices for
+     * a customer in {@code [from, to]} (by {@code invoice_date}). Ordered by
+     * date asc so the statement reads top-down chronologically.
+     */
+    @Query("""
+        select s from SalesInvoice s
+         where s.customerId = :customerId
+           and s.invoiceDate between :from and :to
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PAID,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.VOIDED)
+         order by s.invoiceDate asc, s.id asc
+        """)
+    List<SalesInvoice> findForStatement(@Param("customerId") Long customerId,
+                                        @Param("from") LocalDate from,
+                                        @Param("to") LocalDate to);
+
+    /**
+     * F8.7 — opening AR balance for the statement window: sum of
+     * (total − paid) on POSTED + PARTIALLY_PAID invoices dated strictly
+     * before {@code from}. VOIDED + DRAFT excluded since they never
+     * contributed debt.
+     */
+    @Query("""
+        select coalesce(sum(s.totalAmount - s.paidAmount), 0)
+          from SalesInvoice s
+         where s.customerId = :customerId
+           and s.invoiceDate < :from
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID)
+        """)
+    BigDecimal sumOutstandingBefore(@Param("customerId") Long customerId,
+                                    @Param("from") LocalDate from);
 }
