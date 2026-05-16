@@ -12,7 +12,6 @@ import com.orbix.engine.modules.day.repository.BusinessDayRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -43,13 +42,17 @@ class BusinessDayServiceImplTest {
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
-    @InjectMocks private BusinessDayServiceImpl service;
+    private BusinessDayServiceImpl service;
 
     @BeforeEach
     void bindContext() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
         lenient().when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(branch(COMPANY_ID)));
+        // F7.5: BusinessDayServiceImpl auto-wires List<EodGuard>; pass empty
+        // here so the tests focus on the state-machine without per-module
+        // guard plumbing. EodGuard behaviour is unit-tested per-module.
+        service = new BusinessDayServiceImpl(businessDays, branches, List.of(), events, context);
     }
 
     private static Branch branch(Long companyId) {
@@ -120,19 +123,31 @@ class BusinessDayServiceImplTest {
     }
 
     @Test
-    void startClosing_rejectsDayThatIsNotOpen() {
+    void startClosing_isIdempotentOnAlreadyClosingDay() {
+        // F7.5: re-calling startClosing on a CLOSING day returns the existing
+        // row without re-emitting an event (idempotent — TC-DAY-025).
         when(businessDays.findById(new BusinessDayId(BRANCH_ID, TODAY)))
             .thenReturn(Optional.of(day(TODAY, BusinessDayStatus.CLOSING)));
 
-        assertThatThrownBy(() -> service.startClosing(BRANCH_ID, TODAY))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("not OPEN");
+        BusinessDayDto result = service.startClosing(BRANCH_ID, TODAY);
+
+        assertThat(result.status()).isEqualTo(BusinessDayStatus.CLOSING);
+        verify(events, never()).publish(eq("BusinessDayClosingStarted.v1"), any(), any(), any());
     }
 
     @Test
     void closeDay_finalisesClosingDay() {
         BusinessDay closing = day(TODAY, BusinessDayStatus.CLOSING);
         when(businessDays.findById(new BusinessDayId(BRANCH_ID, TODAY))).thenReturn(Optional.of(closing));
+        // F7.5 auto-roll: after CLOSING -> CLOSED, openInternal runs for
+        // TODAY+1. Mock the lookups + save so the auto-roll path completes.
+        when(businessDays.findById(new BusinessDayId(BRANCH_ID, TODAY.plusDays(1))))
+            .thenReturn(Optional.empty());
+        when(businessDays.findFirstByBranchIdAndStatusIn(eq(BRANCH_ID), any()))
+            .thenReturn(Optional.empty());
+        when(businessDays.findByBranchIdOrderByBusinessDateDesc(BRANCH_ID))
+            .thenReturn(List.of(closing));
+        when(businessDays.save(any(BusinessDay.class))).thenAnswer(inv -> inv.getArgument(0));
 
         BusinessDayDto result = service.closeDay(BRANCH_ID, TODAY, "eod/2026-05-14.pdf");
 
@@ -140,6 +155,8 @@ class BusinessDayServiceImplTest {
         assertThat(result.closedBy()).isEqualTo(ACTOR_ID);
         assertThat(result.eodReportObjectKey()).isEqualTo("eod/2026-05-14.pdf");
         verify(events).publish(eq("BusinessDayClosed.v1"), any(), any(), any());
+        // Auto-roll also fires a BusinessDayOpened.v1 for the next day.
+        verify(events).publish(eq("BusinessDayOpened.v1"), any(), any(), any());
     }
 
     @Test

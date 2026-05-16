@@ -33,4 +33,7 @@ public final class ResponseCode {
 
     // ----- catalog ---------------------------------------------------------
     public static final String CATALOG_ITEM_CREATED     = "CATALOG_ITEM_CREATED";
+
+    // ----- day (F7.5 EOD) --------------------------------------------------
+    public static final String DAY_EOD_BLOCKED          = "DAY_EOD_BLOCKED";
 }
