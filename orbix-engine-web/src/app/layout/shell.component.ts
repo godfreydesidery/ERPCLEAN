@@ -287,6 +287,7 @@ interface NavGroup {
       padding: 1.5rem;
       padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
       max-width: 1400px;
+      margin: 0 auto;
     }
 
     /* ------- Mobile breakpoint ------- */
