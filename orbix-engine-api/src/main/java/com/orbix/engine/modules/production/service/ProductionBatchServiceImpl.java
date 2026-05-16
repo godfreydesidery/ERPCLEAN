@@ -8,6 +8,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.production.domain.dto.AdvanceLifecycleRequestDto;
 import com.orbix.engine.modules.production.domain.dto.ExplodedMaterialDto;
 import com.orbix.engine.modules.production.domain.dto.PlanProductionBatchRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PostProductionOutputRequestDto;
@@ -18,12 +19,14 @@ import com.orbix.engine.modules.production.domain.entity.ProductionConsumption;
 import com.orbix.engine.modules.production.domain.entity.ProductionOutput;
 import com.orbix.engine.modules.production.domain.enums.BomStatus;
 import com.orbix.engine.modules.production.domain.enums.ProductionBatchStatus;
+import com.orbix.engine.modules.production.domain.enums.ProductionLifecycleState;
 import com.orbix.engine.modules.production.repository.BomRepository;
 import com.orbix.engine.modules.production.repository.ProductionBatchRepository;
 import com.orbix.engine.modules.production.repository.ProductionConsumptionRepository;
 import com.orbix.engine.modules.production.repository.ProductionOutputRepository;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
+import com.orbix.engine.modules.stock.domain.dto.RecallStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
@@ -301,6 +304,65 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
         events.publish("ProductionBatchCancelled.v1", AGG, String.valueOf(batch.getId()),
             Map.of(F_ID, batch.getId(), F_NUMBER, batch.getNumber()));
         return loadDto(batch);
+    }
+
+    // ---------------------------------------------------------------------
+    // Lifecycle (F7.3c)
+    // ---------------------------------------------------------------------
+
+    @Override
+    @Transactional
+    @Auditable(action = "ADVANCE_LIFECYCLE", entityType = AGG)
+    public ProductionBatchDto advanceLifecycle(Long batchId, AdvanceLifecycleRequestDto request) {
+        ProductionBatch batch = requireBatch(batchId);
+        dayGuard.requireOpenDay(batch.getBranchId());
+        Long actorId = context.userId();
+        ProductionLifecycleState target = request.targetState();
+
+        if (target == ProductionLifecycleState.OUTPUT_DONATED
+                || target == ProductionLifecycleState.OUTPUT_WRITE_OFF) {
+            String reason = (request.reason() == null || request.reason().isBlank())
+                ? target.name() + " — " + batch.getNumber()
+                : request.reason();
+            writeOffRemainingOutputs(batch, reason);
+            batch.markDonatedOrWriteOff(target, actorId);
+        } else {
+            batch.advanceLifecycle(target, actorId);
+        }
+
+        events.publish("ProductionLifecycleAdvanced.v1", AGG, String.valueOf(batch.getId()),
+            Map.of(F_ID, batch.getId(), F_NUMBER, batch.getNumber(),
+                "lifecycleState", batch.getLifecycleState().name(),
+                "reason", request.reason() == null ? "" : request.reason()));
+        return loadDto(batch);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "CLOSE", entityType = AGG)
+    public ProductionBatchDto close(Long batchId) {
+        ProductionBatch batch = requireBatch(batchId);
+        batch.markClosed(context.userId());
+        events.publish("ProductionBatchClosed.v1", AGG, String.valueOf(batch.getId()),
+            Map.of(F_ID, batch.getId(), F_NUMBER, batch.getNumber(),
+                "actualQty", batch.getActualQty() == null ? BigDecimal.ZERO : batch.getActualQty()));
+        return loadDto(batch);
+    }
+
+    /**
+     * Writes off the remaining on-hand qty of every batch-tracked
+     * production_output via {@link StockBatchService#recallBatch}. Non-batch-
+     * tracked outputs aren't selectively tracked by production batch in MVP —
+     * their qty stays in the general balance until normal sale / consumption.
+     */
+    private void writeOffRemainingOutputs(ProductionBatch batch, String reason) {
+        for (ProductionOutput out : outputs.findByProductionBatchIdOrderByLineNoAsc(batch.getId())) {
+            if (out.getBatchId() == null) continue;
+            StockBatchDto sb = stockBatchService.getBatch(out.getBatchId());
+            if (sb.qtyOnHand().signum() <= 0) continue;
+            stockBatchService.recallBatch(out.getBatchId(),
+                new RecallStockBatchRequestDto(reason));
+        }
     }
 
     // ---------------------------------------------------------------------

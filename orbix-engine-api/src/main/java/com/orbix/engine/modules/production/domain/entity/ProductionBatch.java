@@ -166,6 +166,83 @@ public class ProductionBatch {
         touch(actorId);
     }
 
+    /**
+     * Forward-only OUTPUT_* progression (HOT → COLD → DISCOUNTED). The
+     * terminal OUTPUT_DONATED / OUTPUT_WRITE_OFF / CLOSED transitions go
+     * through {@link #markDonatedOrWriteOff} / {@link #markClosed} so the
+     * service can run the necessary stock-side write-off side effects.
+     */
+    public void advanceLifecycle(ProductionLifecycleState target, Long actorId) {
+        requireCompletedForLifecycle();
+        switch (target) {
+            case OUTPUT_COLD_DISPLAY ->
+                requireFrom(target, ProductionLifecycleState.OUTPUT_HOT_DISPLAY);
+            case OUTPUT_DISCOUNTED ->
+                requireFrom(target, ProductionLifecycleState.OUTPUT_HOT_DISPLAY,
+                    ProductionLifecycleState.OUTPUT_COLD_DISPLAY);
+            default -> throw new IllegalArgumentException(
+                "advanceLifecycle does not handle target " + target
+                    + " — use markDonatedOrWriteOff / markClosed");
+        }
+        this.lifecycleState = target;
+        touch(actorId);
+    }
+
+    public void markDonatedOrWriteOff(ProductionLifecycleState target, Long actorId) {
+        requireCompletedForLifecycle();
+        if (target != ProductionLifecycleState.OUTPUT_DONATED
+                && target != ProductionLifecycleState.OUTPUT_WRITE_OFF) {
+            throw new IllegalArgumentException(
+                "markDonatedOrWriteOff requires OUTPUT_DONATED or OUTPUT_WRITE_OFF (was " + target + ")");
+        }
+        if (!isOutputState(lifecycleState)) {
+            throw new IllegalStateException(
+                "Donate / write-off requires an OUTPUT_* state (was " + lifecycleState + ")");
+        }
+        if (lifecycleState == ProductionLifecycleState.OUTPUT_DONATED
+                || lifecycleState == ProductionLifecycleState.OUTPUT_WRITE_OFF) {
+            throw new IllegalStateException(
+                "Batch is already in terminal output state " + lifecycleState);
+        }
+        this.lifecycleState = target;
+        touch(actorId);
+    }
+
+    public void markClosed(Long actorId) {
+        if (status != ProductionBatchStatus.COMPLETED) {
+            throw new IllegalStateException(
+                "Only COMPLETED batches can be closed (was status " + status + ")");
+        }
+        if (lifecycleState == ProductionLifecycleState.CLOSED) {
+            throw new IllegalStateException("Batch is already CLOSED");
+        }
+        this.lifecycleState = ProductionLifecycleState.CLOSED;
+        touch(actorId);
+    }
+
+    private void requireCompletedForLifecycle() {
+        if (status != ProductionBatchStatus.COMPLETED) {
+            throw new IllegalStateException(
+                "Lifecycle transitions require a COMPLETED batch (was status " + status + ")");
+        }
+    }
+
+    private void requireFrom(ProductionLifecycleState target, ProductionLifecycleState... allowed) {
+        for (ProductionLifecycleState ok : allowed) {
+            if (lifecycleState == ok) return;
+        }
+        throw new IllegalStateException(
+            "Cannot advance lifecycle to " + target + " from " + lifecycleState);
+    }
+
+    private static boolean isOutputState(ProductionLifecycleState s) {
+        return s == ProductionLifecycleState.OUTPUT_HOT_DISPLAY
+            || s == ProductionLifecycleState.OUTPUT_COLD_DISPLAY
+            || s == ProductionLifecycleState.OUTPUT_DISCOUNTED
+            || s == ProductionLifecycleState.OUTPUT_DONATED
+            || s == ProductionLifecycleState.OUTPUT_WRITE_OFF;
+    }
+
     private void touch(Long actorId) {
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;

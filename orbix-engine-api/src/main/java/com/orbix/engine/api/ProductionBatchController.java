@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.production.domain.dto.AdvanceLifecycleRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PlanProductionBatchRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PostProductionOutputRequestDto;
 import com.orbix.engine.modules.production.domain.dto.ProductionBatchDto;
@@ -15,9 +16,10 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Production batch endpoints (F7.3b / US-PROD-003..006). Plan / start /
- * post-output / cancel. Lifecycle states (hot → cold → discounted → donated /
- * write-off → CLOSED) + wastage land in F7.3c.
+ * Production batch endpoints (F7.3b + F7.3c / US-PROD-003..010). Plan /
+ * start / post-output / cancel / advance-lifecycle (hot → cold → discounted →
+ * donated / write-off) / close. OUTPUT_DONATED + OUTPUT_WRITE_OFF run a
+ * compensating write-off on every batch-tracked output's remaining on-hand.
  */
 @RestController
 @RequestMapping("/api/v1/production-batches")
@@ -66,5 +68,18 @@ public class ProductionBatchController {
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
     public ProductionBatchDto cancel(@PathVariable Long id) {
         return service.cancel(id);
+    }
+
+    @PostMapping("/{id}/advance-lifecycle")
+    @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
+    public ProductionBatchDto advanceLifecycle(@PathVariable Long id,
+                                               @Valid @RequestBody AdvanceLifecycleRequestDto request) {
+        return service.advanceLifecycle(id, request);
+    }
+
+    @PostMapping("/{id}/close")
+    @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
+    public ProductionBatchDto close(@PathVariable Long id) {
+        return service.close(id);
     }
 }

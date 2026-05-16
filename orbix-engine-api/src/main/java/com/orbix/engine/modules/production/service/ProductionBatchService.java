@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.production.service;
 
+import com.orbix.engine.modules.production.domain.dto.AdvanceLifecycleRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PlanProductionBatchRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PostProductionOutputRequestDto;
 import com.orbix.engine.modules.production.domain.dto.ProductionBatchDto;
@@ -8,8 +9,8 @@ import com.orbix.engine.modules.production.domain.enums.ProductionBatchStatus;
 import java.util.List;
 
 /**
- * Production batch lifecycle (F7.3b). Plan / start / record-output / cancel.
- * Lifecycle states + wastage + close land in F7.3c.
+ * Production batch lifecycle (F7.3b + F7.3c). Plan / start / record-output /
+ * cancel + lifecycle advancement + close.
  */
 public interface ProductionBatchService {
 
@@ -39,9 +40,26 @@ public interface ProductionBatchService {
 
     /**
      * Cancel a PLANNED batch — releases the reservation. Once a batch is
-     * IN_PROGRESS use the lifecycle write-off path in F7.3c instead.
+     * IN_PROGRESS use the lifecycle write-off path (advance to OUTPUT_DONATED
+     * or OUTPUT_WRITE_OFF) instead.
      */
     ProductionBatchDto cancel(Long batchId);
+
+    /**
+     * Advance the fine-grained {@code lifecycle_state} dimension (F7.3c /
+     * US-PROD-010). Forward-only HOT → COLD → DISCOUNTED; OUTPUT_DONATED /
+     * OUTPUT_WRITE_OFF reachable from any OUTPUT_* state — those trigger a
+     * {@link com.orbix.engine.modules.stock.service.StockBatchService#recallBatch}
+     * write-off on every batch-tracked output to clear the remaining on-hand.
+     */
+    ProductionBatchDto advanceLifecycle(Long batchId, AdvanceLifecycleRequestDto request);
+
+    /**
+     * Close a COMPLETED batch — terminal, immutable thereafter. Typically
+     * called at end-of-day after all output is disposed (sold / donated /
+     * written off).
+     */
+    ProductionBatchDto close(Long batchId);
 
     ProductionBatchDto get(Long batchId);
 
