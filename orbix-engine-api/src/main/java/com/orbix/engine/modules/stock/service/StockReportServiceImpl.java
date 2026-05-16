@@ -4,6 +4,7 @@ import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
 import com.orbix.engine.modules.stock.domain.dto.ItemMovementRowDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
@@ -35,11 +36,13 @@ public class StockReportServiceImpl implements StockReportService {
     private final StockMoveRepository moves;
     private final ItemRepository items;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public List<ItemBranchBalanceDto> negativeOnHand(Long branchId) {
-        return balances.findNegativeOnHand(branchId).stream()
+        Long scope = branchScope.requireReadable(branchId);
+        return balances.findNegativeOnHand(scope).stream()
             .map(ItemBranchBalanceDto::from)
             .toList();
     }
@@ -48,7 +51,8 @@ public class StockReportServiceImpl implements StockReportService {
     @Transactional(readOnly = true)
     public List<ItemMovementRowDto> fastMovers(Long branchId, LocalDate from, LocalDate to,
                                                List<String> moveTypes, int limit) {
-        return rankMovers(branchId, from, to, moveTypes, limit,
+        Long scope = branchScope.requireReadable(branchId);
+        return rankMovers(scope, from, to, moveTypes, limit,
             Comparator.comparing(ItemMovementRowDto::movedQty).reversed());
     }
 
@@ -56,13 +60,14 @@ public class StockReportServiceImpl implements StockReportService {
     @Transactional(readOnly = true)
     public List<ItemMovementRowDto> slowMovers(Long branchId, LocalDate from, LocalDate to,
                                                List<String> moveTypes, int limit) {
+        Long scope = branchScope.requireReadable(branchId);
         // Slow movers includes zero-movement items so a long-tail item that
         // hasn't sold in the window still surfaces — query catalog for every
         // item and left-join the aggregation against it.
-        Map<Long, BigDecimal> movement = movementMap(branchId, from, to, moveTypes);
+        Map<Long, BigDecimal> movement = movementMap(scope, from, to, moveTypes);
         Long companyId = context.companyId();
         return items.findByCompanyIdAndStatusOrderByIdAsc(companyId, ItemStatus.ACTIVE).stream()
-            .map(item -> toRow(item, branchId,
+            .map(item -> toRow(item, scope,
                 movement.getOrDefault(item.getId(), BigDecimal.ZERO)))
             .sorted(Comparator.comparing(ItemMovementRowDto::movedQty))
             .limit(limit > 0 ? limit : Long.MAX_VALUE)

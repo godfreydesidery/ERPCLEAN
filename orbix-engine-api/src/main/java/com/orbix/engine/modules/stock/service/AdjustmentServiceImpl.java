@@ -2,6 +2,7 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostAdjustmentRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -29,6 +30,7 @@ public class AdjustmentServiceImpl implements AdjustmentService {
     private final ItemBranchBalanceRepository balances;
     private final PermissionResolverService permissions;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Value("${orbix.stock.adjustment-threshold}")
     private BigDecimal threshold;
@@ -40,6 +42,7 @@ public class AdjustmentServiceImpl implements AdjustmentService {
         if (request.qty().signum() == 0) {
             throw new IllegalArgumentException("Adjustment qty must be non-zero");
         }
+        branchScope.requireAccess(request.branchId());
         Long actorId = context.userId();
         BigDecimal value = monetaryImpact(request);
         boolean aboveThreshold = value.compareTo(threshold) > 0;

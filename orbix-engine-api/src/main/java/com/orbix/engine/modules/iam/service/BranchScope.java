@@ -74,4 +74,25 @@ public class BranchScope {
                 "No role grant for branch " + branchId);
         }
     }
+
+    /** Non-throwing variant of {@link #requireAccess} — for OR composition. */
+    public boolean canAccess(Long branchId) {
+        if (branchId == null) return true;
+        return userRoles.hasBranchAccess(context.userId(), context.companyId(), branchId);
+    }
+
+    /**
+     * Bi-branch resources (e.g. stock transfers) are visible / actionable
+     * if the caller has a grant covering EITHER side.
+     */
+    public void requireAccessToEither(Long a, Long b) {
+        if (canAccess(a) || canAccess(b)) return;
+        throw new AccessDeniedException(
+            "No role grant for either branch " + a + " or " + b);
+    }
+
+    /** Whether the caller holds any company-wide grant. */
+    public boolean isCompanyWide() {
+        return userRoles.hasAnyCompanyWideGrant(context.userId(), context.companyId());
+    }
 }

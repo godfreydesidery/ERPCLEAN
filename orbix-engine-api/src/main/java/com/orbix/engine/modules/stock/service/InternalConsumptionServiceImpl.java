@@ -2,6 +2,7 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostInternalConsumptionRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -23,11 +24,13 @@ public class InternalConsumptionServiceImpl implements InternalConsumptionServic
     private final StockMoveService stockMoveService;
     private final PermissionResolverService permissions;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = "InternalConsumption")
     public StockMoveDto postInternalConsumption(PostInternalConsumptionRequestDto request) {
+        branchScope.requireAccess(request.branchId());
         Long actorId = context.userId();
         if (Objects.equals(request.authorisedByUserId(), actorId)) {
             throw new IllegalArgumentException("You cannot authorise your own internal-consumption draw");

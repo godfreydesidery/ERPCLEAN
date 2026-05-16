@@ -9,5 +9,7 @@ public interface StockCountRepository extends JpaRepository<StockCount, Long> {
 
     List<StockCount> findByCompanyIdOrderByCountDateDesc(Long companyId);
 
+    List<StockCount> findByCompanyIdAndBranchIdOrderByCountDateDesc(Long companyId, Long branchId);
+
     boolean existsByBranchIdAndNumber(Long branchId, String number);
 }

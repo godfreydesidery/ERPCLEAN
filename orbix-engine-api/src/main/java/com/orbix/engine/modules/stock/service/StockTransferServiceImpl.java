@@ -2,6 +2,7 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockTransferRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.ReceiveTransferRequestDto;
@@ -36,11 +37,18 @@ public class StockTransferServiceImpl implements StockTransferService {
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
     public List<StockTransferDto> listTransfers() {
-        return transfers.findByCompanyIdOrderByIdDesc(context.companyId()).stream()
+        Long companyId = context.companyId();
+        // Bi-branch resource: a branch-scoped caller sees transfers touching
+        // their branch on either side; a company-wide caller sees everything.
+        List<StockTransfer> rows = branchScope.isCompanyWide()
+            ? transfers.findByCompanyIdOrderByIdDesc(companyId)
+            : transfers.findInvolvingBranch(companyId, context.branchId());
+        return rows.stream()
             .map(t -> StockTransferDto.from(t, transferLines.findByStockTransferId(t.getId())))
             .toList();
     }
@@ -57,6 +65,9 @@ public class StockTransferServiceImpl implements StockTransferService {
     @Auditable(action = "CREATE", entityType = "StockTransfer")
     public StockTransferDto createTransfer(CreateStockTransferRequestDto request) {
         Long companyId = context.companyId();
+        // Creator must hold a grant in the source branch; receivers at the
+        // destination authorise themselves via receiveTransfer.
+        branchScope.requireAccess(request.fromBranchId());
         String number = request.number().trim().toUpperCase();
         if (request.fromBranchId().equals(request.toBranchId())) {
             throw new IllegalArgumentException("Transfer source and destination must differ");
@@ -77,6 +88,7 @@ public class StockTransferServiceImpl implements StockTransferService {
     @Auditable(action = "ISSUE", entityType = "StockTransfer")
     public StockTransferDto issueTransfer(Long transferId) {
         StockTransfer transfer = requireTransfer(transferId);
+        branchScope.requireAccess(transfer.getFromBranchId());
         transfer.issue();
         List<StockTransferLine> lines = transferLines.findByStockTransferId(transferId);
         for (StockTransferLine line : lines) {
@@ -97,6 +109,7 @@ public class StockTransferServiceImpl implements StockTransferService {
     @Auditable(action = "RECEIVE", entityType = "StockTransfer")
     public StockTransferDto receiveTransfer(Long transferId, ReceiveTransferRequestDto request) {
         StockTransfer transfer = requireTransfer(transferId);
+        branchScope.requireAccess(transfer.getToBranchId());
         if (transfer.getStatus() != StockTransferStatus.ISSUED) {
             throw new IllegalArgumentException("Only an ISSUED transfer can be received");
         }
@@ -134,6 +147,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (!Objects.equals(transfer.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Stock transfer not found: " + transferId);
         }
+        branchScope.requireAccessToEither(transfer.getFromBranchId(), transfer.getToBranchId());
         return transfer;
     }
 }

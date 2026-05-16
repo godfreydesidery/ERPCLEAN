@@ -2,6 +2,7 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockCountRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.RecordCountsRequestDto;
@@ -36,11 +37,17 @@ public class StockCountServiceImpl implements StockCountService {
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final RequestContext context;
+    private final BranchScope branchScope;
 
     @Override
     @Transactional(readOnly = true)
-    public List<StockCountDto> listCounts() {
-        return counts.findByCompanyIdOrderByCountDateDesc(context.companyId()).stream()
+    public List<StockCountDto> listCounts(Long branchId) {
+        Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
+        List<StockCount> rows = scope == null
+            ? counts.findByCompanyIdOrderByCountDateDesc(companyId)
+            : counts.findByCompanyIdAndBranchIdOrderByCountDateDesc(companyId, scope);
+        return rows.stream()
             .map(c -> StockCountDto.from(c, countLines.findByStockCountId(c.getId())))
             .toList();
     }
@@ -58,6 +65,7 @@ public class StockCountServiceImpl implements StockCountService {
     public StockCountDto createCount(CreateStockCountRequestDto request) {
         Long companyId = context.companyId();
         Long branchId = request.branchId();
+        branchScope.requireAccess(branchId);
         String number = request.number().trim().toUpperCase();
         if (counts.existsByBranchIdAndNumber(branchId, number)) {
             throw new IllegalArgumentException("Stock count number already exists: " + number);
@@ -142,6 +150,7 @@ public class StockCountServiceImpl implements StockCountService {
         if (!Objects.equals(count.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Stock count not found: " + countId);
         }
+        branchScope.requireAccess(count.getBranchId());
         return count;
     }
 }
