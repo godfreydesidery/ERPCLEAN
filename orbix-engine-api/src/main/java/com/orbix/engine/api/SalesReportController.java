@@ -2,8 +2,10 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.sales.domain.dto.DailySalesRowDto;
 import com.orbix.engine.modules.sales.domain.dto.DailySummaryDto;
+import com.orbix.engine.modules.sales.domain.dto.SectionPnlRowDto;
 import com.orbix.engine.modules.sales.domain.dto.ZHistoryEntryDto;
 import com.orbix.engine.modules.sales.service.SalesReportService;
+import com.orbix.engine.modules.sales.service.SectionPnlReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +26,7 @@ import java.util.List;
 public class SalesReportController {
 
     private final SalesReportService service;
+    private final SectionPnlReportService sectionPnlService;
 
     /** US-RPT-001 — flat per-document list blending sales_invoice + pos_sale. */
     @GetMapping("/sales-daily")
@@ -53,5 +56,19 @@ public class SalesReportController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.zHistory(branchId, from, to);
+    }
+
+    /**
+     * US-RPT-011 — per-section revenue minus COGS minus wastage cost over
+     * a {@code [from, to]} window. POS-only at MVP (back-office
+     * {@code sales_invoice} doesn't carry a section dimension). Defaults to
+     * the last 30 days when {@code from} / {@code to} are omitted.
+     */
+    @GetMapping("/section-pnl")
+    public List<SectionPnlRowDto> sectionPnl(
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return sectionPnlService.report(branchId, from, to);
     }
 }
