@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
@@ -23,6 +24,8 @@ interface CreateForm {
   password: string;
   generatePassword: boolean;
 }
+
+type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 
 @Component({
   selector: 'orbix-user-admin',
@@ -95,9 +98,21 @@ interface CreateForm {
                   <label class="form-label small fw-semibold text-secondary">Phone <span class="text-muted">(opt)</span></label>
                   <input class="form-control" name="phone" [(ngModel)]="newForm.phone">
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Default branch ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" name="branchId" [(ngModel)]="newForm.defaultBranchId">
+                <div class="col-md-12">
+                  <label class="form-label small fw-semibold text-secondary">
+                    Default branch <span class="text-muted">(opt)</span>
+                  </label>
+                  <select class="form-select" name="branchId" [(ngModel)]="newForm.defaultBranchId">
+                    <option [ngValue]="null">— No default —</option>
+                    @for (b of branches(); track b.id) {
+                      <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
+                    }
+                  </select>
+                  <small class="form-text text-secondary">
+                    Where the user lands on login. This does NOT grant them access — go to
+                    <a routerLink="/admin/roles" class="text-decoration-none">Roles &amp; permissions</a>
+                    after creating to assign their role.
+                  </small>
                 </div>
               </div>
             </fieldset>
@@ -133,22 +148,48 @@ interface CreateForm {
       </div>
     }
 
+    @if (!showNewForm()) {
+    <!-- Toolbar -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
+        <div class="search-box flex-grow-1">
+          <i class="bi bi-search"></i>
+          <input type="search" class="form-control" placeholder="Search by username, name or email"
+                 [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+        </div>
+        <div class="status-pills d-flex gap-1 flex-wrap">
+          @for (opt of filterOptions; track opt.value) {
+            <button type="button" class="status-pill"
+                    [class.is-active]="filter() === opt.value"
+                    (click)="filter.set(opt.value)">
+              {{ opt.label }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
     <div class="row g-3 g-md-4">
       <!-- Users list -->
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
-            <span class="badge text-bg-light text-secondary">{{ users().length }}</span>
+            <span class="badge text-bg-light text-secondary">
+              {{ filtered().length }}@if (filtered().length !== users().length) { / {{ users().length }} }
+            </span>
           </div>
-          @if (users().length === 0) {
+          @if (filtered().length === 0) {
             <div class="p-5 text-center">
               <div class="empty-icon mx-auto mb-3"><i class="bi bi-people"></i></div>
-              <p class="small text-secondary mb-0">No users yet.</p>
+              <p class="small text-secondary mb-0">
+                @if (users().length === 0) { No users yet. }
+                @else { No users match these filters. }
+              </p>
             </div>
           } @else {
             <ul class="list-unstyled mb-0 u-list">
-              @for (u of users(); track u.id) {
+              @for (u of filtered(); track u.id) {
                 <li>
                   <button type="button" class="u-row"
                           [class.is-active]="selected()?.id === u.id"
@@ -253,8 +294,13 @@ interface CreateForm {
                       <input class="form-control" name="ph" [(ngModel)]="editForm.phone">
                     </div>
                     <div class="col-md-6">
-                      <label class="form-label small fw-semibold text-secondary">Default branch ID</label>
-                      <input class="form-control" type="number" name="br" [(ngModel)]="editForm.defaultBranchId">
+                      <label class="form-label small fw-semibold text-secondary">Default branch</label>
+                      <select class="form-select" name="br" [(ngModel)]="editForm.defaultBranchId">
+                        <option [ngValue]="null">— No default —</option>
+                        @for (b of branches(); track b.id) {
+                          <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
+                        }
+                      </select>
                     </div>
                   </div>
                 </fieldset>
@@ -321,6 +367,7 @@ interface CreateForm {
         }
       </div>
     </div>
+    }
   `,
   styles: [`
     :host { display: block; }
@@ -335,6 +382,32 @@ interface CreateForm {
     }
     .form-control:focus, .form-select:focus {
       border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+
+    /* ---- Toolbar ---- */
+    .search-box { position: relative; min-width: 220px; }
+    .search-box i {
+      position: absolute; left: 0.875rem; top: 50%; transform: translateY(-50%);
+      color: #9ca3af; pointer-events: none;
+    }
+    .search-box .form-control { padding-left: 2.4rem; border: 1px solid #e5e7eb; }
+    .search-box .form-control:focus {
+      border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+
+    .status-pill {
+      padding: 0.4rem 0.85rem; font-size: 0.85rem; font-weight: 500;
+      border: 1px solid #e5e7eb; border-radius: 999px;
+      background: #fff; color: #6b7280;
+      transition: all 0.15s ease;
+    }
+    .status-pill:hover { border-color: #cbd5e1; color: #1f2937; }
+    .status-pill.is-active { background: #0d2a5b; border-color: #0d2a5b; color: #fff; }
+
+    @media (max-width: 575.98px) {
+      .search-box { min-width: 100%; }
+      .status-pills { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+      .status-pill { flex-shrink: 0; }
     }
 
     .u-list { max-height: 70vh; overflow-y: auto; }
@@ -398,7 +471,9 @@ interface CreateForm {
 })
 export class UserAdminComponent implements OnInit {
   private readonly api = inject(UserAdminService);
+  private readonly branchService = inject(BranchService);
 
+  protected readonly branches = signal<AccessibleBranch[]>([]);
   protected readonly users = signal<UserSummary[]>([]);
   protected readonly selected = signal<UserDetail | null>(null);
   protected readonly busy = signal(false);
@@ -411,10 +486,44 @@ export class UserAdminComponent implements OnInit {
   protected newForm: CreateForm = blankCreateForm();
   protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as number | null };
 
+  // --- toolbar state ------------------------------------------------------
+  protected readonly searchSignal = signal('');
+  protected searchTerm = '';
+  protected readonly filter = signal<UserListFilter>('all');
+  protected readonly filterOptions: { label: string; value: UserListFilter }[] = [
+    { label: 'All',      value: 'all' },
+    { label: 'Active',   value: 'active' },
+    { label: 'Disabled', value: 'disabled' },
+    { label: 'Locked',   value: 'locked' },
+    { label: 'Reset due', value: 'reset' },
+  ];
+
+  protected readonly filtered = computed(() => {
+    const q = this.searchSignal().trim().toLowerCase();
+    const f = this.filter();
+    return this.users().filter(u => {
+      switch (f) {
+        case 'active':   if (u.status !== 'ACTIVE') return false; break;
+        case 'disabled': if (u.status === 'ACTIVE') return false; break;
+        case 'locked':   if (!u.locked) return false; break;
+        case 'reset':    if (!u.mustChangePassword) return false; break;
+        default: /* all */ break;
+      }
+      if (!q) return true;
+      return u.username.toLowerCase().includes(q)
+          || u.displayName.toLowerCase().includes(q)
+          || (u.email?.toLowerCase().includes(q) ?? false);
+    });
+  });
+
   protected readonly statusBadgeFor = computed(() => this.selected()?.status?.toLowerCase());
 
   ngOnInit(): void {
     this.load();
+    this.branchService.listBranches().subscribe({
+      next: list => this.branches.set(list),
+      error: () => this.branches.set([])
+    });
   }
 
   initials(displayName: string | null): string {
@@ -429,11 +538,20 @@ export class UserAdminComponent implements OnInit {
 
   toggleNewForm(): void {
     this.showNewForm.update(v => !v);
-    if (!this.showNewForm()) this.newForm = blankCreateForm();
+    if (this.showNewForm()) {
+      // Clear any open detail so the right column collapses to its empty
+      // state — the new-user form is the focus while it's open.
+      this.selected.set(null);
+    } else {
+      this.newForm = blankCreateForm();
+    }
   }
 
   selectUser(id: number): void {
     this.error.set(null);
+    // Close the new-user form if the admin is now picking an existing user
+    // — they're switching tasks.
+    if (this.showNewForm()) this.showNewForm.set(false);
     this.api.getUser(id).subscribe({
       next: detail => {
         this.selected.set(detail);
