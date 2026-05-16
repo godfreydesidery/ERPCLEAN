@@ -98,6 +98,15 @@ export class AuthService {
     this._user.set(null);
   }
 
+  /**
+   * Persist a token pair returned by any endpoint that mints a fresh session
+   * (login, refresh, branch switch). Replaces the active access + refresh
+   * tokens and the cached user-summary signal.
+   */
+  applySession(resp: LoginResponse): void {
+    this.storeSession(resp);
+  }
+
   private storeSession(resp: LoginResponse): void {
     sessionStorage.setItem(TOKEN_KEY, resp.accessToken);
     sessionStorage.setItem(REFRESH_KEY, resp.refreshToken);

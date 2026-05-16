@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.iam.service;
 
+import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.AccessibleBranchDto;
 
 import java.util.List;
@@ -14,9 +15,14 @@ public interface SessionService {
     List<AccessibleBranchDto> listAccessibleBranches();
 
     /**
-     * Persists the user's active branch preference on {@code app_user}.
-     * Throws {@link org.springframework.security.access.AccessDeniedException}
-     * if the user has no grant for that branch.
+     * Persists the user's active branch preference on {@code app_user} and
+     * returns a fresh access + refresh token pair whose JWT carries the new
+     * {@code branchId} claim plus {@code perms[]} resolved against the new
+     * branch context. The frontend stores the new pair so subsequent calls
+     * don't depend on the {@code X-Branch-Id} override path.
+     *
+     * @throws org.springframework.security.access.AccessDeniedException
+     *         if the user has no role grant covering that branch.
      */
-    void setActiveBranch(Long branchId);
+    LoginResponseDto setActiveBranch(Long branchId);
 }

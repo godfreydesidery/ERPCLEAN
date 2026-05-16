@@ -55,8 +55,11 @@ management:
 orbix:
   jwt:
     issuer: orbix-engine
+    # 15-min access keeps leak-blast-radius small; 12h refresh aligns
+    # roughly with a single shift so a stolen laptop can't sit on a
+    # multi-week session.
     access-ttl: PT15M
-    refresh-ttl: P30D
+    refresh-ttl: PT12H
     # Production: load RS256 keys from secret store. Local dev uses an in-memory key.
     signing-mode: ${JWT_SIGNING_MODE:dev-in-memory}
   search:

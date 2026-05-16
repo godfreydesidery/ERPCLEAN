@@ -3,6 +3,8 @@ package com.orbix.engine.modules.iam.service;
 import com.orbix.engine.modules.admin.domain.entity.Branch;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
+import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
+import com.orbix.engine.modules.auth.service.AuthService;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.iam.domain.dto.AccessibleBranchDto;
@@ -31,6 +33,7 @@ public class SessionServiceImpl implements SessionService {
     private final BranchRepository branches;
     private final AppUserRepository users;
     private final BranchAccessGuard branchAccessGuard;
+    private final AuthService authService;
     private final RequestContext context;
 
     @Override
@@ -64,7 +67,7 @@ public class SessionServiceImpl implements SessionService {
     @Override
     @Transactional
     @Auditable(action = "SET_ACTIVE_BRANCH", entityType = "AppUser")
-    public void setActiveBranch(Long branchId) {
+    public LoginResponseDto setActiveBranch(Long branchId) {
         Long userId = context.userId();
         Long companyId = context.companyId();
 
@@ -81,5 +84,10 @@ public class SessionServiceImpl implements SessionService {
         user.setUpdatedAt(Instant.now());
         user.setUpdatedBy(userId);
         users.save(user);
+
+        // Reissue tokens so the new JWT carries (branchId, perms[]) freshly
+        // resolved against the new branch context — no more X-Branch-Id
+        // override path on subsequent calls.
+        return authService.reissueTokens(userId);
     }
 }

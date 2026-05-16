@@ -121,6 +121,16 @@ public class AuthServiceImpl implements AuthService {
         refreshTokens.revokeAllForUser(userId, Instant.now());
     }
 
+    @Override
+    @Transactional
+    public LoginResponseDto reissueTokens(Long userId) {
+        AppUser user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
+        if (!user.canLogIn(Instant.now())) {
+            throw new InvalidCredentialsException();
+        }
+        return issueTokens(user);
+    }
+
     private LoginResponseDto issueTokens(AppUser user) {
         Long companyId = user.getDefaultCompanyId() == null ? 0L : user.getDefaultCompanyId();
         Long branchId = user.getDefaultBranchId();
