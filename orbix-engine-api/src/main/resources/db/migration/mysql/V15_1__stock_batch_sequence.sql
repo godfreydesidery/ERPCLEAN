@@ -1,2 +1,2 @@
--- Emulated sequence for the F2.4 stock_batch aggregate.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('stock_batch_seq', 1);
+-- Sequence for the F2.4 stock_batch aggregate.
+CREATE SEQUENCE stock_batch_seq START WITH 1 INCREMENT BY 50;

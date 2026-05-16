@@ -24,6 +24,13 @@
         <springdoc.version>2.6.0</springdoc.version>
         <meilisearch.version>0.14.4</meilisearch.version>
         <testcontainers.version>1.20.3</testcontainers.version>
+        <!--
+          Spring Boot 3.3.5 pins mysql-connector-j to 8.3.0 (Jan 2024), which
+          predates MySQL 8.4 (Apr 2024) and breaks the caching_sha2_password
+          handshake — "Access denied" even with correct credentials. Bumping
+          to 9.x (compatible with MySQL 8.0 + 8.4 + 9.x).
+        -->
+        <mysql.version>9.1.0</mysql.version>
     </properties>
 
     <dependencies>

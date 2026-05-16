@@ -1,3 +1,3 @@
--- Emulated sequences for the F4.5 packing_list aggregate.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('packing_list_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('packing_list_line_seq', 1);
+-- Sequences for the F4.5 packing_list aggregate.
+CREATE SEQUENCE packing_list_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE packing_list_line_seq START WITH 1 INCREMENT BY 50;

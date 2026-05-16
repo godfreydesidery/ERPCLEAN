@@ -27,4 +27,15 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
      */
     List<CustomerOrder> findByStatusInAndReservedUntilLessThan(
         List<CustomerOrderStatus> statuses, Instant cutoff);
+
+    /**
+     * F8.6 / US-RPT-014 — open orders for ageing. Excludes terminal
+     * COLLECTED / CANCELLED / EXPIRED so the report tracks only what's
+     * still in flight.
+     */
+    List<CustomerOrder> findByCompanyIdAndStatusInOrderByCreatedAtAsc(
+        Long companyId, List<CustomerOrderStatus> statuses);
+
+    List<CustomerOrder> findByCompanyIdAndBranchIdAndStatusInOrderByCreatedAtAsc(
+        Long companyId, Long branchId, List<CustomerOrderStatus> statuses);
 }

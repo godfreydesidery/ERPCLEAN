@@ -1,9 +1,9 @@
 -- Platform sequences for identity + tenancy aggregates.
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('organisation_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('company_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('branch_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('app_user_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('role_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('permission_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('user_role_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('refresh_token_seq', 1);
+CREATE SEQUENCE organisation_seq  START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE company_seq       START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE branch_seq        START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE app_user_seq      START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE role_seq          START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE permission_seq    START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE user_role_seq     START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE refresh_token_seq START WITH 1 INCREMENT BY 50;
