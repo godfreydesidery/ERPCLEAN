@@ -1,7 +1,9 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
@@ -11,177 +13,354 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
 @Component({
   selector: 'orbix-lpos',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
   template: `
-    <h2 class="h3 mb-4">Local purchase orders</h2>
-    @if (error()) { <div class="alert alert-danger py-2">{{ error() }}</div> }
-    @if (info()) { <div class="alert alert-success py-2">{{ info() }}</div> }
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
+          <a routerLink=".." class="text-decoration-none text-secondary">Procurement</a> &rsaquo; LPOs
+        </p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Local purchase orders</h1>
+        <p class="text-secondary mb-0 small">{{ lpos().length }} LPO{{ lpos().length === 1 ? '' : 's' }} on file.</p>
+      </div>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
+        <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
+        {{ showForm() ? 'Close form' : 'New LPO' }}
+      </button>
+    </header>
 
-    <div class="row g-4">
-      <div class="col-12 col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-header fw-semibold">LPOs</div>
-          <div class="list-group list-group-flush">
-            @for (l of lpos(); track l.id) {
-              <button type="button"
-                      class="list-group-item list-group-item-action d-flex justify-content-between"
-                      [class.active]="selected()?.id === l.id" (click)="select(l)">
-                <span>{{ l.number }}
-                  <small class="d-block text-muted">supplier #{{ l.supplierId }} · {{ l.totalAmount | number:'1.0-2' }}</small>
-                </span>
-                <span class="badge align-self-center"
-                      [class.text-bg-secondary]="l.status === 'DRAFT'"
-                      [class.text-bg-warning]="l.status === 'PENDING_APPROVAL'"
-                      [class.text-bg-success]="l.status === 'APPROVED' || l.status === 'RECEIVED'"
-                      [class.text-bg-info]="l.status === 'PARTIALLY_RECEIVED'"
-                      [class.text-bg-danger]="l.status === 'CANCELLED'">{{ l.status }}</span>
-              </button>
-            } @empty { <div class="list-group-item text-muted">No LPOs yet.</div> }
-          </div>
+    @if (error()) {
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (info()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+      </div>
+    }
+
+    @if (showForm()) {
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <h2 class="h6 fw-bold mb-0 text-dark">Draft LPO</h2>
+          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
         </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-semibold">New LPO</div>
-          <div class="card-body">
-            <form (ngSubmit)="create()" #f="ngForm">
-              <div class="mb-2">
-                <label class="form-label">Number</label>
-                <input class="form-control" name="num" [(ngModel)]="newNumber" required>
-              </div>
-              <div class="mb-2">
-                <label class="form-label">Supplier id</label>
-                <input class="form-control" type="number" name="sup" [(ngModel)]="newSupplierId" required>
-              </div>
-              <div class="row g-2 mb-2">
-                <div class="col">
-                  <label class="form-label">Order date</label>
+        <div class="card-body p-3">
+          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
+            <fieldset class="form-fieldset">
+              <legend class="form-fieldset__legend"><i class="bi bi-file-earmark-text text-secondary"></i> Header</legend>
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Number</label>
+                  <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="LPO0001">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Supplier ID</label>
+                  <input class="form-control" type="number" name="sup" [(ngModel)]="newSupplierId" required>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Currency</label>
+                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small fw-semibold text-secondary">Order date</label>
                   <input class="form-control" type="date" name="od" [(ngModel)]="newOrderDate" required>
                 </div>
-                <div class="col">
-                  <label class="form-label">Expected delivery</label>
+                <div class="col-md-6">
+                  <label class="form-label small fw-semibold text-secondary">Expected delivery <span class="text-muted">(optional)</span></label>
                   <input class="form-control" type="date" name="ed" [(ngModel)]="newExpectedDelivery">
                 </div>
               </div>
-              <div class="mb-2">
-                <label class="form-label">Currency</label>
-                <input class="form-control" name="cur" [(ngModel)]="newCurrency" required>
-              </div>
-              <fieldset class="border rounded p-2 mb-2">
-                <legend class="float-none w-auto small px-1">Line 1</legend>
-                <div class="row g-2">
-                  <div class="col">
-                    <label class="form-label small mb-1">Item id</label>
-                    <input class="form-control" type="number" name="li" [(ngModel)]="newItemId" required>
-                  </div>
-                  <div class="col">
-                    <label class="form-label small mb-1">Qty</label>
-                    <input class="form-control" type="number" step="0.0001" min="0.0001"
-                           name="lq" [(ngModel)]="newQty" required>
-                  </div>
-                  <div class="col">
-                    <label class="form-label small mb-1">Unit price</label>
-                    <input class="form-control" type="number" step="0.0001" min="0"
-                           name="lp" [(ngModel)]="newUnitPrice" required>
-                  </div>
+            </fieldset>
+
+            <fieldset class="form-fieldset">
+              <legend class="form-fieldset__legend"><i class="bi bi-list-ul text-secondary"></i> First line</legend>
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
+                  <input class="form-control" type="number" name="li" [(ngModel)]="newItemId" required>
                 </div>
-                <div class="form-text">More lines via PATCH (edit) once draft is created.</div>
-              </fieldset>
-              <button class="btn btn-primary w-100" [disabled]="busy() || f.invalid">Create draft</button>
-            </form>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Qty</label>
+                  <input class="form-control text-end" type="number" step="0.0001" min="0.0001"
+                         name="lq" [(ngModel)]="newQty" required>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Unit price</label>
+                  <input class="form-control text-end" type="number" step="0.0001" min="0"
+                         name="lp" [(ngModel)]="newUnitPrice" required>
+                </div>
+              </div>
+              <p class="small text-secondary mb-0 mt-2">
+                <i class="bi bi-info-circle me-1"></i>Add more lines via PATCH once the draft exists.
+              </p>
+            </fieldset>
+
+            <div class="d-flex gap-2 pt-2 border-top">
+              <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                      [disabled]="busy() || f.invalid">
+                @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                @else { <i class="bi bi-file-earmark-text"></i> }
+                Create draft
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="toggleForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    }
+
+    <div class="row g-3 g-md-4">
+      <div class="col-12 col-lg-5">
+        <div class="card border-0 shadow-sm overflow-hidden">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">LPOs</h2>
+            <span class="badge text-bg-light text-secondary">{{ lpos().length }}</span>
           </div>
+          @if (lpos().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-file-earmark-text"></i></div>
+              <p class="small text-secondary mb-0">No LPOs yet. Draft the first one.</p>
+            </div>
+          } @else {
+            <ul class="list-unstyled mb-0 lpo-list">
+              @for (l of lpos(); track l.id) {
+                <li>
+                  <button type="button" class="lpo-row"
+                          [class.is-active]="selected()?.id === l.id"
+                          (click)="select(l)">
+                    <div class="flex-grow-1 min-w-0">
+                      <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge text-bg-light border text-secondary font-monospace">{{ l.number }}</span>
+                        <span class="status-badge status-badge--{{ l.status.toLowerCase() }}">
+                          <span class="status-badge__dot"></span>{{ statusLabel(l.status) }}
+                        </span>
+                      </div>
+                      <p class="small text-secondary mb-0">
+                        Supplier #{{ l.supplierId }} · {{ l.orderDate | date:'mediumDate' }}
+                      </p>
+                    </div>
+                    <div class="fw-bold text-dark">{{ l.totalAmount | number:'1.2-2' }}</div>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
         </div>
       </div>
 
-      <div class="col-12 col-lg-8">
+      <div class="col-12 col-lg-7">
         @if (selected(); as lpo) {
-          <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <span class="fw-semibold">{{ lpo.number }} — {{ lpo.status }}</span>
-              <div class="btn-group">
-                @if (lpo.status === 'DRAFT') {
-                  <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="submit(lpo)">Submit</button>
-                  <button class="btn btn-sm btn-outline-danger" [disabled]="busy()" (click)="cancel(lpo)">Cancel</button>
-                }
-                @if (lpo.status === 'PENDING_APPROVAL') {
-                  <button class="btn btn-sm btn-success" [disabled]="busy()" (click)="approve(lpo)">Approve</button>
-                  <button class="btn btn-sm btn-outline-danger" [disabled]="busy()" (click)="cancel(lpo)">Cancel</button>
-                }
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4">
+              <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                <div>
+                  <p class="small text-secondary mb-1">Supplier #{{ lpo.supplierId }} · {{ lpo.orderDate | date:'mediumDate' }}</p>
+                  <h2 class="h4 fw-bold mb-1 text-dark">{{ lpo.number }}</h2>
+                  <span class="status-badge status-badge--{{ lpo.status.toLowerCase() }}">
+                    <span class="status-badge__dot"></span>{{ statusLabel(lpo.status) }}
+                  </span>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                  @if (lpo.status === 'DRAFT') {
+                    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="submit(lpo)">
+                      <i class="bi bi-send"></i> Submit
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(lpo)">
+                      <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  }
+                  @if (lpo.status === 'PENDING_APPROVAL') {
+                    <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="approve(lpo)">
+                      <i class="bi bi-check2-circle"></i> Approve
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(lpo)">
+                      <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  }
+                </div>
               </div>
-            </div>
-            <div class="card-body">
-              <dl class="row mb-3">
-                <dt class="col-sm-3">Supplier</dt><dd class="col-sm-9">#{{ lpo.supplierId }}</dd>
-                <dt class="col-sm-3">Order date</dt><dd class="col-sm-9">{{ lpo.orderDate }}</dd>
-                <dt class="col-sm-3">Expected delivery</dt><dd class="col-sm-9">{{ lpo.expectedDeliveryDate ?? '—' }}</dd>
-                <dt class="col-sm-3">Currency</dt><dd class="col-sm-9">{{ lpo.currencyCode }}</dd>
-                <dt class="col-sm-3">Subtotal</dt><dd class="col-sm-9">{{ lpo.subtotalAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-3">Tax</dt><dd class="col-sm-9">{{ lpo.taxAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-3">Total</dt><dd class="col-sm-9 fw-semibold">{{ lpo.totalAmount | number:'1.2-2' }}</dd>
+
+              <div class="row g-2 totals-row mb-3">
+                <div class="col-6 col-md-4">
+                  <p class="totals-row__label">Subtotal</p>
+                  <p class="totals-row__value">{{ lpo.subtotalAmount | number:'1.2-2' }}</p>
+                </div>
+                <div class="col-6 col-md-4">
+                  <p class="totals-row__label">Tax</p>
+                  <p class="totals-row__value">{{ lpo.taxAmount | number:'1.2-2' }}</p>
+                </div>
+                <div class="col-6 col-md-4">
+                  <p class="totals-row__label">Total</p>
+                  <p class="totals-row__value totals-row__value--strong">{{ lpo.totalAmount | number:'1.2-2' }}</p>
+                </div>
+              </div>
+
+              <dl class="row small mb-0">
+                <dt class="col-4 text-secondary">Expected delivery</dt>
+                <dd class="col-8 mb-1">{{ lpo.expectedDeliveryDate ? (lpo.expectedDeliveryDate | date:'mediumDate') : '—' }}</dd>
+                <dt class="col-4 text-secondary">Currency</dt>
+                <dd class="col-8 mb-1 font-monospace">{{ lpo.currencyCode }}</dd>
                 @if (lpo.approvedBy) {
-                  <dt class="col-sm-3">Approved</dt>
-                  <dd class="col-sm-9">by #{{ lpo.approvedBy }} at {{ lpo.approvedAt }}</dd>
+                  <dt class="col-4 text-secondary">Approved</dt>
+                  <dd class="col-8 mb-1">by #{{ lpo.approvedBy }} at {{ lpo.approvedAt | date:'medium' }}</dd>
                 }
                 @if (lpo.notes) {
-                  <dt class="col-sm-3">Notes</dt><dd class="col-sm-9">{{ lpo.notes }}</dd>
+                  <dt class="col-4 text-secondary">Notes</dt>
+                  <dd class="col-8 mb-1">{{ lpo.notes }}</dd>
                 }
               </dl>
-              <table class="table table-sm align-middle">
-                <thead><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th class="text-end">Unit</th>
-                           <th class="text-end">Disc%</th><th class="text-end">Line total</th>
-                           <th class="text-end">Received</th></tr></thead>
+            </div>
+          </div>
+
+          <div class="card border-0 shadow-sm overflow-hidden">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h3 class="h6 fw-bold mb-0 text-dark">Lines</h3>
+              <span class="badge text-bg-light text-secondary">{{ lpo.lines.length }}</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0 simple-table">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Item</th>
+                    <th class="text-end">Ordered</th><th class="text-end">Received</th>
+                    <th class="text-end">Unit</th><th class="text-end">Disc %</th>
+                    <th class="text-end">Total</th>
+                  </tr>
+                </thead>
                 <tbody>
                   @for (line of lpo.lines; track line.id) {
                     <tr>
-                      <td>{{ line.lineNo }}</td>
-                      <td>{{ line.itemId }}</td>
+                      <td class="small text-secondary">{{ line.lineNo }}</td>
+                      <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span></td>
                       <td class="text-end">{{ line.orderedQty }}</td>
+                      <td class="text-end small"
+                          [class.text-success]="line.receivedQty >= line.orderedQty"
+                          [class.text-warning]="line.receivedQty > 0 && line.receivedQty < line.orderedQty"
+                          [class.text-secondary]="line.receivedQty === 0">
+                        {{ line.receivedQty }}
+                      </td>
                       <td class="text-end">{{ line.unitPrice | number:'1.2-2' }}</td>
-                      <td class="text-end">{{ line.discountPct | number:'1.0-2' }}</td>
-                      <td class="text-end">{{ line.lineTotal | number:'1.2-2' }}</td>
-                      <td class="text-end">{{ line.receivedQty }}</td>
+                      <td class="text-end small text-secondary">{{ line.discountPct | number:'1.0-2' }}</td>
+                      <td class="text-end fw-semibold">{{ line.lineTotal | number:'1.2-2' }}</td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="7" class="text-muted">No lines.</td></tr>
+                    <tr><td colspan="7" class="text-center text-secondary py-4">No lines.</td></tr>
                   }
                 </tbody>
               </table>
             </div>
           </div>
         } @else {
-          <div class="alert alert-secondary">Select an LPO from the list, or create one.</div>
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
+              <h2 class="h6 fw-bold mb-1 text-dark">Pick an LPO</h2>
+              <p class="small text-secondary mb-0">Or draft a new one.</p>
+            </div>
+          </div>
         }
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    :host { display: block; }
+    .min-w-0 { min-width: 0; }
+
+    .form-fieldset {
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem 1.25rem 1.25rem;
+    }
+    .form-fieldset__legend {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #374151; padding: 0 0.5rem; width: 100%; margin-bottom: 0.5rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8; box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+
+    .lpo-list { max-height: 70vh; overflow-y: auto; }
+    .lpo-row {
+      width: 100%; display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1rem; background: #fff; border: none;
+      border-bottom: 1px solid #f3f4f6; text-align: left;
+      transition: background 0.1s ease;
+    }
+    .lpo-row:hover { background: #f8fafc; }
+    .lpo-row.is-active { background: #eef4ff; border-left: 3px solid #1d4ed8; padding-left: calc(1rem - 3px); }
+    .lpo-row:last-child { border-bottom: none; }
+
+    .simple-table thead th {
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td { padding: 0.65rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table tbody tr:hover { background: #f8fafc; }
+
+    .totals-row .totals-row__label {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6b7280; margin-bottom: 0.15rem;
+    }
+    .totals-row .totals-row__value { font-size: 1.05rem; font-weight: 600; color: #111827; margin-bottom: 0; }
+    .totals-row .totals-row__value--strong { font-size: 1.4rem; color: #0d2a5b; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.25rem 0.625rem; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-badge--draft               { background: #f3f4f6; color: #4b5563; }
+    .status-badge--draft .status-badge__dot               { background: #9ca3af; }
+    .status-badge--pending_approval    { background: #fef3c7; color: #92400e; }
+    .status-badge--pending_approval .status-badge__dot    { background: #f59e0b; }
+    .status-badge--approved            { background: #e0ecff; color: #1d4ed8; }
+    .status-badge--approved .status-badge__dot            { background: #3b82f6; }
+    .status-badge--partially_received  { background: #fef3c7; color: #92400e; }
+    .status-badge--partially_received .status-badge__dot  { background: #f59e0b; }
+    .status-badge--received            { background: #d1fae5; color: #047857; }
+    .status-badge--received .status-badge__dot            { background: #10b981; }
+    .status-badge--cancelled           { background: #fee2e2; color: #b91c1c; }
+    .status-badge--cancelled .status-badge__dot           { background: #f43f5e; }
+
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: #e0ecff; color: #1d4ed8; font-size: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+  `]
 })
 export class LposComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
 
-  readonly lpos = signal<LpoOrder[]>([]);
-  readonly selected = signal<LpoOrder | null>(null);
-  readonly busy = signal<boolean>(false);
-  readonly error = signal<string | null>(null);
-  readonly info = signal<string | null>(null);
+  protected readonly lpos = signal<LpoOrder[]>([]);
+  protected readonly selected = signal<LpoOrder | null>(null);
+  protected readonly busy = signal<boolean>(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly info = signal<string | null>(null);
+  protected readonly showForm = signal(false);
 
-  readonly branchId = computed(() =>
+  protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  // ---- new-LPO form state --------------------------------------------------
-  newNumber = '';
-  newSupplierId: number | null = null;
-  newOrderDate = new Date().toISOString().slice(0, 10);
-  newExpectedDelivery: string | null = null;
-  newCurrency = 'TZS';
-  newItemId: number | null = null;
-  newQty: number | null = null;
-  newUnitPrice: number | null = null;
+  protected newNumber = '';
+  protected newSupplierId: number | null = null;
+  protected newOrderDate = new Date().toISOString().slice(0, 10);
+  protected newExpectedDelivery: string | null = null;
+  protected newCurrency = 'TZS';
+  protected newItemId: number | null = null;
+  protected newQty: number | null = null;
+  protected newUnitPrice: number | null = null;
 
-  ngOnInit(): void {
-    this.refresh();
-  }
+  ngOnInit(): void { this.refresh(); }
+
+  toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
     this.procurement.listLpos(this.branchId()).subscribe({
@@ -190,8 +369,12 @@ export class LposComponent implements OnInit {
     });
   }
 
-  select(lpo: LpoOrder): void {
-    this.selected.set(lpo);
+  select(lpo: LpoOrder): void { this.selected.set(lpo); }
+
+  statusLabel(status: string): string {
+    if (status === 'PENDING_APPROVAL') return 'PENDING';
+    if (status === 'PARTIALLY_RECEIVED') return 'PART-RECV';
+    return status;
   }
 
   create(): void {
@@ -224,6 +407,7 @@ export class LposComponent implements OnInit {
     this.newItemId = null;
     this.newQty = null;
     this.newUnitPrice = null;
+    this.showForm.set(false);
   }
 
   submit(lpo: LpoOrder): void {
@@ -235,11 +419,11 @@ export class LposComponent implements OnInit {
   }
 
   cancel(lpo: LpoOrder): void {
-    if (!window.confirm(`Cancel ${lpo.number}?`)) return;
+    if (!globalThis.confirm(`Cancel ${lpo.number}?`)) return;
     this.run(this.procurement.cancelLpo(lpo.id), `LPO cancelled.`);
   }
 
-  private run(op: import('rxjs').Observable<LpoOrder>, successMessage: string): void {
+  private run(op: Observable<LpoOrder>, successMessage: string): void {
     this.busy.set(true);
     this.error.set(null);
     this.info.set(null);
@@ -250,10 +434,7 @@ export class LposComponent implements OnInit {
         this.selected.set(order);
         this.refresh();
       },
-      error: err => {
-        this.busy.set(false);
-        this.showError(err);
-      }
+      error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 
