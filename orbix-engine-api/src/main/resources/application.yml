@@ -69,6 +69,14 @@ orbix:
   giftcard:
     # F7.1 — daily auto-expiry of gift cards past expires_at. Default 00:10 UTC.
     expiry-cron: "0 10 0 * * *"
+  production:
+    # F7.3b — yield variance gating on production output post.
+    # Hard 422 when actual output > planned × this multiple (TC-PROD-011).
+    yield-hard-reject-multiple: 2.0
+    # Informational soft-warn band: |actual / planned − 1| > this fraction
+    # surfaces a warning (TC-PROD-010). Currently surfaced via the response
+    # payload only; future work routes it through the notifications channel.
+    yield-soft-warn-fraction: 0.5
   orders:
     # F7.2 — default deposit-required percentage of total when the client
     # omits depositRequiredAmount on order create.
