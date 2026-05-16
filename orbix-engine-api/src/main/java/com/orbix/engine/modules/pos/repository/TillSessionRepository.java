@@ -21,4 +21,14 @@ public interface TillSessionRepository extends JpaRepository<TillSession, Long> 
     /** F7.5 EOD gate — returns any non-RECONCILED sessions for the close window. */
     List<TillSession> findByBranchIdAndBusinessDateAndStatusIn(
         Long branchId, LocalDate businessDate, List<TillSessionStatus> statuses);
+
+    /**
+     * F8.2 / US-RPT-003 — every till session whose business_date falls in
+     * {@code [from, to]} (inclusive) for the audit's Z-history view.
+     */
+    List<TillSession> findByCompanyIdAndBusinessDateBetweenOrderByIdDesc(
+        Long companyId, LocalDate from, LocalDate to);
+
+    List<TillSession> findByCompanyIdAndBranchIdAndBusinessDateBetweenOrderByIdDesc(
+        Long companyId, Long branchId, LocalDate from, LocalDate to);
 }
