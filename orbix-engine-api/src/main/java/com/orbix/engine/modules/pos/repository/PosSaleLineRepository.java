@@ -40,4 +40,33 @@ public interface PosSaleLineRepository extends JpaRepository<PosSaleLine, Long> 
                                       @Param("to") LocalDate to,
                                       @Param("status") PosSaleStatus status,
                                       @Param("kind") PosSaleKind kind);
+
+    /**
+     * F8.8 / US-NFR-COMP-001 — per-VAT-group output rollup over a
+     * {@code [from, to]} window driven by {@code pos_sale.business_date}.
+     * VOIDED excluded; caller invokes once with {@code kind = SALE} and
+     * once with {@code kind = REFUND} so refund totals subtract from the
+     * sale totals at the service layer. Returns
+     * {@code Object[]{vatGroupId, sumNet, sumTax}} where
+     * {@code net = line_total − tax_amount} (POS lines store
+     * {@code line_total} tax-inclusive).
+     */
+    @Query("""
+        select l.vatGroupId,
+               coalesce(sum(l.lineTotal - l.taxAmount), 0),
+               coalesce(sum(l.taxAmount), 0)
+          from PosSale s join PosSaleLine l on l.posSaleId = s.id
+         where s.companyId = :companyId
+           and (:branchId is null or s.branchId = :branchId)
+           and s.businessDate between :from and :to
+           and s.status = :status
+           and s.kind = :kind
+         group by l.vatGroupId
+        """)
+    List<Object[]> aggregateOutputVat(@Param("companyId") Long companyId,
+                                      @Param("branchId") Long branchId,
+                                      @Param("from") LocalDate from,
+                                      @Param("to") LocalDate to,
+                                      @Param("status") PosSaleStatus status,
+                                      @Param("kind") PosSaleKind kind);
 }
