@@ -6,15 +6,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
 import { ITEM_TYPES, ItemGroup, ItemType, Uom, VatGroup, WEIGHING_UNITS, WeighingUnit } from '../catalog.models';
-
-// FOLLOWUP: barcodes-panel + price-history-panel currently call the
-// backend with a numeric itemId. Until those endpoints migrate to uid
-// (separate PR), the sub-panels are not rendered on this page.
+import { BarcodesPanelComponent } from './barcodes-panel.component';
+import { PriceHistoryPanelComponent } from './price-history-panel.component';
 
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [DecimalPipe, FormsModule, RouterLink],
+  imports: [DecimalPipe, FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
   template: `
     <h2 class="h3 mb-4">{{ itemUid() ? 'Edit item' : 'New item' }}</h2>
 
@@ -119,8 +117,12 @@ import { ITEM_TYPES, ItemGroup, ItemType, Uom, VatGroup, WEIGHING_UNITS, Weighin
       </div>
     </form>
 
-    <!-- FOLLOWUP: barcodes-panel + price-history-panel hidden until those
-         endpoints migrate from numeric itemId to uid. -->
+    @if (itemId(); as id) {
+      <div style="max-width: 720px">
+        <orbix-barcodes-panel [itemId]="id" />
+        <orbix-price-history-panel [itemId]="id" />
+      </div>
+    }
   `
 })
 export class ItemEditComponent implements OnInit {
@@ -129,6 +131,9 @@ export class ItemEditComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly itemUid = signal<string | null>(null);
+  /** Numeric id of the loaded item — used by sub-panels (barcodes, price
+   *  history) that still address items by id in their endpoints. */
+  readonly itemId = signal<number | null>(null);
   readonly groups = signal<ItemGroup[]>([]);
   readonly uoms = signal<Uom[]>([]);
   readonly vatGroups = signal<VatGroup[]>([]);
@@ -173,6 +178,7 @@ export class ItemEditComponent implements OnInit {
       this.itemUid.set(uidParam);
       this.catalog.getItem(uidParam).subscribe({
         next: item => {
+          this.itemId.set(item.id);
           this.form = {
             code: item.code,
             name: item.name,

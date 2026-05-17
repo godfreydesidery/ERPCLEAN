@@ -8,13 +8,13 @@ import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
 import java.math.BigDecimal;
 
 /**
- * Outgoing item representation. The numeric {@code id} is intentionally
- * absent — externals address items by {@code uid} only. Joined-by foreign
- * keys ({@code itemGroupId}, {@code uomId}, {@code vatGroupId}) will follow
- * the same uid migration as their owning aggregates land; for now they
- * still carry numeric ids.
+ * Outgoing item representation. Carries both {@code uid} (for URLs and
+ * cross-system references) and {@code id} (numeric, for body-level joins
+ * with other DTOs that still reference items by numeric id). URLs MUST
+ * address items by uid — id appears in the body only.
  */
 public record ItemResponseDto(
+    Long id,
     String uid,
     Long companyId,
     String code,
@@ -35,6 +35,7 @@ public record ItemResponseDto(
 ) {
     public static ItemResponseDto from(Item item) {
         return new ItemResponseDto(
+            item.getId(),
             item.getUid(),
             item.getCompanyId(),
             item.getCode(),

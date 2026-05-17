@@ -16,7 +16,10 @@ export const ITEM_TYPES: ItemType[] = ['SELLABLE', 'CONSUMABLE', 'BOTH', 'SERVIC
 export const WEIGHING_UNITS: WeighingUnit[] = ['KG', 'G', 'L', 'ML'];
 
 export interface Item {
-  /** ULID (26 chars). The numeric id is internal to the backend and never exposed. */
+  /** Numeric primary key — present in response bodies so DTOs that join by
+   *  numeric id (e.g. SalesInvoiceLine.itemId) keep working. Never used in URLs. */
+  id: number;
+  /** ULID (26 chars). The canonical external identifier — used in every URL. */
   uid: string;
   companyId: number;
   code: string;
