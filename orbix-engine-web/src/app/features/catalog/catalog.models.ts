@@ -16,9 +16,11 @@ export const ITEM_TYPES: ItemType[] = ['SELLABLE', 'CONSUMABLE', 'BOTH', 'SERVIC
 export const WEIGHING_UNITS: WeighingUnit[] = ['KG', 'G', 'L', 'ML'];
 
 export interface Item {
-  /** Numeric primary key — present in response bodies so DTOs that join by
-   *  numeric id (e.g. SalesInvoiceLine.itemId) keep working. Never used in URLs. */
-  id: number;
+  /** Internal handle as a string (JSON:API discipline — backend uses Long
+   *  internally and Jackson serialises as a JSON string). Used as a body-level
+   *  reference for DTOs that still join by item id (e.g. SalesInvoiceLine.itemId).
+   *  Never used in URLs. */
+  id: string;
   /** ULID (26 chars). The canonical external identifier — used in every URL. */
   uid: string;
   companyId: number;

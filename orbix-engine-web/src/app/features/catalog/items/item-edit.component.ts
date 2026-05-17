@@ -178,7 +178,9 @@ export class ItemEditComponent implements OnInit {
       this.itemUid.set(uidParam);
       this.catalog.getItem(uidParam).subscribe({
         next: item => {
-          this.itemId.set(item.id);
+          // item.id arrives as a JSON string (JSON:API discipline) but the
+          // sub-panels still take a numeric itemId — convert at this boundary.
+          this.itemId.set(Number(item.id));
           this.form = {
             code: item.code,
             name: item.name,
