@@ -13,7 +13,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 @immutable
 class MockItem {
+  /// Internal catalog item code (short, business-meaningful).
   final String code;
+  /// Primary barcode printed on the package (EAN-13). Real systems carry a
+  /// list of barcodes per item (supplier + retailer codes); this prototype
+  /// keeps a single primary one to demo the scan flow.
+  final String barcode;
   final String name;
   final String group;
   final double price;
@@ -21,6 +26,7 @@ class MockItem {
 
   const MockItem({
     required this.code,
+    required this.barcode,
     required this.name,
     required this.group,
     required this.price,
@@ -29,24 +35,24 @@ class MockItem {
 }
 
 const mockItems = <MockItem>[
-  MockItem(code: 'BR-001', name: 'White bread loaf 600g',  group: 'Bakery',    price:  2500, uom: 'EA'),
-  MockItem(code: 'BR-002', name: 'Brown bread loaf 600g',  group: 'Bakery',    price:  2700, uom: 'EA'),
-  MockItem(code: 'BR-003', name: 'Hot dog buns (6 pack)',  group: 'Bakery',    price:  3500, uom: 'PK'),
-  MockItem(code: 'DR-001', name: 'Fresh milk 1L',          group: 'Dairy',     price:  3200, uom: 'EA'),
-  MockItem(code: 'DR-002', name: 'Yoghurt strawberry 500ml', group: 'Dairy',   price:  4500, uom: 'EA'),
-  MockItem(code: 'DR-003', name: 'Cheddar cheese 250g',    group: 'Dairy',     price: 12000, uom: 'EA'),
-  MockItem(code: 'BV-001', name: 'Coca-Cola 500ml',        group: 'Beverages', price:  2000, uom: 'EA'),
-  MockItem(code: 'BV-002', name: 'Mineral water 1.5L',     group: 'Beverages', price:  2500, uom: 'EA'),
-  MockItem(code: 'BV-003', name: 'Orange juice 1L',        group: 'Beverages', price:  6500, uom: 'EA'),
-  MockItem(code: 'BV-004', name: 'Tusker lager 500ml',     group: 'Beverages', price:  5000, uom: 'EA'),
-  MockItem(code: 'GR-001', name: 'Rice 5kg bag',           group: 'Groceries', price: 18000, uom: 'BAG'),
-  MockItem(code: 'GR-002', name: 'Sugar 2kg',              group: 'Groceries', price:  9500, uom: 'KG'),
-  MockItem(code: 'GR-003', name: 'Cooking oil 3L',         group: 'Groceries', price: 22000, uom: 'EA'),
-  MockItem(code: 'SN-001', name: 'Pringles 165g',          group: 'Snacks',    price:  8000, uom: 'EA'),
-  MockItem(code: 'SN-002', name: 'Cadbury chocolate 90g',  group: 'Snacks',    price:  6500, uom: 'EA'),
-  MockItem(code: 'HS-001', name: 'Toilet paper (10 roll)', group: 'Household', price: 14000, uom: 'PK'),
-  MockItem(code: 'HS-002', name: 'Laundry soap 1kg',       group: 'Household', price:  7500, uom: 'EA'),
-  MockItem(code: 'HS-003', name: 'Dishwashing liquid 750ml', group: 'Household', price: 6000, uom: 'EA'),
+  MockItem(code: 'BR-001', barcode: '5901234100013', name: 'White bread loaf 600g',  group: 'Bakery',    price:  2500, uom: 'EA'),
+  MockItem(code: 'BR-002', barcode: '5901234100020', name: 'Brown bread loaf 600g',  group: 'Bakery',    price:  2700, uom: 'EA'),
+  MockItem(code: 'BR-003', barcode: '5901234100037', name: 'Hot dog buns (6 pack)',  group: 'Bakery',    price:  3500, uom: 'PK'),
+  MockItem(code: 'DR-001', barcode: '5901234200013', name: 'Fresh milk 1L',          group: 'Dairy',     price:  3200, uom: 'EA'),
+  MockItem(code: 'DR-002', barcode: '5901234200020', name: 'Yoghurt strawberry 500ml', group: 'Dairy',   price:  4500, uom: 'EA'),
+  MockItem(code: 'DR-003', barcode: '5901234200037', name: 'Cheddar cheese 250g',    group: 'Dairy',     price: 12000, uom: 'EA'),
+  MockItem(code: 'BV-001', barcode: '5449000000996', name: 'Coca-Cola 500ml',        group: 'Beverages', price:  2000, uom: 'EA'),
+  MockItem(code: 'BV-002', barcode: '5901234300013', name: 'Mineral water 1.5L',     group: 'Beverages', price:  2500, uom: 'EA'),
+  MockItem(code: 'BV-003', barcode: '5901234300020', name: 'Orange juice 1L',        group: 'Beverages', price:  6500, uom: 'EA'),
+  MockItem(code: 'BV-004', barcode: '5901234300037', name: 'Tusker lager 500ml',     group: 'Beverages', price:  5000, uom: 'EA'),
+  MockItem(code: 'GR-001', barcode: '5901234400013', name: 'Rice 5kg bag',           group: 'Groceries', price: 18000, uom: 'BAG'),
+  MockItem(code: 'GR-002', barcode: '5901234400020', name: 'Sugar 2kg',              group: 'Groceries', price:  9500, uom: 'KG'),
+  MockItem(code: 'GR-003', barcode: '5901234400037', name: 'Cooking oil 3L',         group: 'Groceries', price: 22000, uom: 'EA'),
+  MockItem(code: 'SN-001', barcode: '5000159407236', name: 'Pringles 165g',          group: 'Snacks',    price:  8000, uom: 'EA'),
+  MockItem(code: 'SN-002', barcode: '7622210447241', name: 'Cadbury chocolate 90g',  group: 'Snacks',    price:  6500, uom: 'EA'),
+  MockItem(code: 'HS-001', barcode: '5901234500013', name: 'Toilet paper (10 roll)', group: 'Household', price: 14000, uom: 'PK'),
+  MockItem(code: 'HS-002', barcode: '5901234500020', name: 'Laundry soap 1kg',       group: 'Household', price:  7500, uom: 'EA'),
+  MockItem(code: 'HS-003', barcode: '5901234500037', name: 'Dishwashing liquid 750ml', group: 'Household', price: 6000, uom: 'EA'),
 ];
 
 final mockItemGroups = mockItems.map((i) => i.group).toSet().toList()..sort();

@@ -6,8 +6,9 @@ import '../../_demo/mocks.dart';
 /// Supermarket mode — spreadsheet-style table is the entire workspace.
 ///
 /// Header row → column titles.
-/// First data row → input: Code cell takes a scan/code (Enter to add),
-/// Item-name cell takes a substring filter that narrows visible rows.
+/// First data row → input: Scan-code cell takes a barcode (Enter to add),
+/// Code cell takes a substring filter on the item code, Item-name cell takes
+/// a substring filter on the item name and shows a combo dropdown.
 /// Following rows → cart items, one per row.
 ///
 /// Heavy cell borders so it reads as a grid. No tiles, no scan log, no
@@ -22,19 +23,25 @@ class SupermarketPane extends ConsumerStatefulWidget {
 class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
   final _scanCtrl = TextEditingController();
   final _scanFocus = FocusNode();
+  final _codeFilterCtrl = TextEditingController();
+  final _codeFocus = FocusNode();
   final _nameFilterCtrl = TextEditingController();
   final _nameFocus = FocusNode();
 
+  String _codeFilter = '';
   String _nameFilter = '';
   String? _scanError;
 
-  /// Items in the catalog whose name/code contains the typed text — drives
-  /// the search dropdown that appears under the name cell.
+  /// Items in the catalog whose barcode/code/name contains the typed text —
+  /// drives the search dropdown that appears under the name cell.
   List<MockItem> get _nameMatches {
     final q = _nameFilter.trim().toLowerCase();
     if (q.isEmpty) return const [];
     return mockItems
-        .where((i) => i.name.toLowerCase().contains(q) || i.code.toLowerCase().contains(q))
+        .where((i) =>
+            i.name.toLowerCase().contains(q) ||
+            i.code.toLowerCase().contains(q) ||
+            i.barcode.toLowerCase().contains(q))
         .toList();
   }
 
@@ -46,7 +53,8 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
   }
 
   // ---- Column widths (shared across every row so cells line up) -----------
-  static const _wCode = 150.0;
+  static const _wScanCode = 150.0;
+  static const _wCode = 110.0;
   static const _wQty = 110.0;
   static const _wPrice = 120.0;
   static const _wTotal = 130.0;
@@ -56,6 +64,8 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
   void dispose() {
     _scanCtrl.dispose();
     _scanFocus.dispose();
+    _codeFilterCtrl.dispose();
+    _codeFocus.dispose();
     _nameFilterCtrl.dispose();
     _nameFocus.dispose();
     super.dispose();
@@ -67,9 +77,12 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
       _scanFocus.requestFocus();
       return;
     }
-    final hit = mockItems.where((i) => i.code.toLowerCase() == v.toLowerCase()).firstOrNull;
+    // Look up by barcode first (real scanner input), then fall back to item
+    // code so cashiers can still key in a known code.
+    final hit = mockItems.where((i) => i.barcode == v).firstOrNull
+        ?? mockItems.where((i) => i.code.toLowerCase() == v.toLowerCase()).firstOrNull;
     if (hit == null) {
-      setState(() => _scanError = 'Unknown code: $v');
+      setState(() => _scanError = 'Unknown scan code / code: $v');
     } else {
       ref.read(cartProvider.notifier).addItem(hit);
       setState(() => _scanError = null);
@@ -83,11 +96,17 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
 
+    final cf = _codeFilter.trim().toLowerCase();
+    final nf = _nameFilter.trim().toLowerCase();
     final visible = <_VisibleRow>[];
     for (var i = 0; i < cart.length; i++) {
       final line = cart[i];
-      if (_nameFilter.isNotEmpty &&
-          !line.item.name.toLowerCase().contains(_nameFilter.toLowerCase())) {
+      if (cf.isNotEmpty &&
+          !line.item.code.toLowerCase().contains(cf) &&
+          !line.item.barcode.toLowerCase().contains(cf)) {
+        continue;
+      }
+      if (nf.isNotEmpty && !line.item.name.toLowerCase().contains(nf)) {
         continue;
       }
       visible.add(_VisibleRow(originalIndex: i, line: line));
@@ -116,16 +135,17 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
                 Expanded(
                   child: cart.isEmpty
                       ? _emptyState(theme,
-                          'Scan a barcode or type a code in the first row, then press Enter')
+                          'Scan a barcode in the first row, then press Enter')
                       : (visible.isEmpty
                           ? _emptyState(theme,
-                              'No rows match "$_nameFilter" — clear the name filter to see ${cart.length} cart line${cart.length == 1 ? "" : "s"}.')
+                              'No rows match the current filters — clear them to see ${cart.length} cart line${cart.length == 1 ? "" : "s"}.')
                           : ListView.builder(
                               itemCount: visible.length,
                               itemBuilder: (_, i) => _DataRow(
                                 originalIndex: visible[i].originalIndex,
                                 line: visible[i].line,
                                 zebra: i.isOdd,
+                                wScanCode: _wScanCode,
                                 wCode: _wCode,
                                 wQty: _wQty,
                                 wPrice: _wPrice,
@@ -143,7 +163,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
               Positioned(
                 // header (24) + input row (30) + error strip (if shown ~24)
                 top: 24 + 30 + (_scanError != null ? 24 : 0),
-                left: _wCode,
+                left: _wScanCode + _wCode,
                 right: rightReserved,
                 child: _suggestionsDropdown(theme, _nameMatches),
               ),
@@ -164,6 +184,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
       ),
       child: Row(
         children: [
+          _headerCell(theme, 'Scan code',  width: _wScanCode),
           _headerCell(theme, 'Code',       width: _wCode),
           _headerCell(theme, 'Item name'),
           _headerCell(theme, 'Qty',        width: _wQty,    align: Alignment.center),
@@ -210,10 +231,10 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
       ),
       child: Row(
         children: [
-          // Code cell — scan input
+          // Scan-code cell — barcode input (Enter to add)
           Container(
             height: 30,
-            width: _wCode,
+            width: _wScanCode,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
               border: Border(right: BorderSide(color: theme.colorScheme.outlineVariant)),
@@ -229,7 +250,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
               ),
               decoration: InputDecoration(
                 isDense: true,
-                hintText: 'scan / code…',
+                hintText: 'scan barcode…',
                 hintStyle: TextStyle(fontSize: 11, color: theme.colorScheme.outline),
                 prefixIcon: Padding(
                   padding: const EdgeInsets.only(left: 2),
@@ -244,7 +265,51 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
               onSubmitted: _scan,
             ),
           ),
-          // Item-name cell — substring filter
+          // Code cell — substring filter on item code (also matches barcode)
+          Container(
+            height: 30,
+            width: _wCode,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border(right: BorderSide(color: theme.colorScheme.outlineVariant)),
+            ),
+            child: TextField(
+              controller: _codeFilterCtrl,
+              focusNode: _codeFocus,
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'filter code…',
+                hintStyle: TextStyle(fontSize: 11, color: theme.colorScheme.outline),
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: Icon(Icons.filter_alt_outlined, size: 13, color: theme.colorScheme.onSurfaceVariant),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                suffixIcon: _codeFilter.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close, size: 12),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                        onPressed: () {
+                          _codeFilterCtrl.clear();
+                          setState(() => _codeFilter = '');
+                        },
+                      ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
+              ),
+              onChanged: (v) => setState(() => _codeFilter = v),
+            ),
+          ),
+          // Item-name cell — substring filter + combo dropdown
           Expanded(
             child: Container(
               height: 30,
@@ -399,6 +464,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
                             child: Text(
                               m.code,
                               style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace'),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -457,6 +523,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
   Widget _footerRow(ThemeData theme, List<CartLine> cart) {
     final lineCount = cart.length;
     final unitCount = cart.fold<double>(0, (a, l) => a + l.qty);
+    final filtered = _codeFilter.isNotEmpty || _nameFilter.isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
@@ -476,14 +543,14 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
             style: theme.textTheme.bodySmall,
           ),
           const Spacer(),
-          if (_nameFilter.isNotEmpty)
+          if (filtered)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: theme.colorScheme.tertiaryContainer,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text('filtered by name',
+              child: Text('filtered',
                   style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onTertiaryContainer)),
             ),
         ],
@@ -502,6 +569,7 @@ class _DataRow extends ConsumerWidget {
   final int originalIndex;
   final CartLine line;
   final bool zebra;
+  final double wScanCode;
   final double wCode;
   final double wQty;
   final double wPrice;
@@ -511,6 +579,7 @@ class _DataRow extends ConsumerWidget {
     required this.originalIndex,
     required this.line,
     required this.zebra,
+    required this.wScanCode,
     required this.wCode,
     required this.wQty,
     required this.wPrice,
@@ -530,9 +599,17 @@ class _DataRow extends ConsumerWidget {
       child: Row(
         children: [
           _cell(theme,
+              width: wScanCode,
+              child: Text(line.item.barcode,
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1)),
+          _cell(theme,
               width: wCode,
               child: Text(line.item.code,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'))),
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1)),
           _cell(theme,
               expanded: true,
               child: Text(

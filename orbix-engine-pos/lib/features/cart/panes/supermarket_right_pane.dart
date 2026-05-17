@@ -114,8 +114,9 @@ class _SupermarketRightPaneState extends ConsumerState<SupermarketRightPane> {
           _totalsStrip(theme, total, tendered, change),
           Divider(height: 1, color: theme.dividerColor),
           _quickFillRow(theme, total, hasCart),
-          Expanded(child: _numpad(theme)),
-          _actionRow(theme, total, tendered, cashReady, hasCart),
+          _numpad(theme),
+          _actionStack(theme, total, tendered, cashReady, hasCart),
+          const Spacer(),
         ],
       ),
     );
@@ -343,53 +344,62 @@ class _SupermarketRightPaneState extends ConsumerState<SupermarketRightPane> {
   }
 
   // ---------------------------------------------------------------------
-  Widget _actionRow(
+  // Action buttons stacked vertically directly under the numpad, aligned to
+  // the same 240px column so the entire control area reads as one unit.
+  // Primary action (Pay cash) on top, secondary Other below it, destructive
+  // Void at the bottom so it's furthest from the most-used button.
+  Widget _actionStack(
       ThemeData theme, double total, double tendered, bool cashReady, bool hasCart) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: hasCart
-                  ? () {
-                      ref.read(cartProvider.notifier).clear();
-                      ref.read(tenderedAmountProvider.notifier).state = 0;
-                      setState(() => _buf = '0');
-                    }
-                  : null,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                foregroundColor: theme.colorScheme.error,
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: cashReady ? () => _payCash(total, tendered) : null,
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                  icon: const Icon(Icons.payments, size: 18),
+                  label: const Text('Pay cash'),
+                ),
               ),
-              icon: const Icon(Icons.delete_outline, size: 16),
-              label: const Text('Void'),
-            ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: hasCart ? () => context.push('/payment') : null,
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                  icon: const Icon(Icons.credit_card, size: 16),
+                  label: const Text('Other'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: hasCart
+                      ? () {
+                          ref.read(cartProvider.notifier).clear();
+                          ref.read(tenderedAmountProvider.notifier).state = 0;
+                          setState(() => _buf = '0');
+                        }
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('Void'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: hasCart ? () => context.push('/payment') : null,
-              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
-              icon: const Icon(Icons.credit_card, size: 16),
-              label: const Text('Other'),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            flex: 2,
-            child: FilledButton.icon(
-              onPressed: cashReady ? () => _payCash(total, tendered) : null,
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
-              icon: const Icon(Icons.payments, size: 18),
-              label: const Text('Pay cash'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

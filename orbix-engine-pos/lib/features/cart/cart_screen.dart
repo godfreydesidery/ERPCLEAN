@@ -37,8 +37,9 @@ class CartScreen extends ConsumerWidget {
           // Divider
           Container(width: 1, color: theme.dividerColor),
           // Right pane — universal cart for most modes; supermarket gets a
-          // numpad instead (its cart lines already live in the left table).
-          SizedBox(width: 420, child: _rightPane(mode)),
+          // numpad instead (its cart lines already live in the left table)
+          // and uses a thinner pane to leave the spreadsheet more space.
+          SizedBox(width: _rightPaneWidth(mode), child: _rightPane(mode)),
         ],
       ),
     );
@@ -58,6 +59,13 @@ class CartScreen extends ConsumerWidget {
     return switch (mode) {
       PosMode.supermarket => const SupermarketRightPane(),
       _ => const CartPane(),
+    };
+  }
+
+  double _rightPaneWidth(PosMode mode) {
+    return switch (mode) {
+      PosMode.supermarket => 260, // just enough for the 3-col tendered numpad
+      _ => 420,
     };
   }
 }
