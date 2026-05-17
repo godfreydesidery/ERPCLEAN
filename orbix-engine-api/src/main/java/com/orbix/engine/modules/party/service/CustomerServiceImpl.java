@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CustomerServiceImpl implements CustomerService {
 
+    private static final String NOT_A_CUSTOMER = "Not a customer: ";
+
     private final CustomerRepository customers;
     private final PartyRepository parties;
     private final PartyService partyService;
@@ -48,7 +50,7 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponseDto getCustomer(Long partyId) {
         Party party = partyService.requireInCompany(partyId);
         Customer customer = customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a customer: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
         return CustomerResponseDto.from(customer, party);
     }
 
@@ -56,7 +58,7 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional
     @Auditable(action = "CREATE", entityType = "Customer")
     public CustomerResponseDto createCustomer(CreateCustomerRequestDto request) {
-        Party party = partyService.resolveOrCreate(request.code(), request.party(), context.userId());
+        Party party = resolveParty(request);
         if (customers.existsById(party.getId())) {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has a customer role");
@@ -67,13 +69,25 @@ public class CustomerServiceImpl implements CustomerService {
         return CustomerResponseDto.from(customers.save(customer), party);
     }
 
+    private Party resolveParty(CreateCustomerRequestDto request) {
+        if (request.partyId() != null) {
+            return partyService.requireInCompany(request.partyId());
+        }
+        if (request.party() == null) {
+            throw new IllegalArgumentException(
+                "Supply either partyId, or party details, to create a customer");
+        }
+        String generatedCode = partyService.reservePartyCode("CUST");
+        return partyService.resolveOrCreate(generatedCode, request.party(), context.userId());
+    }
+
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Customer")
     public CustomerResponseDto updateCustomer(Long partyId, UpdateCustomerRequestDto request) {
         Party party = partyService.requireInCompany(partyId);
         Customer customer = customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a customer: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
         partyService.applyDetails(party, request.party(), context.userId());
         customer.update(request.creditLimitAmount(), request.creditTermsDays(), request.priceListId(),
             request.defaultSalesAgentId(), request.defaultBranchId(), request.taxExempt());
@@ -85,8 +99,17 @@ public class CustomerServiceImpl implements CustomerService {
     @Auditable(action = "DEACTIVATE", entityType = "Customer")
     public void deactivateCustomer(Long partyId) {
         customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a customer: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
         partyService.deactivate(partyId);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "Customer")
+    public void activateCustomer(Long partyId) {
+        customers.findById(partyId)
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
+        partyService.activate(partyId);
     }
 
     @Override

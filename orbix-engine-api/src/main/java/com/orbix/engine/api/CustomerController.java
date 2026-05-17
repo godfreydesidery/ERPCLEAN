@@ -51,4 +51,10 @@ public class CustomerController {
         service.deactivateCustomer(partyId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{partyId}/activate")
+    public ResponseEntity<Void> activateCustomer(@PathVariable Long partyId) {
+        service.activateCustomer(partyId);
+        return ResponseEntity.noContent().build();
+    }
 }

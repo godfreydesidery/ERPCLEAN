@@ -8,13 +8,18 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 /**
- * Creates an employee. If a party in the company already carries the supplied
- * {@code party.tin()}, that party is reused (shared-party rule) and {@code code}
- * is ignored.
+ * Creates an employee. Two paths:
+ * <ul>
+ *   <li><b>Pick existing party</b>: supply {@code partyId} only; {@code party}
+ *       is ignored.</li>
+ *   <li><b>Create new party</b>: leave {@code partyId} null and supply
+ *       {@code party}. The backend allocates the party code from the
+ *       {@code EMP} sequence; clients cannot override it.</li>
+ * </ul>
  */
 public record CreateEmployeeRequestDto(
-    @NotBlank @Size(max = 40) String code,
-    @Valid @NotNull PartyDetailsDto party,
+    Long partyId,
+    @Valid PartyDetailsDto party,
     @NotBlank @Size(max = 40) String employeeCode,
     Long appUserId,
     @Size(max = 120) String jobTitle,

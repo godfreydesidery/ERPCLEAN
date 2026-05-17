@@ -51,7 +51,17 @@ export interface Customer {
 }
 
 export interface CreateCustomerRequest {
-  code: string;
+  partyId: number | null;
+  party: PartyDetails | null;
+  creditLimitAmount: number;
+  creditTermsDays: number;
+  priceListId: number | null;
+  defaultSalesAgentId: number | null;
+  defaultBranchId: number | null;
+  taxExempt: boolean;
+}
+
+export interface UpdateCustomerRequest {
   party: PartyDetails;
   creditLimitAmount: number;
   creditTermsDays: number;
@@ -73,7 +83,17 @@ export interface Supplier {
 }
 
 export interface CreateSupplierRequest {
-  code: string;
+  partyId: number | null;
+  party: PartyDetails | null;
+  paymentTermsDays: number;
+  creditLimitAmount: number;
+  defaultCurrencyCode: string | null;
+  bankName: string | null;
+  bankAccountNo: string | null;
+  leadTimeDays: number | null;
+}
+
+export interface UpdateSupplierRequest {
   party: PartyDetails;
   paymentTermsDays: number;
   creditLimitAmount: number;
@@ -95,9 +115,18 @@ export interface Employee {
 }
 
 export interface CreateEmployeeRequest {
-  code: string;
-  party: PartyDetails;
+  partyId: number | null;
+  party: PartyDetails | null;
   employeeCode: string;
+  appUserId: number | null;
+  jobTitle: string | null;
+  branchId: number;
+  hireDate: string | null;
+  terminationDate: string | null;
+}
+
+export interface UpdateEmployeeRequest {
+  party: PartyDetails;
   appUserId: number | null;
   jobTitle: string | null;
   branchId: number;

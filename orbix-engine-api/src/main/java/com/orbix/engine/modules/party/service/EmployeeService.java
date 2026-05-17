@@ -18,4 +18,7 @@ public interface EmployeeService {
     EmployeeResponseDto updateEmployee(Long partyId, UpdateEmployeeRequestDto request);
 
     void deactivateEmployee(Long partyId);
+
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateEmployee(Long partyId);
 }

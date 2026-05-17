@@ -18,4 +18,7 @@ public interface SupplierService {
     SupplierResponseDto updateSupplier(Long partyId, UpdateSupplierRequestDto request);
 
     void deactivateSupplier(Long partyId);
+
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateSupplier(Long partyId);
 }

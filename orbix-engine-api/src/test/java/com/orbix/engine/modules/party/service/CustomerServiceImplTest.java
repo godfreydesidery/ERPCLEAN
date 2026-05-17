@@ -45,6 +45,8 @@ class CustomerServiceImplTest {
     void bindContext() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
+        // Backend auto-allocates the party code for the create-new path now.
+        lenient().when(partyService.reservePartyCode("CUST")).thenReturn("CUST0001");
     }
 
     private static Party party(Long id, String code) {
@@ -56,14 +58,14 @@ class CustomerServiceImplTest {
     private static CreateCustomerRequestDto createRequest() {
         PartyDetailsDto details = new PartyDetailsDto("Mama Sara", null, PartyCategory.BUSINESS,
             "999-1", null, null, null, null, null, null, null);
-        return new CreateCustomerRequestDto("C-1", details, new BigDecimal("2000000"), 30,
+        return new CreateCustomerRequestDto(null, details, new BigDecimal("2000000"), 30,
             null, null, null, false);
     }
 
     @Test
     void createCustomer_attachesRoleToResolvedParty() {
-        Party resolved = party(100L, "C-1");
-        when(partyService.resolveOrCreate(eq("C-1"), any(), eq(ACTOR_ID))).thenReturn(resolved);
+        Party resolved = party(100L, "CUST0001");
+        when(partyService.resolveOrCreate(eq("CUST0001"), any(), eq(ACTOR_ID))).thenReturn(resolved);
         when(customers.existsById(100L)).thenReturn(false);
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -79,8 +81,8 @@ class CustomerServiceImplTest {
 
     @Test
     void createCustomer_whenPartyAlreadyHasCustomerRole_isRejected() {
-        Party resolved = party(100L, "C-1");
-        when(partyService.resolveOrCreate(eq("C-1"), any(), eq(ACTOR_ID))).thenReturn(resolved);
+        Party resolved = party(100L, "CUST0001");
+        when(partyService.resolveOrCreate(eq("CUST0001"), any(), eq(ACTOR_ID))).thenReturn(resolved);
         when(customers.existsById(100L)).thenReturn(true);
 
         assertThatThrownBy(() -> service.createCustomer(createRequest()))

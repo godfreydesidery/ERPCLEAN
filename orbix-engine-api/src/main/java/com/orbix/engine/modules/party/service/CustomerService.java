@@ -20,6 +20,9 @@ public interface CustomerService {
     /** Deactivates the underlying party (affects every role on it). */
     void deactivateCustomer(Long partyId);
 
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateCustomer(Long partyId);
+
     /** Provisions the synthetic per-branch walk-in customer; idempotent-friendly caller. */
     void createWalkInCustomer(Long branchId);
 }

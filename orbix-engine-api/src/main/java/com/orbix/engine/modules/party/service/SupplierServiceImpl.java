@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SupplierServiceImpl implements SupplierService {
 
+    private static final String NOT_A_SUPPLIER = "Not a supplier: ";
+
     private final SupplierRepository suppliers;
     private final PartyRepository parties;
     private final PartyService partyService;
@@ -47,7 +49,7 @@ public class SupplierServiceImpl implements SupplierService {
     public SupplierResponseDto getSupplier(Long partyId) {
         Party party = partyService.requireInCompany(partyId);
         Supplier supplier = suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a supplier: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
         return SupplierResponseDto.from(supplier, party);
     }
 
@@ -55,7 +57,7 @@ public class SupplierServiceImpl implements SupplierService {
     @Transactional
     @Auditable(action = "CREATE", entityType = "Supplier")
     public SupplierResponseDto createSupplier(CreateSupplierRequestDto request) {
-        Party party = partyService.resolveOrCreate(request.code(), request.party(), context.userId());
+        Party party = resolveParty(request);
         if (suppliers.existsById(party.getId())) {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has a supplier role");
@@ -67,13 +69,25 @@ public class SupplierServiceImpl implements SupplierService {
         return SupplierResponseDto.from(suppliers.save(supplier), party);
     }
 
+    private Party resolveParty(CreateSupplierRequestDto request) {
+        if (request.partyId() != null) {
+            return partyService.requireInCompany(request.partyId());
+        }
+        if (request.party() == null) {
+            throw new IllegalArgumentException(
+                "Supply either partyId, or party details, to create a supplier");
+        }
+        String generatedCode = partyService.reservePartyCode("SUP");
+        return partyService.resolveOrCreate(generatedCode, request.party(), context.userId());
+    }
+
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Supplier")
     public SupplierResponseDto updateSupplier(Long partyId, UpdateSupplierRequestDto request) {
         Party party = partyService.requireInCompany(partyId);
         Supplier supplier = suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a supplier: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
         partyService.applyDetails(party, request.party(), context.userId());
         supplier.update(request.paymentTermsDays(), request.creditLimitAmount(),
             request.defaultCurrencyCode(), request.bankName(), request.bankAccountNo(),
@@ -86,7 +100,16 @@ public class SupplierServiceImpl implements SupplierService {
     @Auditable(action = "DEACTIVATE", entityType = "Supplier")
     public void deactivateSupplier(Long partyId) {
         suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a supplier: " + partyId));
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
         partyService.deactivate(partyId);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "Supplier")
+    public void activateSupplier(Long partyId) {
+        suppliers.findById(partyId)
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
+        partyService.activate(partyId);
     }
 }

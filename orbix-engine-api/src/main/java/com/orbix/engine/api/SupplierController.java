@@ -51,4 +51,10 @@ public class SupplierController {
         service.deactivateSupplier(partyId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{partyId}/activate")
+    public ResponseEntity<Void> activateSupplier(@PathVariable Long partyId) {
+        service.activateSupplier(partyId);
+        return ResponseEntity.noContent().build();
+    }
 }
