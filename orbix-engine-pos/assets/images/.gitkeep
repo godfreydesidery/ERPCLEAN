@@ -1,0 +1,4 @@
+# Reserved for POS branding assets (logo, splash, receipt headers).
+# Flutter's pubspec.yaml lists `assets/images/` as a bundled asset
+# directory — Flutter refuses to build if the directory doesn't exist,
+# even when empty. This file pins it.
