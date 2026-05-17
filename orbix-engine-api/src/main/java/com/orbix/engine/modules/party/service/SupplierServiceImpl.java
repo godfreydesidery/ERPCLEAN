@@ -46,10 +46,10 @@ public class SupplierServiceImpl implements SupplierService {
 
     @Override
     @Transactional(readOnly = true)
-    public SupplierResponseDto getSupplier(Long partyId) {
-        Party party = partyService.requireInCompany(partyId);
-        Supplier supplier = suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
+    public SupplierResponseDto getSupplierByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Supplier supplier = suppliers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyUid));
         return SupplierResponseDto.from(supplier, party);
     }
 
@@ -84,10 +84,10 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Supplier")
-    public SupplierResponseDto updateSupplier(Long partyId, UpdateSupplierRequestDto request) {
-        Party party = partyService.requireInCompany(partyId);
-        Supplier supplier = suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
+    public SupplierResponseDto updateSupplierByPartyUid(String partyUid, UpdateSupplierRequestDto request) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Supplier supplier = suppliers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
         supplier.update(request.paymentTermsDays(), request.creditLimitAmount(),
             request.defaultCurrencyCode(), request.bankName(), request.bankAccountNo(),
@@ -98,18 +98,20 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Supplier")
-    public void deactivateSupplier(Long partyId) {
-        suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
-        partyService.deactivate(partyId);
+    public void deactivateSupplierByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        suppliers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyUid));
+        partyService.deactivate(party.getId());
     }
 
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = "Supplier")
-    public void activateSupplier(Long partyId) {
-        suppliers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyId));
-        partyService.activate(partyId);
+    public void activateSupplierByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        suppliers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyUid));
+        partyService.activate(party.getId());
     }
 }

@@ -494,7 +494,7 @@ export class SuppliersComponent implements OnInit {
 
   deactivate(supplier: Supplier): void {
     this.busy.set(true);
-    this.party.deactivateSupplier(supplier.partyId).subscribe({
+    this.party.deactivateSupplier(supplier.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -502,7 +502,7 @@ export class SuppliersComponent implements OnInit {
 
   activate(supplier: Supplier): void {
     this.busy.set(true);
-    this.party.activateSupplier(supplier.partyId).subscribe({
+    this.party.activateSupplier(supplier.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -539,7 +539,7 @@ export class SuppliersComponent implements OnInit {
       bankAccountNo: this.bankAccountNo,
       leadTimeDays: this.leadTimeDays == null ? null : Number(this.leadTimeDays)
     };
-    this.party.updateSupplier(editing.partyId, payload).subscribe({
+    this.party.updateSupplier(editing.party.uid, payload).subscribe({
       next: () => this.afterSave(),
       error: err => { this.busy.set(false); this.showError(err); }
     });

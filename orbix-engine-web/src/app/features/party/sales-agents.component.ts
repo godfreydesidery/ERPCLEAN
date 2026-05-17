@@ -479,7 +479,7 @@ export class SalesAgentsComponent implements OnInit {
   submit(): void {
     const editing = this.editing();
     if (editing) {
-      this.runUpdate(editing.partyId);
+      this.runUpdate(editing.party.uid);
     } else {
       this.runCreate();
     }
@@ -509,7 +509,7 @@ export class SalesAgentsComponent implements OnInit {
 
   deactivate(agent: SalesAgent): void {
     this.busy.set(true);
-    this.party.deactivateSalesAgent(agent.partyId).subscribe({
+    this.party.deactivateSalesAgent(agent.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -517,7 +517,7 @@ export class SalesAgentsComponent implements OnInit {
 
   activate(agent: SalesAgent): void {
     this.busy.set(true);
-    this.party.activateSalesAgent(agent.partyId).subscribe({
+    this.party.activateSalesAgent(agent.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -541,7 +541,7 @@ export class SalesAgentsComponent implements OnInit {
     });
   }
 
-  private runUpdate(partyId: string): void {
+  private runUpdate(partyUid: string): void {
     this.busy.set(true);
     this.error.set(null);
     const payload: UpdateSalesAgentRequest = {
@@ -551,7 +551,7 @@ export class SalesAgentsComponent implements OnInit {
       commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
       branchId: this.branchId!
     };
-    this.party.updateSalesAgent(partyId, payload).subscribe({
+    this.party.updateSalesAgent(partyUid, payload).subscribe({
       next: () => this.afterSave(),
       error: err => { this.busy.set(false); this.showError(err); }
     });

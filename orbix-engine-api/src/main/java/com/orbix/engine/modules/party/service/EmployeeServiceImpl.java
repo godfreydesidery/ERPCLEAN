@@ -46,10 +46,10 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     @Transactional(readOnly = true)
-    public EmployeeResponseDto getEmployee(Long partyId) {
-        Party party = partyService.requireInCompany(partyId);
-        Employee employee = employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyId));
+    public EmployeeResponseDto getEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Employee employee = employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
         return EmployeeResponseDto.from(employee, party);
     }
 
@@ -88,10 +88,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Employee")
-    public EmployeeResponseDto updateEmployee(Long partyId, UpdateEmployeeRequestDto request) {
-        Party party = partyService.requireInCompany(partyId);
-        Employee employee = employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyId));
+    public EmployeeResponseDto updateEmployeeByPartyUid(String partyUid, UpdateEmployeeRequestDto request) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Employee employee = employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
         employee.update(request.appUserId(), request.jobTitle(), request.branchId(),
             request.hireDate(), request.terminationDate());
@@ -101,18 +101,20 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Employee")
-    public void deactivateEmployee(Long partyId) {
-        employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyId));
-        partyService.deactivate(partyId);
+    public void deactivateEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
+        partyService.deactivate(party.getId());
     }
 
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = "Employee")
-    public void activateEmployee(Long partyId) {
-        employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyId));
-        partyService.activate(partyId);
+    public void activateEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
+        partyService.activate(party.getId());
     }
 }

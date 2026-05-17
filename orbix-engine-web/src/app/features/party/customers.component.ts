@@ -465,7 +465,7 @@ export class CustomersComponent implements OnInit {
   submit(): void {
     const editing = this.editing();
     if (editing) {
-      this.runUpdate(editing.partyId);
+      this.runUpdate(editing.party.uid);
     } else {
       this.runCreate();
     }
@@ -473,7 +473,7 @@ export class CustomersComponent implements OnInit {
 
   deactivate(customer: Customer): void {
     this.busy.set(true);
-    this.party.deactivateCustomer(customer.partyId).subscribe({
+    this.party.deactivateCustomer(customer.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -481,7 +481,7 @@ export class CustomersComponent implements OnInit {
 
   activate(customer: Customer): void {
     this.busy.set(true);
-    this.party.activateCustomer(customer.partyId).subscribe({
+    this.party.activateCustomer(customer.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -506,7 +506,7 @@ export class CustomersComponent implements OnInit {
     });
   }
 
-  private runUpdate(partyId: string): void {
+  private runUpdate(partyUid: string): void {
     this.busy.set(true);
     this.error.set(null);
     const editing = this.editing()!;
@@ -519,7 +519,7 @@ export class CustomersComponent implements OnInit {
       defaultBranchId: editing.defaultBranchId,
       taxExempt: this.taxExempt
     };
-    this.party.updateCustomer(partyId, payload).subscribe({
+    this.party.updateCustomer(partyUid, payload).subscribe({
       next: () => this.afterSave(),
       error: err => { this.busy.set(false); this.showError(err); }
     });

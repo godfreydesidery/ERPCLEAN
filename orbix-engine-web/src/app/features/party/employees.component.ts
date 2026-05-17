@@ -466,7 +466,7 @@ export class EmployeesComponent implements OnInit {
   submit(): void {
     const editing = this.editing();
     if (editing) {
-      this.runUpdate(editing.partyId);
+      this.runUpdate(editing.party.uid);
     } else {
       this.runCreate();
     }
@@ -474,7 +474,7 @@ export class EmployeesComponent implements OnInit {
 
   deactivate(employee: Employee): void {
     this.busy.set(true);
-    this.party.deactivateEmployee(employee.partyId).subscribe({
+    this.party.deactivateEmployee(employee.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -482,7 +482,7 @@ export class EmployeesComponent implements OnInit {
 
   activate(employee: Employee): void {
     this.busy.set(true);
-    this.party.activateEmployee(employee.partyId).subscribe({
+    this.party.activateEmployee(employee.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -507,7 +507,7 @@ export class EmployeesComponent implements OnInit {
     });
   }
 
-  private runUpdate(partyId: string): void {
+  private runUpdate(partyUid: string): void {
     this.busy.set(true);
     this.error.set(null);
     const editing = this.editing()!;
@@ -519,7 +519,7 @@ export class EmployeesComponent implements OnInit {
       hireDate: this.hireDate,
       terminationDate: editing.terminationDate
     };
-    this.party.updateEmployee(partyId, payload).subscribe({
+    this.party.updateEmployee(partyUid, payload).subscribe({
       next: () => this.afterSave(),
       error: err => { this.busy.set(false); this.showError(err); }
     });

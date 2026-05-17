@@ -47,10 +47,10 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional(readOnly = true)
-    public CustomerResponseDto getCustomer(Long partyId) {
-        Party party = partyService.requireInCompany(partyId);
-        Customer customer = customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
+    public CustomerResponseDto getCustomerByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Customer customer = customers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
         return CustomerResponseDto.from(customer, party);
     }
 
@@ -84,10 +84,10 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Customer")
-    public CustomerResponseDto updateCustomer(Long partyId, UpdateCustomerRequestDto request) {
-        Party party = partyService.requireInCompany(partyId);
-        Customer customer = customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
+    public CustomerResponseDto updateCustomerByPartyUid(String partyUid, UpdateCustomerRequestDto request) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Customer customer = customers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
         customer.update(request.creditLimitAmount(), request.creditTermsDays(), request.priceListId(),
             request.defaultSalesAgentId(), request.defaultBranchId(), request.taxExempt());
@@ -97,19 +97,21 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Customer")
-    public void deactivateCustomer(Long partyId) {
-        customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
-        partyService.deactivate(partyId);
+    public void deactivateCustomerByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        customers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
+        partyService.deactivate(party.getId());
     }
 
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = "Customer")
-    public void activateCustomer(Long partyId) {
-        customers.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyId));
-        partyService.activate(partyId);
+    public void activateCustomerByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        customers.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
+        partyService.activate(party.getId());
     }
 
     @Override

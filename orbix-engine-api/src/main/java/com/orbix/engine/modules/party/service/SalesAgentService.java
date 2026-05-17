@@ -11,17 +11,17 @@ public interface SalesAgentService {
 
     List<SalesAgentResponseDto> listSalesAgents();
 
-    SalesAgentResponseDto getSalesAgent(Long partyId);
+    SalesAgentResponseDto getSalesAgentByPartyUid(String partyUid);
 
     SalesAgentResponseDto createSalesAgent(CreateSalesAgentRequestDto request);
 
-    SalesAgentResponseDto updateSalesAgent(Long partyId, UpdateSalesAgentRequestDto request);
+    SalesAgentResponseDto updateSalesAgentByPartyUid(String partyUid, UpdateSalesAgentRequestDto request);
 
-    void deactivateSalesAgent(Long partyId);
+    void deactivateSalesAgentByPartyUid(String partyUid);
 
     /**
      * Reactivates the underlying party. Affects every other role on the party
      * (a deactivated customer-and-agent comes back as both).
      */
-    void activateSalesAgent(Long partyId);
+    void activateSalesAgentByPartyUid(String partyUid);
 }

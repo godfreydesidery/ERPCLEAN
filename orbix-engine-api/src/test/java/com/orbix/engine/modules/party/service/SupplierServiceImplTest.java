@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.party.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.party.domain.dto.CreateSupplierRequestDto;
 import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
 import com.orbix.engine.modules.party.domain.dto.SupplierResponseDto;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 
@@ -51,6 +53,7 @@ class SupplierServiceImplTest {
     private static Party party(Long id, String code) {
         Party party = new Party(COMPANY_ID, code, "Name " + code, PartyCategory.BUSINESS, ACTOR_ID);
         party.setId(id);
+        ReflectionTestUtils.setField(party, "uid", UidGenerator.next());
         return party;
     }
 
@@ -103,9 +106,11 @@ class SupplierServiceImplTest {
 
     @Test
     void deactivateSupplier_delegatesToPartyService() {
+        Party party = party(100L, "SUP0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(suppliers.findById(100L)).thenReturn(java.util.Optional.of(new Supplier(100L)));
 
-        service.deactivateSupplier(100L);
+        service.deactivateSupplierByPartyUid(party.getUid());
 
         verify(partyService).deactivate(100L);
     }

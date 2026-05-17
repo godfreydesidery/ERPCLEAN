@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.party.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.dto.CustomerResponseDto;
 import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
@@ -16,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 
@@ -52,6 +54,7 @@ class CustomerServiceImplTest {
     private static Party party(Long id, String code) {
         Party party = new Party(COMPANY_ID, code, "Name " + code, PartyCategory.BUSINESS, ACTOR_ID);
         party.setId(id);
+        ReflectionTestUtils.setField(party, "uid", UidGenerator.next());
         return party;
     }
 
@@ -72,6 +75,7 @@ class CustomerServiceImplTest {
         CustomerResponseDto result = service.createCustomer(createRequest());
 
         assertThat(result.partyId()).isEqualTo(100L);
+        assertThat(result.party().uid()).isEqualTo(resolved.getUid());
         assertThat(result.creditTermsDays()).isEqualTo(30);
         ArgumentCaptor<Customer> saved = ArgumentCaptor.forClass(Customer.class);
         verify(customers).save(saved.capture());
@@ -93,18 +97,22 @@ class CustomerServiceImplTest {
 
     @Test
     void deactivateCustomer_delegatesToPartyService() {
+        Party party = party(100L, "CUST0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(customers.findById(100L)).thenReturn(java.util.Optional.of(new Customer(100L)));
 
-        service.deactivateCustomer(100L);
+        service.deactivateCustomerByPartyUid(party.getUid());
 
         verify(partyService).deactivate(100L);
     }
 
     @Test
     void deactivateCustomer_whenNotACustomer_throwsNotFound() {
+        Party party = party(100L, "CUST0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(customers.findById(100L)).thenReturn(java.util.Optional.empty());
 
-        assertThatThrownBy(() -> service.deactivateCustomer(100L))
+        assertThatThrownBy(() -> service.deactivateCustomerByPartyUid(party.getUid()))
             .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
@@ -114,6 +122,7 @@ class CustomerServiceImplTest {
         when(parties.save(any(Party.class))).thenAnswer(inv -> {
             Party p = inv.getArgument(0);
             p.setId(200L);
+            ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
             return p;
         });
 

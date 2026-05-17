@@ -101,12 +101,23 @@ public class PartyServiceImpl implements PartyService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Party requireInCompanyByUid(String partyUid) {
+        Party party = parties.findByUid(partyUid)
+            .orElseThrow(() -> new NoSuchElementException("Party not found: " + partyUid));
+        if (!Objects.equals(party.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Party not found: " + partyUid);
+        }
+        return party;
+    }
+
+    @Override
     @Transactional
     public void deactivate(Long partyId) {
         Party party = requireInCompany(partyId);
         party.deactivate(context.userId());
-        events.publish("PartyDeactivated.v1", "Party", String.valueOf(partyId),
-            Map.of("partyId", partyId));
+        events.publish("PartyDeactivated.v1", "Party", party.getUid(),
+            Map.of("partyUid", party.getUid()));
     }
 
     @Override
@@ -114,7 +125,7 @@ public class PartyServiceImpl implements PartyService {
     public void activate(Long partyId) {
         Party party = requireInCompany(partyId);
         party.activate(context.userId());
-        events.publish("PartyReactivated.v1", "Party", String.valueOf(partyId),
-            Map.of("partyId", partyId));
+        events.publish("PartyReactivated.v1", "Party", party.getUid(),
+            Map.of("partyUid", party.getUid()));
     }
 }

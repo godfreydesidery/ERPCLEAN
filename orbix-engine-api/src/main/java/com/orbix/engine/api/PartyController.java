@@ -1,8 +1,11 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.PartyResponseDto;
+import com.orbix.engine.modules.party.domain.entity.Party;
 import com.orbix.engine.modules.party.service.PartyService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +20,7 @@ import java.util.NoSuchElementException;
 @RestController
 @RequestMapping("/api/v1/parties")
 @RequiredArgsConstructor
+@Validated
 public class PartyController {
 
     private final PartyService service;
@@ -24,6 +28,12 @@ public class PartyController {
     @GetMapping
     public List<PartyResponseDto> listParties() {
         return service.listParties();
+    }
+
+    @GetMapping("/uid/{uid}")
+    public PartyResponseDto getParty(@PathVariable @ValidUlid String uid) {
+        Party party = service.requireInCompanyByUid(uid);
+        return PartyResponseDto.from(party);
     }
 
     @GetMapping("/by-tin")

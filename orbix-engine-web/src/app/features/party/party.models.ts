@@ -22,6 +22,7 @@ export interface PartyDetails {
 
 export interface PartyResponse {
   id: string;
+  uid: string;
   companyId: string;
   code: string;
   name: string;
