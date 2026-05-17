@@ -28,6 +28,40 @@ class _LoginScreenState extends State<LoginScreen> {
     context.go('/till/open');
   }
 
+  Future<void> _biometric() async {
+    setState(() => _busy = true);
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        Future<void>.delayed(const Duration(milliseconds: 900), () {
+          if (Navigator.of(dialogCtx, rootNavigator: true).canPop()) {
+            Navigator.of(dialogCtx, rootNavigator: true).pop(true);
+          }
+        });
+        return const AlertDialog(
+          icon: Icon(Icons.fingerprint, size: 56, color: Colors.indigo),
+          title: Text('Touch sensor'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 4),
+              Text('Place your finger on the reader…'),
+              SizedBox(height: 12),
+              LinearProgressIndicator(),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    if (ok == true) {
+      context.go('/till/open');
+    } else {
+      setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -88,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      onPressed: () {},
+                      onPressed: _busy ? null : _biometric,
                       icon: const Icon(Icons.fingerprint),
                       label: const Text('Use biometric'),
                     ),

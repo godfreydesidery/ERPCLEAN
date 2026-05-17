@@ -61,36 +61,10 @@ class _SupermarketRightPaneState extends ConsumerState<SupermarketRightPane> {
   double _roundUp(double total, double bucket) => ((total / bucket).ceil() * bucket).toDouble();
 
   Future<void> _payCash(double total, double tendered) async {
-    final change = tendered - total;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        icon: const Icon(Icons.check_circle, size: 48, color: Colors.green),
-        title: const Text('Payment complete'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Paid ${money(tendered)} in cash.'),
-            if (change > 0) ...[
-              const SizedBox(height: 8),
-              Text('Change: ${money(change)}',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 12),
-            Text(
-              'Receipt #POS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-              style: const TextStyle(color: Colors.grey, fontFamily: 'monospace'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Next sale')),
-        ],
-      ),
-    );
-    ref.read(cartProvider.notifier).clear();
-    ref.read(tenderedAmountProvider.notifier).state = 0;
-    if (mounted) setState(() => _buf = '0');
+    recordSale(ref, method: PaymentMethod.cash, tendered: tendered);
+    if (!mounted) return;
+    setState(() => _buf = '0');
+    await context.push('/receipt');
   }
 
   @override

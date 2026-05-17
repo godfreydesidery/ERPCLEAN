@@ -47,7 +47,14 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.inbox_outlined,
                     title: 'Cash drawer',
                     subtitle: 'Opens via printer kick — tested',
-                    trailing: TextButton(onPressed: () {}, child: const Text('Test')),
+                    trailing: Builder(
+                      builder: (context) => TextButton(
+                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Drawer kick sent — listen for the clunk')),
+                        ),
+                        child: const Text('Test'),
+                      ),
+                    ),
                   ),
                   _SettingsTile(
                     icon: Icons.receipt_long,
@@ -70,10 +77,22 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.sync,
                     title: 'Sync status',
                     subtitle: '12 ops in outbox · last push 2 min ago',
-                    trailing: TextButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Push now'),
+                    trailing: Builder(
+                      builder: (context) => TextButton.icon(
+                        onPressed: () async {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Pushing outbox…')),
+                          );
+                          await Future<void>.delayed(const Duration(milliseconds: 700));
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Outbox flushed — 12 ops sent, 0 failed')),
+                          );
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Push now'),
+                      ),
                     ),
                   ),
                   _SettingsTile(

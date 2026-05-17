@@ -334,6 +334,176 @@ const mockCustomers = <MockCustomer>[
 final selectedCustomerProvider = StateProvider<MockCustomer>((_) => mockCustomers.first);
 
 // ---------------------------------------------------------------------------
+// Held carts — cashier parks an in-progress cart so they can serve the next
+// customer, then recalls it later by id.
+// ---------------------------------------------------------------------------
+
+@immutable
+class HeldCart {
+  final String id;
+  final List<CartLine> lines;
+  final MockCustomer customer;
+  final DateTime heldAt;
+  final String? note;
+  const HeldCart({
+    required this.id,
+    required this.lines,
+    required this.customer,
+    required this.heldAt,
+    this.note,
+  });
+
+  int get itemCount => lines.fold<int>(0, (a, l) => a + l.qty.round());
+  double get total => lines.fold<double>(0, (a, l) => a + l.net);
+}
+
+class HeldCartsNotifier extends Notifier<List<HeldCart>> {
+  int _seq = 1;
+
+  @override
+  List<HeldCart> build() => const [];
+
+  String hold(List<CartLine> lines, MockCustomer customer, {String? note}) {
+    final id = 'H${_seq.toString().padLeft(3, '0')}';
+    _seq++;
+    state = [
+      ...state,
+      HeldCart(id: id, lines: lines, customer: customer, heldAt: DateTime.now(), note: note),
+    ];
+    return id;
+  }
+
+  HeldCart? recall(String id) {
+    final found = state.where((h) => h.id == id).firstOrNull;
+    if (found != null) state = state.where((h) => h.id != id).toList();
+    return found;
+  }
+
+  void delete(String id) => state = state.where((h) => h.id != id).toList();
+}
+
+final heldCartsProvider = NotifierProvider<HeldCartsNotifier, List<HeldCart>>(HeldCartsNotifier.new);
+
+// ---------------------------------------------------------------------------
+// Last completed sale — written by the payment / pay-cash flow, consumed by
+// the receipt preview screen so the cashier can reprint / email / start over.
+// ---------------------------------------------------------------------------
+
+@immutable
+class CompletedSale {
+  final String receiptNo;
+  final List<CartLine> lines;
+  final MockCustomer customer;
+  final PaymentMethod method;
+  final double subtotal;
+  final double discount;
+  final double total;
+  final double tendered;
+  final double change;
+  final DateTime completedAt;
+  final String tillCode;
+  final String cashierName;
+  final String branchName;
+  const CompletedSale({
+    required this.receiptNo,
+    required this.lines,
+    required this.customer,
+    required this.method,
+    required this.subtotal,
+    required this.discount,
+    required this.total,
+    required this.tendered,
+    required this.change,
+    required this.completedAt,
+    required this.tillCode,
+    required this.cashierName,
+    required this.branchName,
+  });
+}
+
+final lastSaleProvider = StateProvider<CompletedSale?>((_) => null);
+
+/// One-shot helper called by the payment flows so receipt-write logic lives
+/// in one place. Returns the receipt number it generated.
+String recordSale(WidgetRef ref, {
+  required PaymentMethod method,
+  required double tendered,
+}) {
+  final lines = ref.read(cartProvider);
+  final customer = ref.read(selectedCustomerProvider);
+  final session = ref.read(sessionProvider);
+  final subtotal = ref.read(cartSubtotalProvider);
+  final discount = ref.read(cartDiscountProvider);
+  final total = ref.read(cartTotalProvider);
+  final receiptNo = 'POS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+  ref.read(lastSaleProvider.notifier).state = CompletedSale(
+    receiptNo: receiptNo,
+    lines: List.unmodifiable(lines),
+    customer: customer,
+    method: method,
+    subtotal: subtotal,
+    discount: discount,
+    total: total,
+    tendered: tendered,
+    change: tendered - total,
+    completedAt: DateTime.now(),
+    tillCode: session?.tillCode ?? 'TILL-?',
+    cashierName: session?.cashierName ?? 'Cashier',
+    branchName: session?.branchName ?? 'Branch',
+  );
+  return receiptNo;
+}
+
+// ---------------------------------------------------------------------------
+// Mock past sales — used by the refund / return picker.
+// ---------------------------------------------------------------------------
+
+@immutable
+class PastSale {
+  final String receiptNo;
+  final DateTime completedAt;
+  final String tillCode;
+  final String cashierName;
+  final List<CartLine> lines;
+  final double total;
+  final PaymentMethod method;
+  const PastSale({
+    required this.receiptNo,
+    required this.completedAt,
+    required this.tillCode,
+    required this.cashierName,
+    required this.lines,
+    required this.total,
+    required this.method,
+  });
+}
+
+List<PastSale> get mockPastSales {
+  final now = DateTime.now();
+  CartLine line(MockItem item, double qty) => CartLine(item: item, qty: qty);
+  List<PastSale> build(List<({String r, int minsAgo, String till, String cashier, List<CartLine> lines, PaymentMethod m})> seed) {
+    return seed
+        .map((s) => PastSale(
+              receiptNo: s.r,
+              completedAt: now.subtract(Duration(minutes: s.minsAgo)),
+              tillCode: s.till,
+              cashierName: s.cashier,
+              lines: s.lines,
+              total: s.lines.fold<double>(0, (a, l) => a + l.net),
+              method: s.m,
+            ))
+        .toList();
+  }
+  return build([
+    (r: 'POS-8472103', minsAgo:   4, till: 'TILL-1', cashier: 'Cashier One', lines: [line(mockItems[0], 2), line(mockItems[6], 3)],  m: PaymentMethod.cash),
+    (r: 'POS-8472089', minsAgo:  18, till: 'TILL-1', cashier: 'Cashier One', lines: [line(mockItems[13], 1)],                          m: PaymentMethod.card),
+    (r: 'POS-8472051', minsAgo:  42, till: 'TILL-2', cashier: 'Cashier Two', lines: [line(mockItems[10], 1), line(mockItems[11], 2)],  m: PaymentMethod.mobileMoney),
+    (r: 'POS-8472012', minsAgo:  93, till: 'TILL-1', cashier: 'Cashier One', lines: [line(mockItems[3], 4), line(mockItems[4], 1), line(mockItems[15], 1)], m: PaymentMethod.cash),
+    (r: 'POS-8471870', minsAgo: 217, till: 'TILL-3', cashier: 'Cashier Two', lines: [line(mockItems[12], 1)],                          m: PaymentMethod.card),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
 // Formatting
 // ---------------------------------------------------------------------------
 

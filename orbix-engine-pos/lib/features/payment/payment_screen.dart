@@ -28,40 +28,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   void _complete() {
     final total = ref.read(cartTotalProvider);
-    final tendered = double.tryParse(_tendered.text.replaceAll(',', '')) ?? total;
-    final change = tendered - total;
-
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        icon: const Icon(Icons.check_circle, size: 48, color: Colors.green),
-        title: const Text('Payment complete'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Paid ${money(tendered)} via ${_method.label.toLowerCase()}.'),
-            if (change > 0) ...[
-              const SizedBox(height: 8),
-              Text('Change: ${money(change)}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 12),
-            Text('Receipt #POS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-                style: const TextStyle(color: Colors.grey, fontFamily: 'monospace')),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ref.read(cartProvider.notifier).clear();
-              context.pop();
-            },
-            child: const Text('Next sale'),
-          ),
-        ],
-      ),
-    );
+    final tendered = _method == PaymentMethod.cash
+        ? (double.tryParse(_tendered.text.replaceAll(',', '')) ?? total)
+        : total;
+    recordSale(ref, method: _method, tendered: tendered);
+    context.go('/receipt');
   }
 
   @override

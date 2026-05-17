@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../_demo/mocks.dart';
 
@@ -42,6 +43,58 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
     setState(() => _query = '');
   }
 
+  Future<void> _hold(BuildContext context) async {
+    final cart = ref.read(cartProvider);
+    if (cart.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart is empty — nothing to hold')),
+      );
+      return;
+    }
+    final noteCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.pause_circle_outline, size: 40),
+        title: const Text('Hold cart'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Park the current ${cart.length} line${cart.length == 1 ? "" : "s"} '
+                'so you can serve the next customer.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Note (optional)',
+                hintText: 'e.g. waiting for ID, gone to fetch wallet',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Hold')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final id = ref.read(heldCartsProvider.notifier).hold(
+          cart,
+          ref.read(selectedCustomerProvider),
+          note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+        );
+    ref.read(cartProvider.notifier).clear();
+    ref.read(selectedCustomerProvider.notifier).state = mockCustomers.first;
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cart held as $id — recall from the history button')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -78,12 +131,12 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
               const SizedBox(width: 8),
               IconButton.filledTonal(
                 tooltip: 'Hold this cart and start a new one.',
-                onPressed: () {},
+                onPressed: () => _hold(context),
                 icon: const Icon(Icons.pause_circle_outline),
               ),
               IconButton.filledTonal(
                 tooltip: 'Recall a previously held cart.',
-                onPressed: () {},
+                onPressed: () => context.push('/held'),
                 icon: const Icon(Icons.history),
               ),
             ],

@@ -127,6 +127,14 @@ class _TopBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         const SizedBox(width: 8),
         Tooltip(
+          message: 'Refund a previous sale — pick the receipt, then the lines / qty to return.',
+          child: TextButton.icon(
+            onPressed: () => context.push('/refund'),
+            icon: const Icon(Icons.assignment_return_outlined, size: 18),
+            label: const Text('Refund'),
+          ),
+        ),
+        Tooltip(
           message: 'Authorise a void, discount, or refund (requires supervisor PIN).',
           child: TextButton.icon(
             onPressed: () => context.push('/supervisor'),

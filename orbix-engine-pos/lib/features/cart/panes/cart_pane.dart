@@ -356,6 +356,24 @@ class _CartLineRow extends ConsumerWidget {
                       '${line.item.code} · ${money(line.item.price)} / ${line.item.uom}',
                       style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
+                    if (line.discountPct > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.tertiaryContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${line.discountPct.toStringAsFixed(0)}% off  ·  −${money(line.discount)}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onTertiaryContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
                     if (batch != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
@@ -375,6 +393,12 @@ class _CartLineRow extends ConsumerWidget {
                       ),
                   ],
                 ),
+              ),
+              IconButton(
+                tooltip: 'Apply / change discount on this line',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _showDiscountDialog(context, ref, index, line),
+                icon: const Icon(Icons.percent, size: 18),
               ),
               IconButton(
                 tooltip: 'Remove',
@@ -398,6 +422,103 @@ class _CartLineRow extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> _showDiscountDialog(BuildContext context, WidgetRef ref, int index, CartLine line) async {
+  final ctrl = TextEditingController(text: line.discountPct == 0 ? '' : line.discountPct.toStringAsFixed(0));
+  final preset = [0.0, 5.0, 10.0, 15.0, 20.0];
+  double current = line.discountPct;
+  final ok = await showDialog<double>(
+    context: context,
+    builder: (_) => StatefulBuilder(builder: (ctx, setLocal) {
+      final theme = Theme.of(ctx);
+      final newNet = line.gross * (1 - current / 100);
+      return AlertDialog(
+        icon: const Icon(Icons.percent, size: 36),
+        title: Text('Discount — ${line.item.name}'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Line total before discount: ${money(line.gross)}',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Discount %',
+                  suffixText: '%',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) {
+                  final n = double.tryParse(v) ?? 0;
+                  setLocal(() => current = n.clamp(0, 100).toDouble());
+                },
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                children: preset.map((p) => ChoiceChip(
+                  label: Text(p == 0 ? 'None' : '${p.toStringAsFixed(0)}%'),
+                  selected: current == p,
+                  onSelected: (_) {
+                    ctrl.text = p == 0 ? '' : p.toStringAsFixed(0);
+                    setLocal(() => current = p);
+                  },
+                )).toList(),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Text('New line total', style: theme.textTheme.bodyMedium),
+                    const Spacer(),
+                    Text(money(newNet),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        )),
+                  ],
+                ),
+              ),
+              if (current >= 15) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 14, color: theme.colorScheme.error),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Discounts ≥ 15% require supervisor authorisation in production.',
+                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, current), child: const Text('Apply')),
+        ],
+      );
+    }),
+  );
+  if (ok != null) {
+    ref.read(cartProvider.notifier).setDiscount(index, ok);
   }
 }
 
