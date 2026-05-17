@@ -6,15 +6,17 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
 import { ITEM_TYPES, ItemGroup, ItemType, Uom, VatGroup, WEIGHING_UNITS, WeighingUnit } from '../catalog.models';
-import { BarcodesPanelComponent } from './barcodes-panel.component';
-import { PriceHistoryPanelComponent } from './price-history-panel.component';
+
+// FOLLOWUP: barcodes-panel + price-history-panel currently call the
+// backend with a numeric itemId. Until those endpoints migrate to uid
+// (separate PR), the sub-panels are not rendered on this page.
 
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [DecimalPipe, FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
+  imports: [DecimalPipe, FormsModule, RouterLink],
   template: `
-    <h2 class="h3 mb-4">{{ itemId() ? 'Edit item' : 'New item' }}</h2>
+    <h2 class="h3 mb-4">{{ itemUid() ? 'Edit item' : 'New item' }}</h2>
 
     @if (error()) {
       <div class="alert alert-danger py-2">{{ error() }}</div>
@@ -24,7 +26,7 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
       <div class="col-md-4">
         <label class="form-label">Code</label>
         <input class="form-control" name="code" [(ngModel)]="form.code" required
-               [disabled]="!!itemId()">
+               [disabled]="!!itemUid()">
       </div>
       <div class="col-md-8">
         <label class="form-label">Name</label>
@@ -67,7 +69,7 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
           }
         </select>
       </div>
-      @if (itemId()) {
+      @if (itemUid()) {
         <div class="col-md-3">
           <label class="form-label">Min sell price</label>
           <input class="form-control" type="number" name="msp" [(ngModel)]="form.minSellPrice">
@@ -111,18 +113,14 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
       }
       <div class="col-12 d-flex gap-2">
         <button class="btn btn-primary" [disabled]="saving() || f.invalid">
-          {{ itemId() ? 'Save changes' : 'Create item' }}
+          {{ itemUid() ? 'Save changes' : 'Create item' }}
         </button>
         <a class="btn btn-outline-secondary" routerLink="/catalog/items">Cancel</a>
       </div>
     </form>
 
-    @if (itemId(); as id) {
-      <div style="max-width: 720px">
-        <orbix-barcodes-panel [itemId]="id" />
-        <orbix-price-history-panel [itemId]="id" />
-      </div>
-    }
+    <!-- FOLLOWUP: barcodes-panel + price-history-panel hidden until those
+         endpoints migrate from numeric itemId to uid. -->
   `
 })
 export class ItemEditComponent implements OnInit {
@@ -130,7 +128,7 @@ export class ItemEditComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  readonly itemId = signal<number | null>(null);
+  readonly itemUid = signal<string | null>(null);
   readonly groups = signal<ItemGroup[]>([]);
   readonly uoms = signal<Uom[]>([]);
   readonly vatGroups = signal<VatGroup[]>([]);
@@ -170,11 +168,10 @@ export class ItemEditComponent implements OnInit {
       error: err => this.showError(err)
     });
 
-    const idParam = this.route.snapshot.paramMap.get('id');
-    if (idParam) {
-      const id = Number(idParam);
-      this.itemId.set(id);
-      this.catalog.getItem(id).subscribe({
+    const uidParam = this.route.snapshot.paramMap.get('uid');
+    if (uidParam) {
+      this.itemUid.set(uidParam);
+      this.catalog.getItem(uidParam).subscribe({
         next: item => {
           this.form = {
             code: item.code,
@@ -205,14 +202,14 @@ export class ItemEditComponent implements OnInit {
   save(): void {
     this.saving.set(true);
     this.error.set(null);
-    const id = this.itemId();
+    const uid = this.itemUid();
     const done = {
       next: () => this.router.navigate(['/catalog/items']),
       error: (err: unknown) => { this.saving.set(false); this.showError(err); }
     };
 
-    if (id) {
-      this.catalog.updateItem(id, {
+    if (uid) {
+      this.catalog.updateItem(uid, {
         name: this.form.name.trim(),
         shortName: emptyToNull(this.form.shortName),
         type: this.form.type,

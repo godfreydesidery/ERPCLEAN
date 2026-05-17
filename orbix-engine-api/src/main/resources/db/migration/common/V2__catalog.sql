@@ -48,6 +48,7 @@ CREATE TABLE vat_group (
 
 CREATE TABLE item (
     id                  BIGINT         NOT NULL PRIMARY KEY,
+    uid                 CHAR(26)       NOT NULL,
     company_id          BIGINT         NOT NULL,
     code                VARCHAR(40)    NOT NULL,
     name                VARCHAR(200)   NOT NULL,
@@ -73,6 +74,7 @@ CREATE TABLE item (
     created_by          BIGINT         NOT NULL,
     updated_by          BIGINT         NOT NULL,
     version             INT            NOT NULL DEFAULT 0,
+    CONSTRAINT uk_item_uid          UNIQUE (uid),
     CONSTRAINT uk_item_company_code UNIQUE (company_id, code),
     CONSTRAINT fk_item_company    FOREIGN KEY (company_id)    REFERENCES company (id),
     CONSTRAINT fk_item_group      FOREIGN KEY (item_group_id) REFERENCES item_group (id),

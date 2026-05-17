@@ -42,24 +42,24 @@ export class CatalogService {
     return unwrap(this.http.get<ApiResponse<Page<Item>>>(`${this.base}/items`, { params }));
   }
 
-  getItem(id: number): Observable<Item> {
-    return unwrap(this.http.get<ApiResponse<Item>>(`${this.base}/items/${id}`));
+  getItem(uid: string): Observable<Item> {
+    return unwrap(this.http.get<ApiResponse<Item>>(`${this.base}/items/uid/${uid}`));
   }
 
   createItem(request: CreateItemRequest): Observable<Item> {
     return unwrap(this.http.post<ApiResponse<Item>>(`${this.base}/items`, request));
   }
 
-  updateItem(id: number, request: UpdateItemRequest): Observable<Item> {
-    return unwrap(this.http.patch<ApiResponse<Item>>(`${this.base}/items/${id}`, request));
+  updateItem(uid: string, request: UpdateItemRequest): Observable<Item> {
+    return unwrap(this.http.patch<ApiResponse<Item>>(`${this.base}/items/uid/${uid}`, request));
   }
 
-  archiveItem(id: number): Observable<void> {
-    return this.http.post(`${this.base}/items/${id}/archive`, {}).pipe(map(() => void 0));
+  archiveItem(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/items/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
-  activateItem(id: number): Observable<void> {
-    return this.http.post(`${this.base}/items/${id}/activate`, {}).pipe(map(() => void 0));
+  activateItem(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/items/uid/${uid}/activate`, {}).pipe(map(() => void 0));
   }
 
   // ---- item groups ----------------------------------------------------------

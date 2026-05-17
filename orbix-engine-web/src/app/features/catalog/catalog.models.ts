@@ -16,7 +16,8 @@ export const ITEM_TYPES: ItemType[] = ['SELLABLE', 'CONSUMABLE', 'BOTH', 'SERVIC
 export const WEIGHING_UNITS: WeighingUnit[] = ['KG', 'G', 'L', 'ML'];
 
 export interface Item {
-  id: number;
+  /** ULID (26 chars). The numeric id is internal to the backend and never exposed. */
+  uid: string;
   companyId: number;
   code: string;
   name: string;

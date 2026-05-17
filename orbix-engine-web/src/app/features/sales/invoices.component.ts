@@ -452,8 +452,13 @@ export class InvoicesComponent implements OnInit {
   protected readonly priceListOptions = computed<SearchSelectOption[]>(() =>
     this.priceLists().map(p => ({ id: p.id, label: `${p.name} (${p.code} — ${p.currencyCode})` }))
   );
+  // FOLLOWUP: Item no longer exposes a numeric id (catalog migrated to uid).
+  // The downstream LineRow.itemId / sales-invoice line backend still expects
+  // a numeric id — to be resolved when sales-invoice migrates to uid too.
+  // For now the dropdown emits the uid string; line creation is broken until
+  // that follow-up PR lands.
   protected readonly itemOptions = computed<SearchSelectOption[]>(() =>
-    this.items().map(i => ({ id: i.id, label: `${i.name} (${i.code})` }))
+    this.items().map(i => ({ id: i.uid, label: `${i.name} (${i.code})` }))
   );
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
