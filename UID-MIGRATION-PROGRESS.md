@@ -105,3 +105,159 @@ For each entity in the remaining list:
 2. Pick the next module from the **Remaining** list (recommended: IAM next).
 3. Use the canonical checklist above; commit at module-cohort granularity (one commit per module, like the previous PRs).
 4. After each module: `mvn -Dtest=<Module>ServiceImplTest,ModuleBoundaryTest test` for the green-test sanity check.
+
+## Session record — how we got here
+
+This was a long working session that started in the POS prototype and ended deep in
+the backend uid rollout. The journey is worth keeping because several decisions
+were revisited and the final shape is the third or fourth version of itself.
+
+### Part 1 — Flutter POS prototype polish
+
+Before the uid work, the session refined the POS app (orbix-engine-pos):
+
+- Supermarket spreadsheet table:
+  - Added a separate **Scan code** column for the EAN-13 barcode alongside the
+    existing **Code** column (item code). Lookup now tries barcode first, then
+    falls back to item code.
+  - Combo dropdown under the name column searches barcode + code + name.
+  - Hidden scan code from the dropdown suggestions (per user preference — code
+    + name + price is enough there).
+- Right pane narrowed from 420 → 260 px in supermarket mode (numpad is small),
+  other modes keep 420.
+- Pay cash / Other / Void buttons stacked vertically directly under the numpad,
+  in the same 240 px column. Pay-cash on top, Void at the bottom (furthest from
+  the primary to reduce fat-finger risk).
+
+Then completed three pages that were referenced but unreachable:
+
+- `/payment` → fleshed out as a paper-tape **receipt preview** with Reprint /
+  Email / Open-drawer / Next-sale actions. Replaces the old completion
+  AlertDialog. Pay-cash and Pay-other now route here.
+- `/held` → **held-carts drawer**. Hold parks the active cart as `Hxxx` with
+  optional note; recall swaps it back into the active cart (with a
+  confirm-discard when there's an active cart).
+- `/refund` → **refund/return picker**. Search past sales, tick lines + qty,
+  capture reason, supervisor PIN (mock `1234`) authorises.
+
+Other completions:
+- Login biometric button → mock fingerprint dialog (auto-success after 900 ms).
+- Settings Test / Push-now buttons → SnackBar feedback (no longer no-ops).
+- Per-line **discount dialog** (% button on each cart line, preset chips,
+  warning at ≥15%).
+
+POS supporting infra in `lib/features/_demo/mocks.dart`:
+- `HeldCart` + `HeldCartsNotifier`
+- `CompletedSale` + `lastSaleProvider` + `recordSale()` helper
+- `PastSale` + `mockPastSales` for the refund picker
+
+Commits: `e607007`, `e2da853`, `cdd1ae7`, `b801a1a` (POS prototype era).
+
+### Part 2 — UID + JSON:API rollout
+
+User stated the principle: *"all entities exposed to users and other systems
+should have a unique uid (ULID), used in URLs as `/.../uid/{entityUid}/...`"*.
+
+#### Decisions taken (in order)
+
+1. **URL shape**: literal `uid/{uid}` segment, not bare `{uid}` (matches the
+   user's example exactly; unambiguous vs. code or numeric-id lookups).
+2. **Rollout**: foundation + Item pilot first, then per-aggregate rolloutin follow-up commits. Not a single big-bang refactor.
+3. **DTO id treatment** — *this one was revisited twice*:
+   - First decision: strip `id` from response DTOs, expose `uid` only. This
+     immediately broke `SalesInvoiceLine.itemId: Long` because the dropdown
+     had no numeric id to feed back. **Reverted**.
+   - Second decision: keep `id` in body, `uid` in URL. Working but inconsistent
+     (`"id": "42"` next to `"companyId": 2`).
+   - **Final decision**: install a global Jackson `BeanSerializerModifier` that
+     stringifies every Long field whose name is `id`, ends in `Id`, or ends in
+     `By` (audit-actor user-ids). Per JSON:API discipline; cross-cutting; new
+     DTOs get it for free.
+4. **Migrations strategy**: user is in dev, will recreate DB. So we edit V*.sql
+   in place instead of writing a backfill migration.
+5. **Currency stays addressed by `code`** (its natural key), not uid. Same for
+   junction tables, line/allocation tables, and infra entities.
+
+#### Cohorts rolled out in order
+
+- **Foundation** (commit `e607007`): `UidEntity` mapped superclass,
+  `UidGenerator` (wraps `f4b6a3:ulid-creator`), `@ValidUlid` validator, plus the
+  Item pilot. `id` was originally stripped from the DTO.
+- **Item refinement** (commit `989a079`): put `id` back in DTOs after
+  realising sales-invoice line creation needed it.
+- **JSON:API string ids on Item only** (commit `dab2fdb`): `@JsonSerialize(using = ToStringSerializer.class)` on `ItemResponseDto.id`.
+- **Catalog completion + global modifier** (commit `1873bd2`): the rest of
+  catalog (ItemGroup, Uom, VatGroup, ItemBarcode, PriceList) migrated, and the
+  global modifier replaces the per-field annotation. Per-entity annotation
+  dropped.
+- **Admin + `*By` extension** (commit `56194c6`): Branch / Section / Route +
+  the modifier now also stringifies `*By` fields (createdBy, postedBy, etc.).
+  Triggered a wide Angular cascade — `*Id: number` → `*Id: string` across 60+
+  files in catalog / party / sales / procurement / stock / day / admin.
+- **Party** (commit `3b0b550`): Party + role-tables (Customer/Supplier/Employee/SalesAgent
+  share Party's PK so they inherit its uid; no separate uid on the role rows).
+- **This checkpoint** (commit `40a3e69`): created [UID-MIGRATION-PROGRESS.md](UID-MIGRATION-PROGRESS.md).
+
+#### Important rules / preferences established this session
+
+- **Update migrations in place** (user recreates DB) — don't write Java
+  Flyway backfills.
+- **Skip pre-existing test failures** — 74F + 65E `branchScope is null`
+  errors in sales / stock / procurement / iam tests come from earlier `iam:
+  branch-scope ...` commits (8e53a1c, f64e0e3, 4878946). Not in scope for the
+  uid work but should be addressed separately.
+- **Test fixtures bypass `@PrePersist`** — use
+  `ReflectionTestUtils.setField(entity, "uid", UidGenerator.next())`.
+- **Lombok already excluded from the fat jar**; use it on entities + DTOs.
+- **Per-aggregate commits**, one module per commit, sized like the catalog or
+  admin commits.
+
+#### Sample wire shape (current, after the global modifier)
+
+```json
+GET /api/v1/items/uid/01HZ8X7M3K9PJK2D7Q5BCN8W4F
+{
+  "status": true,
+  "statusCode": 200,
+  "responseCode": "OK",
+  "message": "Item retrieved",
+  "errors": [],
+  "data": {
+    "id": "42",
+    "uid": "01HZ8X7M3K9PJK2D7Q5BCN8W4F",
+    "companyId": "2",
+    "code": "BR-001",
+    "name": "White bread loaf 600g",
+    "itemGroupId": "10",
+    "uomId": "20",
+    "vatGroupId": "30",
+    "avgCost": 2300.0000,
+    "lastCost": 2400.0000,
+    "status": "ACTIVE"
+  }
+}
+```
+
+All id-like fields stringified, decimals stay numeric, enums stay strings.
+This is the shape every migrated module emits.
+
+#### Files that are likely to surprise on resume
+
+- `IdLongAsStringSerializerModifier` matches by **field name**, so any new Long
+  field named `notById` or similar would accidentally stringify. Watch for false
+  positives if a new field happens to end in `By`.
+- `BranchService.requireInCompanyByUid(String)` exists alongside the old
+  `requireInCompany(Long)` — both are kept on purpose: cross-aggregate callers
+  inside the monolith still pass numeric ids from FKs.
+- The `partyService.deactivate(Long)` / `activate(Long)` methods stay as `Long`
+  on purpose — the role services resolve the uid → party first, then pass
+  `party.getId()`.
+- `Currency`, `FxRate`, `Company`, `Organisation` are *intentionally not
+  migrated*. Skipping them isn't a TODO — they have natural keys or no
+  controllers.
+- The `Set<number>` → `Set<string>` and `Record<number, ...>` → `Record<string, ...>`
+  changes in role-admin / grns / packing-lists components were part of the
+  cascade. If something looks like a typed lie there, double-check the type
+  matches the wire value (string).
+- The role-grant "company-wide" sentinel switched from numeric `-1` to empty
+  string `""` for the new string id space.
