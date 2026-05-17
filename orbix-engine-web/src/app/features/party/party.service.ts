@@ -12,7 +12,8 @@ import {
   Employee,
   PartyResponse,
   SalesAgent,
-  Supplier
+  Supplier,
+  UpdateSalesAgentRequest
 } from './party.models';
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +24,18 @@ export class PartyService {
   /** Every party in the caller's company — backs the "pick existing party" picker. */
   listParties(): Observable<PartyResponse[]> {
     return unwrap(this.http.get<ApiResponse<PartyResponse[]>>(`${this.base}/parties`));
+  }
+
+  /**
+   * Reserves the next free party code for {@code prefix} (e.g. `AGT`). Each
+   * call increments the company-scoped counter, so callers should only fetch
+   * when they actually intend to use the code (form open in create-new mode).
+   */
+  reservePartyCode(prefix: string): Observable<string> {
+    const params = new HttpParams().set('prefix', prefix);
+    return unwrap(this.http.post<ApiResponse<{ code: string }>>(
+      `${this.base}/parties/codes/reserve`, null, { params }
+    )).pipe(map(resp => resp.code));
   }
 
   /** Shared-party hint: an existing party in the company with this TIN, or null. */
@@ -84,7 +97,17 @@ export class PartyService {
     return unwrap(this.http.post<ApiResponse<SalesAgent>>(`${this.base}/sales-agents`, request));
   }
 
+  updateSalesAgent(partyId: number, request: UpdateSalesAgentRequest): Observable<SalesAgent> {
+    return unwrap(this.http.patch<ApiResponse<SalesAgent>>(
+      `${this.base}/sales-agents/${partyId}`, request
+    ));
+  }
+
   deactivateSalesAgent(partyId: number): Observable<void> {
     return this.http.post(`${this.base}/sales-agents/${partyId}/deactivate`, {}).pipe(map(() => void 0));
+  }
+
+  activateSalesAgent(partyId: number): Observable<void> {
+    return this.http.post(`${this.base}/sales-agents/${partyId}/activate`, {}).pipe(map(() => void 0));
   }
 }

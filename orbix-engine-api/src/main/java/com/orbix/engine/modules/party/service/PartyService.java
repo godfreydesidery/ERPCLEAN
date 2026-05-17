@@ -17,6 +17,14 @@ public interface PartyService {
     /** Every party in the caller's company, ordered by party code. */
     List<PartyResponseDto> listParties();
 
+    /**
+     * Reserves the next auto-generated party code for the given prefix in the
+     * caller's company. Each call increments the per-(company, prefix) counter
+     * and returns a formatted code like {@code AGT0042}. Numbers may skip if
+     * the caller abandons the form — by design.
+     */
+    String reservePartyCode(String prefix);
+
     /** The existing party in the caller's company carrying this TIN, if any. */
     Optional<PartyResponseDto> findByTin(String tin);
 
@@ -35,4 +43,7 @@ public interface PartyService {
 
     /** Marks the party (and therefore every role on it) INACTIVE. */
     void deactivate(Long partyId);
+
+    /** Marks the party (and therefore every role on it) ACTIVE. */
+    void activate(Long partyId);
 }

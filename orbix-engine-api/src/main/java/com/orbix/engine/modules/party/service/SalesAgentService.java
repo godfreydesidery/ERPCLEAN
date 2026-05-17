@@ -18,4 +18,10 @@ public interface SalesAgentService {
     SalesAgentResponseDto updateSalesAgent(Long partyId, UpdateSalesAgentRequestDto request);
 
     void deactivateSalesAgent(Long partyId);
+
+    /**
+     * Reactivates the underlying party. Affects every other role on the party
+     * (a deactivated customer-and-agent comes back as both).
+     */
+    void activateSalesAgent(Long partyId);
 }

@@ -51,4 +51,10 @@ public class SalesAgentController {
         service.deactivateSalesAgent(partyId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{partyId}/activate")
+    public ResponseEntity<Void> activateSalesAgent(@PathVariable Long partyId) {
+        service.activateSalesAgent(partyId);
+        return ResponseEntity.noContent().build();
+    }
 }

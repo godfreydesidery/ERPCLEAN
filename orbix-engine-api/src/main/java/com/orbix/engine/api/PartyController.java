@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
@@ -29,5 +30,14 @@ public class PartyController {
     public PartyResponseDto findByTin(@RequestParam String tin) {
         return service.findByTin(tin)
             .orElseThrow(() -> new NoSuchElementException("No party with TIN: " + tin));
+    }
+
+    /**
+     * Reserves the next free party code for the given prefix (e.g. {@code AGT}).
+     * POST because each call increments the per-(company, prefix) counter.
+     */
+    @PostMapping("/codes/reserve")
+    public Map<String, String> reserveCode(@RequestParam String prefix) {
+        return Map.of("code", service.reservePartyCode(prefix));
     }
 }

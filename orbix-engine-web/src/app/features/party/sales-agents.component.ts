@@ -9,7 +9,7 @@ import { Route, RouteService } from '../../core/route/route.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PartyService } from './party.service';
 import { PartyDetailsFormComponent } from './party-details-form.component';
-import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './party.models';
+import { PartyDetails, PartyResponse, SalesAgent, UpdateSalesAgentRequest, blankPartyDetails } from './party.models';
 
 @Component({
   selector: 'orbix-sales-agents',
@@ -42,57 +42,71 @@ import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './pa
     @if (showForm()) {
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-          <h2 class="h6 fw-bold mb-0 text-dark">New sales agent</h2>
+          <h2 class="h6 fw-bold mb-0 text-dark">
+            {{ editing() ? 'Edit sales agent' : 'New sales agent' }}
+          </h2>
           <button class="btn-close btn-sm" (click)="toggleForm()" aria-label="Close"
                   title="Close the form without saving"></button>
         </div>
         <div class="card-body p-3">
-          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
-            <div class="party-mode-toggle">
-              <button type="button" class="party-mode-toggle__btn"
-                      [class.is-active]="partyMode() === 'pick'"
-                      (click)="setPartyMode('pick')"
-                      title="Promote a customer, supplier, or employee already on file into the sales-agent role. Use this when the person is already in the system in another capacity.">
-                <i class="bi bi-person-check me-1"></i> Pick existing party
-              </button>
-              <button type="button" class="party-mode-toggle__btn"
-                      [class.is-active]="partyMode() === 'create'"
-                      (click)="setPartyMode('create')"
-                      title="Register a brand-new party and assign the sales-agent role in one step. Use this for people who don't yet exist in the system.">
-                <i class="bi bi-person-plus me-1"></i> Create new party
-              </button>
-            </div>
-
-            @if (partyMode() === 'pick') {
-              <div class="row g-2">
-                <div class="col-md-8">
-                  <label class="form-label small fw-semibold text-secondary">Party</label>
-                  <orbix-search-select name="party" [options]="partyOptions()"
-                                       [(ngModel)]="partyId" placeholder="Pick a customer / supplier / employee…" required>
-                  </orbix-search-select>
-                  <p class="form-text small mb-0">Promotes the chosen party into the sales-agent role.</p>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Agent code</label>
-                  <input class="form-control font-monospace" name="acode" [(ngModel)]="agentCode" required
-                         placeholder="Field ID">
-                </div>
-              </div>
-            } @else {
-              <div class="row g-2">
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Party code</label>
-                  <input class="form-control font-monospace" name="code" [(ngModel)]="code" required
-                         placeholder="e.g. AGT0042">
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Agent code</label>
-                  <input class="form-control font-monospace" name="acode" [(ngModel)]="agentCode" required
-                         placeholder="Field ID">
-                </div>
+          <form (ngSubmit)="submit()" #f="ngForm" class="d-flex flex-column gap-3">
+            @if (editing()) {
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="text-secondary small">Editing</span>
+                <span class="badge text-bg-light border text-secondary font-monospace">{{ agentCode }}</span>
+                <span class="text-secondary small">·</span>
+                <span class="text-secondary small">Agent code cannot be changed</span>
               </div>
 
               <orbix-party-details-form [details]="partyDetails" />
+            } @else {
+              <div class="party-mode-toggle">
+                <button type="button" class="party-mode-toggle__btn"
+                        [class.is-active]="partyMode() === 'pick'"
+                        (click)="setPartyMode('pick')"
+                        title="Promote a customer, supplier, or employee already on file into the sales-agent role. Use this when the person is already in the system in another capacity.">
+                  <i class="bi bi-person-check me-1"></i> Pick existing party
+                </button>
+                <button type="button" class="party-mode-toggle__btn"
+                        [class.is-active]="partyMode() === 'create'"
+                        (click)="setPartyMode('create')"
+                        title="Register a brand-new party and assign the sales-agent role in one step. Use this for people who don't yet exist in the system.">
+                  <i class="bi bi-person-plus me-1"></i> Create new party
+                </button>
+              </div>
+
+              @if (partyMode() === 'pick') {
+                <div class="row g-2">
+                  <div class="col-md-8">
+                    <label class="form-label small fw-semibold text-secondary">Party</label>
+                    <orbix-search-select name="party" [options]="partyOptions()"
+                                         [(ngModel)]="partyId" placeholder="Pick a customer / supplier / employee…" required>
+                    </orbix-search-select>
+                    <p class="form-text small mb-0">Promotes the chosen party into the sales-agent role.</p>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Agent code</label>
+                    <input class="form-control font-monospace" name="acode" [(ngModel)]="agentCode" required
+                           placeholder="Field ID">
+                  </div>
+                </div>
+              } @else {
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Agent code</label>
+                    <input class="form-control font-monospace" name="acode" [(ngModel)]="agentCode" required
+                           placeholder="Field ID">
+                  </div>
+                  <div class="col-md-8 d-flex align-items-end">
+                    <p class="form-text small mb-0">
+                      <i class="bi bi-info-circle me-1"></i>
+                      Party code is auto-generated from the <span class="font-monospace">AGT</span> sequence on save.
+                    </p>
+                  </div>
+                </div>
+
+                <orbix-party-details-form [details]="partyDetails" />
+              }
             }
 
             <fieldset class="role-fieldset">
@@ -127,15 +141,13 @@ import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './pa
             <div class="d-flex gap-2 pt-2 border-top">
               <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
                       [disabled]="busy() || f.invalid"
-                      [title]="partyMode() === 'pick'
-                        ? 'Save and attach the sales-agent role to the chosen party'
-                        : 'Save the new party and assign the sales-agent role in one transaction'">
+                      [title]="submitTooltip()">
                 @if (busy()) {
                   <span class="spinner-border spinner-border-sm"></span>
                 } @else {
-                  <i class="bi bi-plus-lg"></i>
+                  <i class="bi" [class.bi-save]="editing()" [class.bi-plus-lg]="!editing()"></i>
                 }
-                Create sales agent
+                {{ editing() ? 'Save changes' : 'Create sales agent' }}
               </button>
               <button type="button" class="btn btn-outline-secondary" (click)="toggleForm()"
                       title="Discard changes and close the form">Cancel</button>
@@ -145,6 +157,7 @@ import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './pa
       </div>
     }
 
+    @if (!showForm()) {
     <div class="card border-0 shadow-sm mb-3">
       <div class="card-body p-3 d-flex flex-wrap align-items-center gap-3">
         <div class="search-box flex-grow-1">
@@ -203,12 +216,23 @@ import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './pa
                     </span>
                   </td>
                   <td class="text-end actions-col">
-                    @if (agent.party.status === 'ACTIVE') {
-                      <button class="btn btn-sm btn-outline-danger" (click)="deactivate(agent)"
-                              [disabled]="busy()" title="Deactivate">
-                        <i class="bi bi-pause-circle"></i>
+                    <div class="btn-group btn-group-sm">
+                      <button class="btn btn-outline-secondary" (click)="startEdit(agent)"
+                              [disabled]="busy()" title="Edit this agent — change party details, route, branch, or commission. Agent code stays fixed.">
+                        <i class="bi bi-pencil"></i>
                       </button>
-                    }
+                      @if (agent.party.status === 'ACTIVE') {
+                        <button class="btn btn-outline-danger" (click)="deactivate(agent)"
+                                [disabled]="busy()" title="Deactivate this agent. Also deactivates every other role on the underlying party (e.g. their customer record).">
+                          <i class="bi bi-pause-circle"></i>
+                        </button>
+                      } @else {
+                        <button class="btn btn-outline-success" (click)="activate(agent)"
+                                [disabled]="busy()" title="Reactivate this agent. Also reactivates every other role on the underlying party.">
+                          <i class="bi bi-play-circle"></i>
+                        </button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }
@@ -236,17 +260,29 @@ import { PartyDetails, PartyResponse, SalesAgent, blankPartyDetails } from './pa
                 </span>
                 <span>{{ branchLabel(agent.branchId) }}</span>
               </div>
-              @if (agent.party.status === 'ACTIVE') {
-                <button class="btn btn-sm btn-outline-danger w-100 mt-2" (click)="deactivate(agent)"
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-outline-secondary flex-grow-1" (click)="startEdit(agent)"
                         [disabled]="busy()">
-                  <i class="bi bi-pause-circle me-1"></i> Deactivate
+                  <i class="bi bi-pencil me-1"></i> Edit
                 </button>
-              }
+                @if (agent.party.status === 'ACTIVE') {
+                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="deactivate(agent)"
+                          [disabled]="busy()">
+                    <i class="bi bi-pause-circle me-1"></i> Deactivate
+                  </button>
+                } @else {
+                  <button class="btn btn-sm btn-outline-success flex-grow-1" (click)="activate(agent)"
+                          [disabled]="busy()">
+                    <i class="bi bi-play-circle me-1"></i> Activate
+                  </button>
+                }
+              </div>
             </li>
           }
         </ul>
       }
     </div>
+    }
   `,
   styles: [`
     :host { display: block; }
@@ -381,8 +417,14 @@ export class SalesAgentsComponent implements OnInit {
   });
 
   protected readonly partyMode = signal<'pick' | 'create'>('pick');
+  protected readonly editing = signal<SalesAgent | null>(null);
+  protected readonly submitTooltip = computed(() => {
+    if (this.editing()) return 'Save the edits to this agent';
+    return this.partyMode() === 'pick'
+      ? 'Save and attach the sales-agent role to the chosen party'
+      : 'Save the new party and assign the sales-agent role in one transaction';
+  });
   protected partyId: number | null = null;
-  protected code = '';
   protected agentCode = '';
   protected partyDetails: PartyDetails = blankPartyDetails();
   protected routeId: number | null = null;
@@ -408,10 +450,9 @@ export class SalesAgentsComponent implements OnInit {
   setPartyMode(mode: 'pick' | 'create'): void {
     if (this.partyMode() === mode) return;
     this.partyMode.set(mode);
-    // Clear the inactive path's fields so they don't leak validation errors
-    // (e.g. a stale `code` blocking the picker form from submitting).
+    // Clear the inactive path's fields so they don't leak across modes
+    // (e.g. a stale partyId getting submitted from create mode).
     if (mode === 'pick') {
-      this.code = '';
       this.partyDetails = blankPartyDetails();
     } else {
       this.partyId = null;
@@ -435,28 +476,35 @@ export class SalesAgentsComponent implements OnInit {
     if (!this.showForm()) this.reset();
   }
 
-  create(): void {
-    this.busy.set(true);
-    this.error.set(null);
-    const pickMode = this.partyMode() === 'pick';
-    this.party.createSalesAgent({
-      partyId: pickMode ? this.partyId : null,
-      code: pickMode ? null : this.code.trim(),
-      party: pickMode ? null : this.partyDetails,
-      agentCode: this.agentCode.trim(),
-      appUserId: null,
-      routeId: this.routeId,
-      commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
-      branchId: Number(this.branchId)
-    }).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.reset();
-        this.showForm.set(false);
-        this.load();
-      },
-      error: err => { this.busy.set(false); this.showError(err); }
-    });
+  submit(): void {
+    const editing = this.editing();
+    if (editing) {
+      this.runUpdate(editing.partyId);
+    } else {
+      this.runCreate();
+    }
+  }
+
+  startEdit(agent: SalesAgent): void {
+    this.editing.set(agent);
+    this.agentCode = agent.agentCode;
+    this.routeId = agent.routeId;
+    this.commissionRate = agent.commissionRate;
+    this.branchId = agent.branchId;
+    this.partyDetails = {
+      name: agent.party.name,
+      legalName: agent.party.legalName,
+      category: agent.party.category,
+      tin: agent.party.tin,
+      vrn: agent.party.vrn,
+      phone: agent.party.phone,
+      email: agent.party.email,
+      physicalAddress: agent.party.physicalAddress,
+      postalAddress: agent.party.postalAddress,
+      countryCode: agent.party.countryCode,
+      notes: agent.party.notes
+    };
+    this.showForm.set(true);
   }
 
   deactivate(agent: SalesAgent): void {
@@ -467,10 +515,59 @@ export class SalesAgentsComponent implements OnInit {
     });
   }
 
+  activate(agent: SalesAgent): void {
+    this.busy.set(true);
+    this.party.activateSalesAgent(agent.partyId).subscribe({
+      next: () => { this.busy.set(false); this.load(); },
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
+
+  private runCreate(): void {
+    this.busy.set(true);
+    this.error.set(null);
+    const pickMode = this.partyMode() === 'pick';
+    this.party.createSalesAgent({
+      partyId: pickMode ? this.partyId : null,
+      party: pickMode ? null : this.partyDetails,
+      agentCode: this.agentCode.trim(),
+      appUserId: null,
+      routeId: this.routeId,
+      commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
+      branchId: Number(this.branchId)
+    }).subscribe({
+      next: () => this.afterSave(),
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
+
+  private runUpdate(partyId: number): void {
+    this.busy.set(true);
+    this.error.set(null);
+    const payload: UpdateSalesAgentRequest = {
+      party: this.partyDetails,
+      appUserId: null,
+      routeId: this.routeId,
+      commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
+      branchId: Number(this.branchId)
+    };
+    this.party.updateSalesAgent(partyId, payload).subscribe({
+      next: () => this.afterSave(),
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
+
+  private afterSave(): void {
+    this.busy.set(false);
+    this.reset();
+    this.showForm.set(false);
+    this.load();
+  }
+
   private reset(): void {
+    this.editing.set(null);
     this.partyMode.set('pick');
     this.partyId = null;
-    this.code = '';
     this.agentCode = '';
     this.partyDetails = blankPartyDetails();
     this.routeId = null;

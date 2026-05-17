@@ -118,11 +118,21 @@ export interface SalesAgent {
 export interface CreateSalesAgentRequest {
   /** Set to promote an existing party into the sales-agent role. */
   partyId: number | null;
-  /** Required when {@link partyId} is null — code for the new party. */
-  code: string | null;
-  /** Required when {@link partyId} is null — details of the new party. */
+  /**
+   * Required when {@link partyId} is null — details of the new party. The
+   * backend allocates the party code from the AGT sequence; clients cannot
+   * supply one.
+   */
   party: PartyDetails | null;
   agentCode: string;
+  appUserId: number | null;
+  routeId: number | null;
+  commissionRate: number | null;
+  branchId: number;
+}
+
+export interface UpdateSalesAgentRequest {
+  party: PartyDetails;
   appUserId: number | null;
   routeId: number | null;
   commissionRate: number | null;

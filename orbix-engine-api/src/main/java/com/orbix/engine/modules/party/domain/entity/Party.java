@@ -125,6 +125,11 @@ public class Party {
         touch(actorId);
     }
 
+    public void activate(Long actorId) {
+        this.status = PartyStatus.ACTIVE;
+        touch(actorId);
+    }
+
     public void touch(Long actorId) {
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;

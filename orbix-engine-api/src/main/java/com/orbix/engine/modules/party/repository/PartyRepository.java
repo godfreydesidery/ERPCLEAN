@@ -15,5 +15,5 @@ public interface PartyRepository extends JpaRepository<Party, Long> {
     /** Shared-party lookup: an existing party in the company with this TIN, if any. */
     Optional<Party> findFirstByCompanyIdAndTinAndTinNotNull(Long companyId, String tin);
 
-    List<Party> findByCompanyIdOrderByCodeAsc(Long companyId);
+    List<Party> findByCompanyId(Long companyId);
 }

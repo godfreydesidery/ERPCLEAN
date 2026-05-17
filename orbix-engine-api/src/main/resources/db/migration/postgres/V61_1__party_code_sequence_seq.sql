@@ -1,0 +1,1 @@
+CREATE SEQUENCE party_code_sequence_seq START WITH 1 INCREMENT BY 50;
