@@ -1,7 +1,11 @@
--- ISO 4217 currency catalog seed. ~70 currencies covering all G20 nations,
--- East African neighbours, and common trading partners. Default status is
--- INACTIVE; only the East-African + reserve set starts ACTIVE so a fresh
--- deployment has a sensible dropdown. Admins enable additional ones from
+-- ISO 4217 currency catalog seed. ~74 currencies covering all G20 nations,
+-- East African neighbours, and common trading partners.
+--
+-- Default ACTIVE set, in priority order:
+--   1. TZS (primary — the home/functional currency)
+--   2. East African Community core: KES, UGX, RWF, BIF
+--   3. Global reserves: USD, EUR, GBP
+-- Everything else starts INACTIVE; admins enable additional ones from
 -- Admin → Currencies as the business expands.
 --
 -- Idempotent: every INSERT is guarded by WHERE NOT EXISTS so re-running
@@ -11,6 +15,27 @@
 -- KWD/OMR/etc., 2 otherwise). Symbol populated only where a single
 -- Unicode glyph is unambiguous; left NULL for the rest (admin can fill in).
 
+-- ---- Primary + East African Community ----
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'TZS', 'Tanzanian Shilling',            'TSh',2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'TZS');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'KES', 'Kenyan Shilling',               'KSh',2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'KES');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'UGX', 'Ugandan Shilling',              'USh',0, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'UGX');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'RWF', 'Rwandan Franc',                 'RF', 0, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'RWF');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'BIF', 'Burundian Franc',               NULL, 0, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'BIF');
+
+-- ---- Global reserves ----
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'USD', 'US Dollar',                     '$',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'USD');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'EUR', 'Euro',                          '€',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'EUR');
+INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
+  SELECT 'GBP', 'Pound Sterling',                '£',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'GBP');
+
+-- ---- Other catalog entries (INACTIVE; alphabetical) ----
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'AED', 'UAE Dirham',                    NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'AED');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
@@ -21,8 +46,6 @@ INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'BDT', 'Bangladeshi Taka',              NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'BDT');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'BHD', 'Bahraini Dinar',                NULL, 3, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'BHD');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'BIF', 'Burundian Franc',               NULL, 0, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'BIF');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'BRL', 'Brazilian Real',                'R$', 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'BRL');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
@@ -50,10 +73,6 @@ INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'ETB', 'Ethiopian Birr',                NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'ETB');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'EUR', 'Euro',                          '€',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'EUR');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'GBP', 'Pound Sterling',                '£',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'GBP');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'GHS', 'Ghanaian Cedi',                 NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'GHS');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'HKD', 'Hong Kong Dollar',              'HK$',2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'HKD');
@@ -71,8 +90,6 @@ INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'JOD', 'Jordanian Dinar',               NULL, 3, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'JOD');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'JPY', 'Japanese Yen',                  '¥',  0, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'JPY');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'KES', 'Kenyan Shilling',               'KSh',2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'KES');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'KMF', 'Comorian Franc',                NULL, 0, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'KMF');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
@@ -118,8 +135,6 @@ INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'RUB', 'Russian Ruble',                 '₽',  2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'RUB');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'RWF', 'Rwandan Franc',                 'RF', 0, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'RWF');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'SAR', 'Saudi Riyal',                   NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'SAR');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'SCR', 'Seychellois Rupee',             NULL, 2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'SCR');
@@ -142,13 +157,7 @@ INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'TWD', 'New Taiwan Dollar',             'NT$',2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'TWD');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'TZS', 'Tanzanian Shilling',            'TSh',2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'TZS');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'UAH', 'Ukrainian Hryvnia',             '₴',  2, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'UAH');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'UGX', 'Ugandan Shilling',              'USh',0, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'UGX');
-INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
-  SELECT 'USD', 'US Dollar',                     '$',  2, 'ACTIVE'   WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'USD');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)
   SELECT 'VND', 'Vietnamese Dong',               '₫',  0, 'INACTIVE' WHERE NOT EXISTS (SELECT 1 FROM currency WHERE code = 'VND');
 INSERT INTO currency (code, name, symbol, minor_unit_digits, status)

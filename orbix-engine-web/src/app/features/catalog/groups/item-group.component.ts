@@ -255,9 +255,35 @@ export class ItemGroupComponent implements OnInit {
   protected editName = '';
   protected moveParentId: number | null = null;
 
-  protected readonly orderedGroups = computed(() =>
-    [...this.groups()].sort((a, b) => a.level - b.level || a.code.localeCompare(b.code))
-  );
+  // Depth-first tree order: each parent immediately followed by its children
+  // (siblings sorted by code). Avoids the breadth-first "all level-1, then all
+  // level-2" listing that splits children away from their parents.
+  //
+  // Jackson omits null fields in responses (orbix uses `default-property-inclusion:
+  // non_null`), so root groups arrive with `parentId === undefined`, not null.
+  // Normalise to `null` everywhere so the map key and the `visit(null)` lookup
+  // agree.
+  protected readonly orderedGroups = computed(() => {
+    const byParent = new Map<number | null, ItemGroup[]>();
+    for (const g of this.groups()) {
+      const key = g.parentId ?? null;
+      const list = byParent.get(key) ?? [];
+      list.push(g);
+      byParent.set(key, list);
+    }
+    for (const siblings of byParent.values()) {
+      siblings.sort((a, b) => a.code.localeCompare(b.code));
+    }
+    const out: ItemGroup[] = [];
+    const visit = (parentId: number | null) => {
+      for (const g of byParent.get(parentId) ?? []) {
+        out.push(g);
+        visit(g.id);
+      }
+    };
+    visit(null);
+    return out;
+  });
   protected readonly activeGroups = computed(() => this.orderedGroups().filter(g => g.status === 'ACTIVE'));
 
   ngOnInit(): void {
