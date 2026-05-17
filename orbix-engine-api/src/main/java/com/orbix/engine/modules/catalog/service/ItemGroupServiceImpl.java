@@ -51,7 +51,7 @@ public class ItemGroupServiceImpl implements ItemGroupService {
         }
         int level = 1;
         if (request.parentId() != null) {
-            level = requireGroup(request.parentId()).getLevel() + 1;
+            level = requireGroupById(request.parentId()).getLevel() + 1;
         }
         ItemGroup group = groups.save(new ItemGroup(
             companyId, request.parentId(), level, code, request.name(), context.userId()));
@@ -61,8 +61,8 @@ public class ItemGroupServiceImpl implements ItemGroupService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "ItemGroup")
-    public ItemGroupDto renameGroup(Long groupId, UpdateItemGroupRequestDto request) {
-        ItemGroup group = requireGroup(groupId);
+    public ItemGroupDto renameGroupByUid(String uid, UpdateItemGroupRequestDto request) {
+        ItemGroup group = requireGroupByUid(uid);
         group.rename(request.name(), context.userId());
         return ItemGroupDto.from(group);
     }
@@ -70,13 +70,14 @@ public class ItemGroupServiceImpl implements ItemGroupService {
     @Override
     @Transactional
     @Auditable(action = "MOVE", entityType = "ItemGroup")
-    public ItemGroupDto moveGroup(Long groupId, MoveItemGroupRequestDto request) {
-        ItemGroup group = requireGroup(groupId);
+    public ItemGroupDto moveGroupByUid(String uid, MoveItemGroupRequestDto request) {
+        ItemGroup group = requireGroupByUid(uid);
+        Long groupId = group.getId();
         Long newParentId = request.newParentId();
 
         int newLevel = 1;
         if (newParentId != null) {
-            ItemGroup newParent = requireGroup(newParentId);
+            ItemGroup newParent = requireGroupById(newParentId);
             newLevel = newParent.getLevel() + 1;
         }
 
@@ -100,8 +101,8 @@ public class ItemGroupServiceImpl implements ItemGroupService {
     @Override
     @Transactional
     @Auditable(action = "ARCHIVE", entityType = "ItemGroup")
-    public void archiveGroup(Long groupId) {
-        requireGroup(groupId).archive(context.userId());
+    public void archiveGroupByUid(String uid) {
+        requireGroupByUid(uid).archive(context.userId());
     }
 
     /** The group plus all of its descendants, by id. */
@@ -123,11 +124,20 @@ public class ItemGroupServiceImpl implements ItemGroupService {
         return subtree;
     }
 
-    private ItemGroup requireGroup(Long groupId) {
+    private ItemGroup requireGroupById(Long groupId) {
         ItemGroup group = groups.findById(groupId)
             .orElseThrow(() -> new NoSuchElementException("Item group not found: " + groupId));
         if (!Objects.equals(group.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("Item group not found: " + groupId);
+        }
+        return group;
+    }
+
+    private ItemGroup requireGroupByUid(String uid) {
+        ItemGroup group = groups.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Item group not found: " + uid));
+        if (!Objects.equals(group.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Item group not found: " + uid);
         }
         return group;
     }

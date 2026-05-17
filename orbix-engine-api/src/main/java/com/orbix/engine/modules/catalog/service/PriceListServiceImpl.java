@@ -52,8 +52,8 @@ public class PriceListServiceImpl implements PriceListService {
 
     @Override
     @Transactional(readOnly = true)
-    public PriceListDto getPriceList(Long priceListId) {
-        return PriceListDto.from(requirePriceList(priceListId));
+    public PriceListDto getPriceListByUid(String uid) {
+        return PriceListDto.from(requirePriceListByUid(uid));
     }
 
     @Override
@@ -77,8 +77,8 @@ public class PriceListServiceImpl implements PriceListService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "PriceList")
-    public PriceListDto updatePriceList(Long priceListId, UpdatePriceListRequestDto request) {
-        PriceList list = requirePriceList(priceListId);
+    public PriceListDto updatePriceListByUid(String uid, UpdatePriceListRequestDto request) {
+        PriceList list = requirePriceListByUid(uid);
         Long actorId = context.userId();
         list.update(request.name(), request.currencyCode(), request.validFrom(),
             request.validTo(), request.taxInclusive(), actorId);
@@ -92,19 +92,19 @@ public class PriceListServiceImpl implements PriceListService {
     @Override
     @Transactional
     @Auditable(action = "ARCHIVE", entityType = "PriceList")
-    public void archivePriceList(Long priceListId) {
-        PriceList list = requirePriceList(priceListId);
+    public void archivePriceListByUid(String uid) {
+        PriceList list = requirePriceListByUid(uid);
         if (list.getStatus() == ItemStatus.ARCHIVED) {
-            throw new IllegalArgumentException("Price list is already archived: " + priceListId);
+            throw new IllegalArgumentException("Price list is already archived: " + uid);
         }
         list.archive(context.userId());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<PriceListItemDto> listPrices(Long priceListId) {
-        requirePriceList(priceListId);
-        return priceListItems.findByPriceListIdAndValidToIsNull(priceListId).stream()
+    public List<PriceListItemDto> listPricesByPriceListUid(String priceListUid) {
+        PriceList list = requirePriceListByUid(priceListUid);
+        return priceListItems.findByPriceListIdAndValidToIsNull(list.getId()).stream()
             .map(PriceListItemDto::from)
             .toList();
     }
@@ -112,9 +112,10 @@ public class PriceListServiceImpl implements PriceListService {
     @Override
     @Transactional
     @Auditable(action = "SET_PRICE", entityType = "PriceList")
-    public PriceListItemDto setPrice(Long priceListId, SetPriceRequestDto request) {
-        requirePriceList(priceListId);
-        requireItem(request.itemId());
+    public PriceListItemDto setPriceByPriceListUid(String priceListUid, SetPriceRequestDto request) {
+        PriceList list = requirePriceListByUid(priceListUid);
+        requireItemById(request.itemId());
+        Long priceListId = list.getId();
 
         Optional<PriceListItem> current = priceListItems
             .findByPriceListIdAndItemIdAndUomIdAndValidToIsNull(
@@ -144,9 +145,9 @@ public class PriceListServiceImpl implements PriceListService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PriceChangeLogDto> priceHistoryForItem(Long itemId) {
-        requireItem(itemId);
-        return priceChangeLog.findByItemId(itemId).stream()
+    public List<PriceChangeLogDto> priceHistoryByItemUid(String itemUid) {
+        Item item = requireItemByUid(itemUid);
+        return priceChangeLog.findByItemId(item.getId()).stream()
             .map(PriceChangeLogDto::from)
             .toList();
     }
@@ -158,16 +159,25 @@ public class PriceListServiceImpl implements PriceListService {
             .forEach(l -> l.setAsDefault(false, actorId));
     }
 
-    private PriceList requirePriceList(Long priceListId) {
-        PriceList list = priceLists.findById(priceListId)
-            .orElseThrow(() -> new NoSuchElementException("Price list not found: " + priceListId));
+    private PriceList requirePriceListByUid(String uid) {
+        PriceList list = priceLists.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Price list not found: " + uid));
         if (!Objects.equals(list.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Price list not found: " + priceListId);
+            throw new NoSuchElementException("Price list not found: " + uid);
         }
         return list;
     }
 
-    private Item requireItem(Long itemId) {
+    private Item requireItemByUid(String uid) {
+        Item item = items.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Item not found: " + uid));
+        if (!Objects.equals(item.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Item not found: " + uid);
+        }
+        return item;
+    }
+
+    private Item requireItemById(Long itemId) {
         Item item = items.findById(itemId)
             .orElseThrow(() -> new NoSuchElementException("Item not found: " + itemId));
         if (!Objects.equals(item.getCompanyId(), context.companyId())) {

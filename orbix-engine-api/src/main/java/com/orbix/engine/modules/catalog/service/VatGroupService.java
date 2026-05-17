@@ -14,11 +14,11 @@ public interface VatGroupService {
 
     List<VatGroupDto> listVatGroups();
 
-    VatGroupDto getVatGroup(Long vatGroupId);
+    VatGroupDto getVatGroupByUid(String uid);
 
     VatGroupDto createVatGroup(CreateVatGroupRequestDto request);
 
-    VatGroupDto updateVatGroup(Long vatGroupId, UpdateVatGroupRequestDto request);
+    VatGroupDto updateVatGroupByUid(String uid, UpdateVatGroupRequestDto request);
 
-    void archiveVatGroup(Long vatGroupId);
+    void archiveVatGroupByUid(String uid);
 }

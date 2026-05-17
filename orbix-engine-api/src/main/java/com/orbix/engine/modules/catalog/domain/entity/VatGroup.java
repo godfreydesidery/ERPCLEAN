@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.catalog.domain.entity;
 
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -15,12 +16,15 @@ import java.time.LocalDate;
 @Entity
 @Table(
     name = "vat_group",
-    uniqueConstraints = @UniqueConstraint(name = "uk_vat_group_company_code", columnNames = {"company_id", "code"})
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_vat_group_uid",          columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_vat_group_company_code", columnNames = {"company_id", "code"})
+    }
 )
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class VatGroup {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class VatGroup extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "vat_group_seq")

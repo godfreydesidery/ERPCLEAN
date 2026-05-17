@@ -31,8 +31,8 @@ public class UomServiceImpl implements UomService {
 
     @Override
     @Transactional(readOnly = true)
-    public UomDto getUom(Long uomId) {
-        return UomDto.from(requireUom(uomId));
+    public UomDto getUomByUid(String uid) {
+        return UomDto.from(requireUomByUid(uid));
     }
 
     @Override
@@ -49,14 +49,14 @@ public class UomServiceImpl implements UomService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Uom")
-    public UomDto updateUom(Long uomId, UpdateUomRequestDto request) {
-        Uom uom = requireUom(uomId);
+    public UomDto updateUomByUid(String uid, UpdateUomRequestDto request) {
+        Uom uom = requireUomByUid(uid);
         uom.update(request.name(), request.dimension(), request.base());
         return UomDto.from(uom);
     }
 
-    private Uom requireUom(Long uomId) {
-        return uoms.findById(uomId)
-            .orElseThrow(() -> new NoSuchElementException("UoM not found: " + uomId));
+    private Uom requireUomByUid(String uid) {
+        return uoms.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("UoM not found: " + uid));
     }
 }

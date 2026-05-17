@@ -51,8 +51,8 @@ import { VatGroup } from '../catalog.models';
                   </tr>
                 </thead>
                 <tbody>
-                  @for (group of vatGroups(); track group.id) {
-                    <tr [class.table-active]="editingId() === group.id">
+                  @for (group of vatGroups(); track group.uid) {
+                    <tr [class.table-active]="editingUid() === group.uid">
                       <td>
                         <span class="badge text-bg-light border text-secondary font-monospace">{{ group.code }}</span>
                         @if (group.isDefault) {
@@ -93,10 +93,10 @@ import { VatGroup } from '../catalog.models';
         <div class="card border-0 shadow-sm">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">
-              {{ editingId() ? 'Edit VAT group' : 'New VAT group' }}
+              {{ editingUid() ? 'Edit VAT group' : 'New VAT group' }}
             </h2>
-            @if (editingId()) {
-              <span class="badge text-bg-light text-secondary">Editing #{{ editingId() }}</span>
+            @if (editingUid()) {
+              <span class="badge text-bg-light text-secondary">Editing #{{ editingUid() }}</span>
             }
           </div>
           <div class="card-body p-3">
@@ -104,7 +104,7 @@ import { VatGroup } from '../catalog.models';
               <div>
                 <label class="form-label small fw-semibold text-secondary">Code</label>
                 <input class="form-control" name="code" [(ngModel)]="form.code" required
-                       [disabled]="!!editingId()" placeholder="e.g. STD16">
+                       [disabled]="!!editingUid()" placeholder="e.g. STD16">
               </div>
               <div>
                 <label class="form-label small fw-semibold text-secondary">Name</label>
@@ -135,11 +135,11 @@ import { VatGroup } from '../catalog.models';
                   @if (busy()) {
                     <span class="spinner-border spinner-border-sm"></span>
                   } @else {
-                    <i class="bi" [class.bi-save]="editingId()" [class.bi-plus-lg]="!editingId()"></i>
+                    <i class="bi" [class.bi-save]="editingUid()" [class.bi-plus-lg]="!editingUid()"></i>
                   }
-                  {{ editingId() ? 'Save changes' : 'Create group' }}
+                  {{ editingUid() ? 'Save changes' : 'Create group' }}
                 </button>
-                @if (editingId()) {
+                @if (editingUid()) {
                   <button type="button" class="btn btn-outline-secondary" (click)="cancel()">Cancel</button>
                 }
               </div>
@@ -202,7 +202,7 @@ export class VatGroupComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
 
   protected readonly vatGroups = signal<VatGroup[]>([]);
-  protected readonly editingId = signal<number | null>(null);
+  protected readonly editingUid = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -213,7 +213,7 @@ export class VatGroupComponent implements OnInit {
   }
 
   edit(group: VatGroup): void {
-    this.editingId.set(group.id);
+    this.editingUid.set(group.uid);
     this.form = {
       code: group.code,
       name: group.name,
@@ -224,20 +224,20 @@ export class VatGroupComponent implements OnInit {
   }
 
   cancel(): void {
-    this.editingId.set(null);
+    this.editingUid.set(null);
     this.form = blank();
   }
 
   submit(): void {
-    const id = this.editingId();
+    const uid = this.editingUid();
     const request = {
       name: this.form.name.trim(),
       rate: Number(this.form.rate),
       validFrom: this.form.validFrom,
       isDefault: this.form.isDefault
     };
-    const source = id
-      ? this.catalog.updateVatGroup(id, request)
+    const source = uid
+      ? this.catalog.updateVatGroup(uid, request)
       : this.catalog.createVatGroup({ code: this.form.code.trim(), ...request });
     this.run(source, () => {
       this.cancel();
@@ -246,7 +246,7 @@ export class VatGroupComponent implements OnInit {
   }
 
   archive(group: VatGroup): void {
-    this.run(this.catalog.archiveVatGroup(group.id), () => this.load());
+    this.run(this.catalog.archiveVatGroup(group.uid), () => this.load());
   }
 
   private load(): void {

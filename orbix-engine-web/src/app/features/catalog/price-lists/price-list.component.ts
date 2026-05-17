@@ -374,7 +374,7 @@ export class PriceListComponent implements OnInit {
   select(list: PriceList): void {
     this.selected.set(list);
     this.mode.set('view');
-    this.loadPrices(list.id);
+    this.loadPrices(list.uid);
   }
 
   startNew(): void {
@@ -405,7 +405,7 @@ export class PriceListComponent implements OnInit {
 
   submitList(): void {
     const isEdit = this.mode() === 'edit-list';
-    const id = isEdit ? this.selected()?.id ?? null : null;
+    const uid = isEdit ? this.selected()?.uid ?? null : null;
     const request = {
       name: this.listForm.name.trim(),
       currencyCode: this.listForm.currencyCode.trim().toUpperCase(),
@@ -414,8 +414,8 @@ export class PriceListComponent implements OnInit {
       isDefault: this.listForm.isDefault,
       taxInclusive: this.listForm.taxInclusive
     };
-    const source = id
-      ? this.catalog.updatePriceList(id, request)
+    const source = uid
+      ? this.catalog.updatePriceList(uid, request)
       : this.catalog.createPriceList({ code: this.listForm.code.trim(), ...request });
     this.run(source, list => {
       this.loadLists();
@@ -424,7 +424,7 @@ export class PriceListComponent implements OnInit {
   }
 
   archiveList(list: PriceList): void {
-    this.run(this.catalog.archivePriceList(list.id), () => {
+    this.run(this.catalog.archivePriceList(list.uid), () => {
       this.selected.set(null);
       this.mode.set('view');
       this.loadLists();
@@ -432,15 +432,15 @@ export class PriceListComponent implements OnInit {
   }
 
   submitPrice(list: PriceList): void {
-    this.run(this.catalog.setPrice(list.id, {
-      itemId: Number(this.priceForm.itemId),
-      uomId: Number(this.priceForm.uomId),
+    this.run(this.catalog.setPrice(list.uid, {
+      itemId: String(this.priceForm.itemId),
+      uomId: String(this.priceForm.uomId),
       price: Number(this.priceForm.price),
       effectiveFrom: this.priceForm.effectiveFrom,
       reason: this.priceForm.reason.trim() || null
     }), () => {
       this.priceForm = blankPriceForm();
-      this.loadPrices(list.id);
+      this.loadPrices(list.uid);
     });
   }
 
@@ -451,8 +451,8 @@ export class PriceListComponent implements OnInit {
     });
   }
 
-  private loadPrices(priceListId: number): void {
-    this.catalog.listPrices(priceListId).subscribe({
+  private loadPrices(priceListUid: string): void {
+    this.catalog.listPrices(priceListUid).subscribe({
       next: prices => this.prices.set(prices),
       error: err => this.showError(err)
     });

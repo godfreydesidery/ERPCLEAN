@@ -6,12 +6,14 @@ import com.orbix.engine.modules.catalog.domain.dto.UpdateUomRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.Uom;
 import com.orbix.engine.modules.catalog.domain.enums.UomDimension;
 import com.orbix.engine.modules.catalog.repository.UomRepository;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -33,6 +35,7 @@ class UomServiceImplTest {
     private static Uom uom(Long id, String code) {
         Uom uom = new Uom(code, "Name " + code, UomDimension.COUNT, true);
         uom.setId(id);
+        ReflectionTestUtils.setField(uom, "uid", UidGenerator.next());
         return uom;
     }
 
@@ -42,6 +45,7 @@ class UomServiceImplTest {
         when(uoms.save(any(Uom.class))).thenAnswer(inv -> {
             Uom u = inv.getArgument(0);
             u.setId(1L);
+            ReflectionTestUtils.setField(u, "uid", UidGenerator.next());
             return u;
         });
 
@@ -51,6 +55,7 @@ class UomServiceImplTest {
         verify(uoms).save(saved.capture());
         assertThat(saved.getValue().getCode()).isEqualTo("KG");
         assertThat(result.dimension()).isEqualTo(UomDimension.WEIGHT);
+        assertThat(result.uid()).isNotBlank();
     }
 
     @Test
@@ -67,9 +72,9 @@ class UomServiceImplTest {
     @Test
     void updateUom_changesAttributes() {
         Uom existing = uom(1L, "KG");
-        when(uoms.findById(1L)).thenReturn(Optional.of(existing));
+        when(uoms.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        UomDto result = service.updateUom(1L,
+        UomDto result = service.updateUomByUid(existing.getUid(),
             new UpdateUomRequestDto("Kilo", UomDimension.WEIGHT, false));
 
         assertThat(result.name()).isEqualTo("Kilo");
@@ -79,8 +84,10 @@ class UomServiceImplTest {
 
     @Test
     void getUom_notFound_throwsNoSuchElement() {
-        when(uoms.findById(404L)).thenReturn(Optional.empty());
+        String missingUid = UidGenerator.next();
+        when(uoms.findByUid(missingUid)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getUom(404L)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.getUomByUid(missingUid))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }

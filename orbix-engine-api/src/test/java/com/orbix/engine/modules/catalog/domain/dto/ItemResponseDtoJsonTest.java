@@ -1,9 +1,10 @@
 package com.orbix.engine.modules.catalog.domain.dto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
-import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
+import com.orbix.engine.modules.common.service.IdLongAsStringSerializerModifier;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -12,14 +13,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Pin the JSON wire shape of {@link ItemResponseDto} so the JSON:API
- * string-id discipline doesn't silently regress to a numeric id.
+ * string-id discipline doesn't silently regress to a numeric id. The
+ * stringification is driven by {@link IdLongAsStringSerializerModifier}
+ * (registered via {@code JacksonConfig} at app startup); here we register
+ * the same module locally so the test is self-contained.
  */
 class ItemResponseDtoJsonTest {
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper().registerModule(
+        new SimpleModule().setSerializerModifier(new IdLongAsStringSerializerModifier())
+    );
 
     @Test
-    void id_is_serialised_as_json_string() throws Exception {
+    void id_and_all_fk_id_fields_serialise_as_strings() throws Exception {
         ItemResponseDto dto = new ItemResponseDto(
             42L,
             "01HZ8X7M3K9PJK2D7Q5BCN8W4F",
@@ -43,22 +49,23 @@ class ItemResponseDtoJsonTest {
 
         String json = mapper.writeValueAsString(dto);
 
-        // Primary id is a JSON string (JSON:API discipline).
         assertThat(json).contains("\"id\":\"42\"");
-        // uid stays a JSON string as before.
         assertThat(json).contains("\"uid\":\"01HZ8X7M3K9PJK2D7Q5BCN8W4F\"");
-        // FK references stay numeric until their owning aggregates migrate.
-        assertThat(json).contains("\"companyId\":2");
-        assertThat(json).contains("\"itemGroupId\":10");
-        assertThat(json).contains("\"uomId\":20");
-        assertThat(json).contains("\"vatGroupId\":30");
+        // FK / back-reference Long fields are also stringified now.
+        assertThat(json).contains("\"companyId\":\"2\"");
+        assertThat(json).contains("\"itemGroupId\":\"10\"");
+        assertThat(json).contains("\"uomId\":\"20\"");
+        assertThat(json).contains("\"vatGroupId\":\"30\"");
+        // Genuine numerics (decimals, booleans) untouched.
+        assertThat(json).contains("\"avgCost\":0");
+        assertThat(json).contains("\"tracked\":true");
     }
 
     @Test
     void roundtrip_string_id_in_json_deserialises_to_long() throws Exception {
         String json = """
-            {"id":"42","uid":"01HZ8X7M3K9PJK2D7Q5BCN8W4F","companyId":2,"code":"X","name":"X",
-             "shortName":null,"type":"SELLABLE","itemGroupId":10,"uomId":20,"vatGroupId":30,
+            {"id":"42","uid":"01HZ8X7M3K9PJK2D7Q5BCN8W4F","companyId":"2","code":"X","name":"X",
+             "shortName":null,"type":"SELLABLE","itemGroupId":"10","uomId":"20","vatGroupId":"30",
              "tracked":true,"weighed":false,"weighingUnit":null,"batchTracked":false,
              "avgCost":0,"lastCost":0,"minSellPrice":null,"status":"ACTIVE"}
             """;
@@ -66,5 +73,7 @@ class ItemResponseDtoJsonTest {
         ItemResponseDto dto = mapper.readValue(json, ItemResponseDto.class);
 
         assertThat(dto.id()).isEqualTo(42L);
+        assertThat(dto.companyId()).isEqualTo(2L);
+        assertThat(dto.itemGroupId()).isEqualTo(10L);
     }
 }

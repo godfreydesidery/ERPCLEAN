@@ -6,6 +6,7 @@ import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 /** An item-group node, as returned by the catalog group endpoints. The web builds the tree from the flat list. */
 public record ItemGroupDto(
     Long id,
+    String uid,
     Long parentId,
     int level,
     String code,
@@ -15,6 +16,7 @@ public record ItemGroupDto(
     public static ItemGroupDto from(ItemGroup group) {
         return new ItemGroupDto(
             group.getId(),
+            group.getUid(),
             group.getParentId(),
             group.getLevel(),
             group.getCode(),

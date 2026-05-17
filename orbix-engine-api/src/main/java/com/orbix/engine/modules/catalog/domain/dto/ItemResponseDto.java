@@ -1,7 +1,5 @@
 package com.orbix.engine.modules.catalog.domain.dto;
 
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
@@ -11,22 +9,16 @@ import java.math.BigDecimal;
 
 /**
  * Outgoing item representation. Carries both {@code uid} (for URLs and
- * cross-system references) and {@code id} (numeric, for body-level joins
- * with other DTOs that still reference items by numeric id). URLs MUST
- * address items by uid — id appears in the body only.
+ * cross-system references) and {@code id} (numeric handle for body-level
+ * joins). URLs MUST address items by uid — id appears in the body only.
  *
- * <p>Per JSON:API discipline, the canonical {@code id} field is serialised
- * as a JSON string ({@link ToStringSerializer}). The Java type stays
- * {@code Long} so internal callers see a typed numeric handle; Jackson
- * coerces back from {@code "42"} to {@code 42L} on deserialisation by
- * default, so request bodies referencing items by id keep working.
- *
- * <p>Foreign-key fields ({@code itemGroupId}, {@code uomId}, …) keep their
- * native numeric type for now and will switch to string ids as their
- * target aggregates migrate to the same discipline.
+ * <p>Long fields named {@code id} or ending in {@code Id} serialise as
+ * JSON strings via {@code IdLongAsStringSerializerModifier} (JSON:API
+ * discipline). Java types stay {@code Long}; Jackson coerces back from
+ * {@code "42"} to {@code 42L} on deserialisation by default.
  */
 public record ItemResponseDto(
-    @JsonSerialize(using = ToStringSerializer.class) Long id,
+    Long id,
     String uid,
     Long companyId,
     String code,

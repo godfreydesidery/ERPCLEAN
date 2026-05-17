@@ -16,21 +16,19 @@ export const ITEM_TYPES: ItemType[] = ['SELLABLE', 'CONSUMABLE', 'BOTH', 'SERVIC
 export const WEIGHING_UNITS: WeighingUnit[] = ['KG', 'G', 'L', 'ML'];
 
 export interface Item {
-  /** Internal handle as a string (JSON:API discipline — backend uses Long
-   *  internally and Jackson serialises as a JSON string). Used as a body-level
-   *  reference for DTOs that still join by item id (e.g. SalesInvoiceLine.itemId).
-   *  Never used in URLs. */
+  /** Numeric id as a JSON string (JSON:API discipline). Body-level join
+   *  handle for DTOs that still reference items by id. Never used in URLs. */
   id: string;
   /** ULID (26 chars). The canonical external identifier — used in every URL. */
   uid: string;
-  companyId: number;
+  companyId: string;
   code: string;
   name: string;
   shortName: string | null;
   type: ItemType;
-  itemGroupId: number;
-  uomId: number;
-  vatGroupId: number;
+  itemGroupId: string;
+  uomId: string;
+  vatGroupId: string;
   tracked: boolean;
   weighed: boolean;
   weighingUnit: WeighingUnit | null;
@@ -46,18 +44,18 @@ export interface CreateItemRequest {
   name: string;
   shortName: string | null;
   type: ItemType;
-  itemGroupId: number;
-  uomId: number;
-  vatGroupId: number;
+  itemGroupId: string;
+  uomId: string;
+  vatGroupId: string;
 }
 
 export interface UpdateItemRequest {
   name: string;
   shortName: string | null;
   type: ItemType;
-  itemGroupId: number;
-  uomId: number;
-  vatGroupId: number;
+  itemGroupId: string;
+  uomId: string;
+  vatGroupId: string;
   tracked: boolean;
   minSellPrice: number | null;
   weighed: boolean;
@@ -66,8 +64,9 @@ export interface UpdateItemRequest {
 }
 
 export interface ItemGroup {
-  id: number;
-  parentId: number | null;
+  id: string;
+  uid: string;
+  parentId: string | null;
   level: number;
   code: string;
   name: string;
@@ -75,7 +74,7 @@ export interface ItemGroup {
 }
 
 export interface CreateItemGroupRequest {
-  parentId: number | null;
+  parentId: string | null;
   code: string;
   name: string;
 }
@@ -86,7 +85,8 @@ export type UomDimension = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH';
 export const UOM_DIMENSIONS: UomDimension[] = ['COUNT', 'WEIGHT', 'VOLUME', 'LENGTH'];
 
 export interface Uom {
-  id: number;
+  id: string;
+  uid: string;
   code: string;
   name: string;
   dimension: UomDimension;
@@ -107,8 +107,9 @@ export interface UpdateUomRequest {
 }
 
 export interface VatGroup {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   rate: number;
@@ -137,26 +138,28 @@ export const BARCODE_TYPES: BarcodeType[] =
   ['UPC', 'EAN13', 'EAN8', 'PLU', 'EMBEDDED_WEIGHT', 'EMBEDDED_PRICE'];
 
 export interface ItemBarcode {
-  id: number;
-  itemId: number;
+  id: string;
+  uid: string;
+  itemId: string;
   barcode: string;
   barcodeType: BarcodeType;
-  packUomId: number | null;
+  packUomId: string | null;
   packQty: number;
 }
 
 export interface CreateItemBarcodeRequest {
   barcode: string;
   barcodeType: BarcodeType;
-  packUomId: number | null;
+  packUomId: string | null;
   packQty: number | null;
 }
 
 // ---- F1.5: price lists + price-change audit ---------------------------------
 
 export interface PriceList {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   currencyCode: string;
@@ -187,30 +190,30 @@ export interface UpdatePriceListRequest {
 }
 
 export interface PriceListItem {
-  id: number;
-  priceListId: number;
-  itemId: number;
-  uomId: number;
+  id: string;
+  priceListId: string;
+  itemId: string;
+  uomId: string;
   price: number;
   validFrom: string;
   validTo: string | null;
 }
 
 export interface SetPriceRequest {
-  itemId: number;
-  uomId: number;
+  itemId: string;
+  uomId: string;
   price: number;
   effectiveFrom: string;
   reason: string | null;
 }
 
 export interface PriceChangeLog {
-  id: number;
-  priceListItemId: number;
+  id: string;
+  priceListItemId: string;
   oldPrice: number | null;
   newPrice: number;
   effectiveFrom: string;
   changedAt: string;
-  changedBy: number;
+  changedBy: string;
   reason: string | null;
 }

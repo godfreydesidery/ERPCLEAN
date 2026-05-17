@@ -11,9 +11,9 @@ public interface UomService {
 
     List<UomDto> listUoms();
 
-    UomDto getUom(Long uomId);
+    UomDto getUomByUid(String uid);
 
     UomDto createUom(CreateUomRequestDto request);
 
-    UomDto updateUom(Long uomId, UpdateUomRequestDto request);
+    UomDto updateUomByUid(String uid, UpdateUomRequestDto request);
 }

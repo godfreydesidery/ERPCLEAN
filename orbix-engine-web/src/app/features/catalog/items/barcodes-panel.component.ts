@@ -72,7 +72,8 @@ import { BARCODE_TYPES, BarcodeType, ItemBarcode, Uom } from '../catalog.models'
 export class BarcodesPanelComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
 
-  readonly itemId = input.required<number>();
+  /** Owning item's uid — barcode endpoints address the parent item by uid now. */
+  readonly itemUid = input.required<string>();
 
   readonly barcodes = signal<ItemBarcode[]>([]);
   readonly uoms = signal<Uom[]>([]);
@@ -80,7 +81,7 @@ export class BarcodesPanelComponent implements OnInit {
   readonly error = signal<string | null>(null);
 
   readonly barcodeTypes = BARCODE_TYPES;
-  form: { barcode: string; barcodeType: BarcodeType; packUomId: number | null; packQty: number | null } = blank();
+  form: { barcode: string; barcodeType: BarcodeType; packUomId: string | null; packQty: number | null } = blank();
 
   ngOnInit(): void {
     this.catalog.listUoms().subscribe({
@@ -90,14 +91,14 @@ export class BarcodesPanelComponent implements OnInit {
     this.load();
   }
 
-  uomLabel(id: number | null): string {
+  uomLabel(id: string | null): string {
     if (id == null) return '—';
     const match = this.uoms().find(u => u.id === id);
-    return match ? match.code : String(id);
+    return match ? match.code : id;
   }
 
   add(): void {
-    this.run(this.catalog.addBarcode(this.itemId(), {
+    this.run(this.catalog.addBarcode(this.itemUid(), {
       barcode: this.form.barcode.trim(),
       barcodeType: this.form.barcodeType,
       packUomId: this.form.packUomId,
@@ -109,11 +110,11 @@ export class BarcodesPanelComponent implements OnInit {
   }
 
   remove(barcode: ItemBarcode): void {
-    this.run(this.catalog.deleteBarcode(barcode.id), () => this.load());
+    this.run(this.catalog.deleteBarcode(barcode.uid), () => this.load());
   }
 
   private load(): void {
-    this.catalog.listBarcodes(this.itemId()).subscribe({
+    this.catalog.listBarcodes(this.itemUid()).subscribe({
       next: barcodes => this.barcodes.set(barcodes),
       error: err => this.showError(err)
     });
@@ -138,6 +139,6 @@ export class BarcodesPanelComponent implements OnInit {
   }
 }
 
-function blank(): { barcode: string; barcodeType: BarcodeType; packUomId: number | null; packQty: number | null } {
+function blank(): { barcode: string; barcodeType: BarcodeType; packUomId: string | null; packQty: number | null } {
   return { barcode: '', barcodeType: 'EAN13', packUomId: null, packQty: null };
 }

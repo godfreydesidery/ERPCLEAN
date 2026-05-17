@@ -117,10 +117,10 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
       </div>
     </form>
 
-    @if (itemId(); as id) {
+    @if (itemUid(); as uid) {
       <div style="max-width: 720px">
-        <orbix-barcodes-panel [itemId]="id" />
-        <orbix-price-history-panel [itemId]="id" />
+        <orbix-barcodes-panel [itemUid]="uid" />
+        <orbix-price-history-panel [itemUid]="uid" />
       </div>
     }
   `
@@ -131,9 +131,6 @@ export class ItemEditComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly itemUid = signal<string | null>(null);
-  /** Numeric id of the loaded item — used by sub-panels (barcodes, price
-   *  history) that still address items by id in their endpoints. */
-  readonly itemId = signal<number | null>(null);
   readonly groups = signal<ItemGroup[]>([]);
   readonly uoms = signal<Uom[]>([]);
   readonly vatGroups = signal<VatGroup[]>([]);
@@ -145,9 +142,9 @@ export class ItemEditComponent implements OnInit {
     name: string;
     shortName: string;
     type: ItemType;
-    itemGroupId: number | null;
-    uomId: number | null;
-    vatGroupId: number | null;
+    itemGroupId: string | null;
+    uomId: string | null;
+    vatGroupId: string | null;
     tracked: boolean;
     minSellPrice: number | null;
     weighed: boolean;
@@ -178,9 +175,6 @@ export class ItemEditComponent implements OnInit {
       this.itemUid.set(uidParam);
       this.catalog.getItem(uidParam).subscribe({
         next: item => {
-          // item.id arrives as a JSON string (JSON:API discipline) but the
-          // sub-panels still take a numeric itemId — convert at this boundary.
-          this.itemId.set(Number(item.id));
           this.form = {
             code: item.code,
             name: item.name,

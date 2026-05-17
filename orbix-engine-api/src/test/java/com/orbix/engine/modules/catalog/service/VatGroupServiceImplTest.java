@@ -7,12 +7,14 @@ import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -49,6 +51,7 @@ class VatGroupServiceImplTest {
         VatGroup g = new VatGroup(COMPANY_ID, code, "Name " + code, new BigDecimal("0.1800"),
             LocalDate.of(2026, 1, 1), isDefault, ACTOR_ID);
         g.setId(id);
+        ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
         return g;
     }
 
@@ -58,6 +61,7 @@ class VatGroupServiceImplTest {
         when(vatGroups.save(any(VatGroup.class))).thenAnswer(inv -> {
             VatGroup g = inv.getArgument(0);
             g.setId(1L);
+            ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
             return g;
         });
 
@@ -66,6 +70,7 @@ class VatGroupServiceImplTest {
 
         assertThat(result.code()).isEqualTo("STD");
         assertThat(result.rate()).isEqualByComparingTo("0.1800");
+        assertThat(result.uid()).isNotBlank();
     }
 
     @Test
@@ -86,6 +91,7 @@ class VatGroupServiceImplTest {
         when(vatGroups.save(any(VatGroup.class))).thenAnswer(inv -> {
             VatGroup g = inv.getArgument(0);
             g.setId(1L);
+            ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
             return g;
         });
         when(vatGroups.findByCompanyIdAndIsDefaultTrue(COMPANY_ID)).thenReturn(List.of(previous, vatGroup(1L, "STD", true)));
@@ -99,9 +105,9 @@ class VatGroupServiceImplTest {
     @Test
     void updateVatGroup_changesAttributes() {
         VatGroup existing = vatGroup(1L, "STD", false);
-        when(vatGroups.findById(1L)).thenReturn(Optional.of(existing));
+        when(vatGroups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        VatGroupDto result = service.updateVatGroup(1L, new UpdateVatGroupRequestDto(
+        VatGroupDto result = service.updateVatGroupByUid(existing.getUid(), new UpdateVatGroupRequestDto(
             "Standard rate", new BigDecimal("0.2000"), LocalDate.of(2026, 7, 1), false));
 
         assertThat(result.name()).isEqualTo("Standard rate");
@@ -111,9 +117,9 @@ class VatGroupServiceImplTest {
     @Test
     void archiveVatGroup_setsArchivedStatus() {
         VatGroup existing = vatGroup(1L, "STD", false);
-        when(vatGroups.findById(1L)).thenReturn(Optional.of(existing));
+        when(vatGroups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        service.archiveVatGroup(1L);
+        service.archiveVatGroupByUid(existing.getUid());
 
         assertThat(existing.getStatus()).isEqualTo(ItemStatus.ARCHIVED);
     }
@@ -122,9 +128,9 @@ class VatGroupServiceImplTest {
     void archiveVatGroup_rejectsAlreadyArchived() {
         VatGroup existing = vatGroup(1L, "STD", false);
         existing.setStatus(ItemStatus.ARCHIVED);
-        when(vatGroups.findById(1L)).thenReturn(Optional.of(existing));
+        when(vatGroups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.archiveVatGroup(1L))
+        assertThatThrownBy(() -> service.archiveVatGroupByUid(existing.getUid()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already archived");
     }
@@ -134,8 +140,10 @@ class VatGroupServiceImplTest {
         VatGroup foreign = new VatGroup(999L, "X", "Foreign", new BigDecimal("0.1"),
             LocalDate.of(2026, 1, 1), false, ACTOR_ID);
         foreign.setId(7L);
-        when(vatGroups.findById(7L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(vatGroups.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.getVatGroup(7L)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.getVatGroupByUid(foreign.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }
