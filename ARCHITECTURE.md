@@ -353,7 +353,8 @@ This section names the high-priority entities. **Full attribute lists, datatypes
 - `customer(party_id, credit_limit, price_tier, sales_agent_id, default_branch_id, ...)`.
 - `supplier(party_id, payment_terms, credit_limit, ...)`.
 - `employee(party_id, role, branch_id, hire_date, status, ...)`.
-- `sales_agent(party_id, route_code, ...)`.
+- `route(id, company_id, code, name, status, ...)` — delivery-route master.
+- `sales_agent(party_id, route_id, ...)`.
 - `customer_address`, `supplier_address`.
 
 ### 4.3 Catalog

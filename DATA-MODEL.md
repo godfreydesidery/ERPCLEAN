@@ -534,7 +534,7 @@ A single `party` table holds the common fields. Role-specific tables (`customer`
 | `party_id` | `BIGINT` | NO | PK + FK. |
 | `app_user_id` | `BIGINT` | YES | If they log into WMS, set here. |
 | `agent_code` | `VARCHAR(40)` | NO | UNIQUE per company. |
-| `route_code` | `VARCHAR(40)` | YES | Default route. |
+| `route_id` | `BIGINT` | YES | FK → `route.id`. Default delivery route. |
 | `commission_rate` | `DECIMAL(10,4)` | YES | Decimal fraction, e.g. 0.0250 = 2.5%. |
 | `branch_id` | `BIGINT` | NO | Branch the agent loads van from. |
 
@@ -1394,7 +1394,7 @@ The field-agent workflow. A daily route → load van → sell at customer sites 
 | `company_id` | `BIGINT` | NO | |
 | `branch_id` | `BIGINT` | NO | Issuing branch. |
 | `agent_id` | `BIGINT` | NO | |
-| `route_code` | `VARCHAR(40)` | YES | |
+| `route_id` | `BIGINT` | YES | FK → `route.id`. Overrides agent's default route for this load. |
 | `load_date` | `DATE` | NO | |
 | `status` | `VARCHAR(32)` | NO | `DRAFT`, `LOADED`, `IN_FIELD`, `SETTLED`, `CANCELLED`. |
 | `loaded_at` | `TIMESTAMP` | YES | |

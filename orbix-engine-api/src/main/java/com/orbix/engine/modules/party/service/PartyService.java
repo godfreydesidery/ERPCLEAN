@@ -4,6 +4,7 @@ import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
 import com.orbix.engine.modules.party.domain.dto.PartyResponseDto;
 import com.orbix.engine.modules.party.domain.entity.Party;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,6 +13,9 @@ import java.util.Optional;
  * party whose TIN already exists reuses that party rather than duplicating it.
  */
 public interface PartyService {
+
+    /** Every party in the caller's company, ordered by party code. */
+    List<PartyResponseDto> listParties();
 
     /** The existing party in the caller's company carrying this TIN, if any. */
     Optional<PartyResponseDto> findByTin(String tin);

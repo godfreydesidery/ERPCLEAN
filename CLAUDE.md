@@ -1,0 +1,129 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository shape
+
+Orbix Engine is a clean-build ERP rewrite of the legacy `ERP-master` codebase. It's a polyrepo-in-monorepo: five sibling applications all prefixed `orbix-engine-*` plus shared docs.
+
+| Folder | Stack | Role |
+|---|---|---|
+| `orbix-engine-api/` | Spring Boot 3.3 · Java 21 · Maven · Hibernate 6 · Flyway | REST API — modular monolith, source of truth |
+| `orbix-engine-web/` | Angular 17 standalone components · Bootstrap 5 | Back-office Web ERP |
+| `orbix-engine-pos/` | Flutter Desktop (Windows) · Drift/SQLite | Offline-first POS for tills |
+| `orbix-engine-wms/` | Flutter Android · Drift/SQLite | Field-sales mobile app |
+| `orbix-engine-contracts/` | OpenAPI 3.1 + generated TS/Dart clients | Single source of truth for the API contract |
+| `orbix-engine-infra/` | Docker Compose + IaC | Deployment templates |
+
+Java root package: `com.orbix.engine`.
+
+The four documents at repo root — `PRD.md`, `ARCHITECTURE.md`, `DATA-MODEL.md`, `USER-STORIES.md` — are the authoritative design specs. `ARCHITECTURE.md` and `DATA-MODEL.md` are large; load specific sections as needed rather than reading whole.
+
+## Common commands
+
+### Infrastructure (run once per dev session)
+```powershell
+docker compose up -d                                  # MariaDB on :3307, Postgres :5432, Redis :6379, Meilisearch :7700, MinIO :9000-9001, phpMyAdmin :8090
+docker compose down
+```
+Data persists under `./infra/local-data/` (gitignored). MariaDB (not vanilla MySQL) is used because Flyway migrations rely on native `CREATE SEQUENCE`.
+
+### Backend (`orbix-engine-api/`)
+```powershell
+./mvnw spring-boot:run                                                  # default profile: local,mysql — http://localhost:8081
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local,postgres        # switch DB engine
+./mvnw test                                                             # full test suite (unit + ArchUnit + smoke)
+./mvnw test -Dtest=ItemServiceImplTest                                  # single test class
+./mvnw test -Dtest=ItemServiceImplTest#createItem_persistsAndReturnsDto # single test method
+./mvnw -pl orbix-engine-api spring-boot:run                             # if invoked from repo root
+```
+Swagger UI: `http://localhost:8081/swagger-ui.html`.
+
+### Frontend (`orbix-engine-web/`)
+```powershell
+npm install
+npm start             # ng serve on :4200; expects API on http://localhost:8081/api/v1
+npm run build         # production build
+npm test              # Karma unit tests
+npm run e2e           # Playwright + axe-core accessibility
+```
+
+### POS / WMS (Flutter)
+```powershell
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # regenerates database.g.dart + freezed files; required after schema/DTO edits
+flutter run -d windows         # POS
+flutter run -d <android-id>    # WMS
+```
+
+## Backend architecture (the parts that aren't obvious from one file)
+
+### Actual package layout vs. the docs
+`orbix-engine-api/README.md` and `ARCHITECTURE.md §2.2` describe a hexagonal `api/app/domain/infra` layout. **The implemented code uses a flatter layout** — when adding code, follow the implementation, not the prose:
+
+```
+com.orbix.engine
+├── api/                         FLAT — all REST controllers, one file per resource
+└── modules/
+    ├── common/                  cross-cutting platform (audit, response envelope, ...)
+    ├── auth/                    JWT issuance, security filter, login
+    ├── iam/                     users, roles, permissions
+    └── <business module>/       sales, catalog, stock, procurement, pos, production, ...
+        ├── domain/
+        │   ├── entity/          JPA @Entity classes
+        │   ├── dto/             request/response DTOs — every class ends with `Dto`
+        │   ├── enums/
+        │   └── event/           domain events
+        ├── service/             interface `XxxService` + class `XxxServiceImpl` pair
+        ├── repository/          Spring Data JPA repositories
+        └── package-info.java
+```
+
+`ModuleBoundaryTest` (ArchUnit, in `src/test/java/com/orbix/engine/architecture/`) enforces:
+- Controllers in `com.orbix.engine.api..` may not touch repositories.
+- Modules may only depend on other modules via `..domain.dto..` / `..domain.enums..`, plus `common`/`auth`/`iam` infrastructure.
+- Layer order: controller → service → repository → domain.
+
+If you add a new cross-module dependency that breaks the rule, fix the design — don't relax the rule.
+
+### Naming and code-shape conventions (project-wide, enforced socially)
+- **DTOs end with `Dto`** — every class in `domain/dto/`, including nested records (e.g. `SalesInvoiceDto.LineDto`).
+- **Application + helper services split into `interface Xxx` + `class XxxImpl`.** Aspects, config classes, filters, and Spring `@Component` infrastructure stay concrete. Test classes target `XxxImplTest`.
+- **Lombok on new entities and DTOs** (`@Getter`/`@Setter`/`@Builder`/`@NoArgsConstructor`/`@AllArgsConstructor` as needed); prefer Java `record`s for immutable DTOs. Lombok is excluded from the Spring Boot fat jar.
+- **API response envelope** — every REST response is wrapped in `ApiResponse<T>` with `status`/`statusCode`/`responseCode`/`message`/`errors[]`/`data`. Wrapping is automatic on the backend; the Angular HTTP layer unwraps so feature code sees the raw `T`. Don't wrap manually in controllers, and don't expect a wrapped shape in frontend services.
+- **RBAC unit is "permission", not "privilege".** Entity `Permission`, table `permission`, JWT claim `perms`. Use `@PreAuthorize("hasPermission(...)")`-style checks consistent with the rest of the codebase — never invent a parallel "privilege" concept.
+
+### Persistence policy (DB-agnostic by design — ARCHITECTURE.md §2.3)
+The same build must run on MySQL 8 (currently MariaDB 11 locally) **and** PostgreSQL 15+. Concrete rules:
+- JPQL or `CriteriaBuilder` only. Native queries are banned unless wrapped behind a dialect-resolver adapter.
+- No vendor-only features at the app layer (no Postgres `JSONB` operators, no MySQL `FULLTEXT`, no listen/notify, no Oracle hints). Search lives in Meilisearch.
+- IDs are `BIGINT` via Hibernate `SEQUENCE` strategy (table fallback for MySQL), or `BINARY(16)` UUIDs where externally referenced. Never `IDENTITY`.
+- Flyway scripts default to `db/migration/common/`. Dialect-specific scripts go in `db/migration/mysql/` or `db/migration/postgres/` only when unavoidable, and need a `// DIALECT-SPECIFIC:` reason comment.
+- `ddl-auto=validate` always. Never `update`.
+
+### Auth + multi-tenancy
+- JWT (access 1h, refresh 12h — see `orbix.jwt.*` in `application.yml`). Local dev uses an ephemeral in-memory key; production loads RS256 from a secret store.
+- Every transactional table carries `company_id` + `branch_id`. A `RequestContext` filter sets current user/company/branch from the JWT + a branch-override header; repository base interfaces inject the predicate automatically.
+
+### Cross-module communication
+Domain events via a **transactional outbox** (`domain_event` table written in the same TX as the business write, polled and dispatched by a Spring scheduled job). Use it for cross-module side effects — don't reach into another module's service or repository. Spring `ApplicationEventPublisher` directly is not the pattern here because it loses events on crash.
+
+### Configuration knobs worth knowing
+`application.yml` exposes a long list of `orbix.*` thresholds (POS variance, sales discount approval, LPO auto-approval, FEFO expiry cron, gift-card expiry cron, invoice match tolerance, etc.). When implementing a feature that gates on a magnitude, check whether the threshold already exists there before adding a new constant.
+
+## Frontend (`orbix-engine-web`)
+
+- Angular 17 **standalone components** — no NgModules; bootstrap providers in `app.config.ts`, routes (lazy-loaded per feature) in `app.routes.ts`.
+- Feature folders under `src/app/features/` (`catalog`, `sales`, `procurement`, `stock`, `production`, `debt`, `reports`, `admin`, ...). Shared shell in `layout/`, auth/error infra in `core/`.
+- The HTTP interceptor unwraps `ApiResponse<T>` before it reaches services, and attaches the JWT + branch header.
+- Bootstrap 5 + Angular Material for UI primitives. Accessibility (WCAG AA) is a CI gate via axe-core in Playwright.
+
+## Repository conventions
+
+- **Trunk-based development**; feature branches ≤ 2 days, work-in-progress hidden behind feature flags on `main`.
+- **Conventional Commits** for commit messages.
+- **One logical change per PR**, mandatory review, green CI required.
+- Branch / PR / commit references include the user-story ID from `USER-STORIES.md` (`US-POS-014`, `US-PROC-002`).
+- Non-trivial architectural decisions get an ADR in `docs/decisions/` (template at `0000-adr-template.md`; see `0001-modular-monolith.md` for an example).
+- `.env.example` documents required vars; copy to `.env` (gitignored) for local overrides. **Never commit secrets** — `.env`, `*.key`, `*.pem`, `*.pfx`, `*.p12` are gitignored.
+- Legacy reference code at `d:\My_Works\ERP\ERP-master` (outside this repo). Use only for business-process reference, never copy code in — this is a clean rewrite.

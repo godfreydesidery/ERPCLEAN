@@ -20,6 +20,11 @@ export class PartyService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
+  /** Every party in the caller's company — backs the "pick existing party" picker. */
+  listParties(): Observable<PartyResponse[]> {
+    return unwrap(this.http.get<ApiResponse<PartyResponse[]>>(`${this.base}/parties`));
+  }
+
   /** Shared-party hint: an existing party in the company with this TIN, or null. */
   findByTin(tin: string): Observable<PartyResponse | null> {
     const params = new HttpParams().set('tin', tin);

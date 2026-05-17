@@ -110,17 +110,21 @@ export interface SalesAgent {
   party: PartyResponse;
   appUserId: number | null;
   agentCode: string;
-  routeCode: string | null;
+  routeId: number | null;
   commissionRate: number | null;
   branchId: number;
 }
 
 export interface CreateSalesAgentRequest {
-  code: string;
-  party: PartyDetails;
+  /** Set to promote an existing party into the sales-agent role. */
+  partyId: number | null;
+  /** Required when {@link partyId} is null — code for the new party. */
+  code: string | null;
+  /** Required when {@link partyId} is null — details of the new party. */
+  party: PartyDetails | null;
   agentCode: string;
   appUserId: number | null;
-  routeCode: string | null;
+  routeId: number | null;
   commissionRate: number | null;
   branchId: number;
 }

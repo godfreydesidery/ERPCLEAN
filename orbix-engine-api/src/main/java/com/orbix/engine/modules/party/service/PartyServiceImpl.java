@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -22,6 +23,14 @@ public class PartyServiceImpl implements PartyService {
     private final PartyRepository parties;
     private final EventPublisher events;
     private final RequestContext context;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyResponseDto> listParties() {
+        return parties.findByCompanyIdOrderByCodeAsc(context.companyId()).stream()
+            .map(PartyResponseDto::from)
+            .toList();
+    }
 
     @Override
     @Transactional(readOnly = true)

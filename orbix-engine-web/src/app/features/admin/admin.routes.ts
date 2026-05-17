@@ -22,6 +22,10 @@ export const routes: Routes = [
     loadComponent: () => import('./branches/branch-admin.component').then(m => m.BranchAdminComponent)
   },
   {
+    path: 'routes',
+    loadComponent: () => import('./routes/route-admin.component').then(m => m.RouteAdminComponent)
+  },
+  {
     path: 'currencies',
     loadComponent: () => import('./currencies/currency-admin.component').then(m => m.CurrencyAdminComponent)
   },

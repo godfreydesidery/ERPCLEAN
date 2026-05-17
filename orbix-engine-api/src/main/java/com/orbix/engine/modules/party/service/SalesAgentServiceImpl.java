@@ -60,15 +60,26 @@ public class SalesAgentServiceImpl implements SalesAgentService {
         if (salesAgents.existsByCompanyIdAndAgentCode(companyId, agentCode)) {
             throw new IllegalArgumentException("Agent code already exists: " + agentCode);
         }
-        Party party = partyService.resolveOrCreate(request.code(), request.party(), context.userId());
+        Party party = resolveParty(request);
         if (salesAgents.existsById(party.getId())) {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has a sales-agent role");
         }
         SalesAgent agent = new SalesAgent(party.getId(), agentCode, request.branchId());
-        agent.update(request.appUserId(), request.routeCode(), request.commissionRate(),
+        agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
         return SalesAgentResponseDto.from(salesAgents.save(agent), party);
+    }
+
+    private Party resolveParty(CreateSalesAgentRequestDto request) {
+        if (request.partyId() != null) {
+            return partyService.requireInCompany(request.partyId());
+        }
+        if (request.code() == null || request.code().isBlank() || request.party() == null) {
+            throw new IllegalArgumentException(
+                "Supply either partyId, or code + party details, to create a sales agent");
+        }
+        return partyService.resolveOrCreate(request.code(), request.party(), context.userId());
     }
 
     @Override
@@ -79,7 +90,7 @@ public class SalesAgentServiceImpl implements SalesAgentService {
         SalesAgent agent = salesAgents.findById(partyId)
             .orElseThrow(() -> new NoSuchElementException("Not a sales agent: " + partyId));
         partyService.applyDetails(party, request.party(), context.userId());
-        agent.update(request.appUserId(), request.routeCode(), request.commissionRate(),
+        agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
         return SalesAgentResponseDto.from(agent, party);
     }

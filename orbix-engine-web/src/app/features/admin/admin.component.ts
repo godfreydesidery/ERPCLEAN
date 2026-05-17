@@ -77,6 +77,7 @@ export class AdminComponent {
     { label: 'Users',               description: 'Create staff accounts, reset passwords, disable.',    link: 'users',      permission: 'IAM.MANAGE_USERS',     icon: 'bi-people',       tint: 'blue'   },
     { label: 'Roles & permissions', description: 'Create roles, assign permissions, grant to users.',  link: 'roles',      permission: 'IAM.MANAGE_ROLES',     icon: 'bi-shield-lock',  tint: 'rose'   },
     { label: 'Branches & sections', description: 'Manage branches and their internal sections.',       link: 'branches',   permission: 'ADMIN.MANAGE_BRANCHES', icon: 'bi-building',     tint: 'green'  },
+    { label: 'Delivery routes',     description: 'Sales territories agents and van loads anchor to.',  link: 'routes',     permission: 'ADMIN.MANAGE_ROUTES',  icon: 'bi-signpost-split', tint: 'orange' },
     { label: 'Tills',               description: 'POS terminals registered against each branch.',      link: 'tills',      permission: 'ADMIN.MANAGE_BRANCHES', icon: 'bi-cash-stack',   tint: 'amber'  },
     { label: 'Currencies',          description: 'Register and enable currencies.',                     link: 'currencies', permission: 'ADMIN.MANAGE_CURRENCIES', icon: 'bi-currency-exchange', tint: 'violet' },
     { label: 'FX rates',            description: 'Quote exchange rates with full history.',             link: 'fx-rates',   permission: 'ADMIN.MANAGE_FX',      icon: 'bi-graph-up',     tint: 'orange' },
