@@ -1,17 +1,19 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { Currency, CurrencyService } from '../../../core/currency/currency.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { CatalogService } from '../catalog.service';
 import { PriceList, PriceListItem } from '../catalog.models';
 
 @Component({
   selector: 'orbix-price-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -116,9 +118,9 @@ import { PriceList, PriceListItem } from '../catalog.models';
                 <div class="row g-2">
                   <div class="col-md-4">
                     <label class="form-label small fw-semibold text-secondary">Currency</label>
-                    <input class="form-control text-uppercase font-monospace" name="ccy"
-                           [(ngModel)]="listForm.currencyCode"
-                           required pattern="[A-Za-z]{3}" maxlength="3" placeholder="UGX">
+                    <orbix-search-select name="ccy" [options]="currencyOptions()"
+                                         [(ngModel)]="listForm.currencyCode" placeholder="Select…" required>
+                    </orbix-search-select>
                   </div>
                   <div class="col-md-4">
                     <label class="form-label small fw-semibold text-secondary">Valid from</label>
@@ -341,6 +343,14 @@ import { PriceList, PriceListItem } from '../catalog.models';
 })
 export class PriceListComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly priceLists = signal<PriceList[]>([]);
   protected readonly selected = signal<PriceList | null>(null);
@@ -355,6 +365,10 @@ export class PriceListComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadLists();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
   }
 
   select(list: PriceList): void {

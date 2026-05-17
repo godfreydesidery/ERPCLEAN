@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
+import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PartyService } from './party.service';
 import { PartyDetailsFormComponent } from './party-details-form.component';
@@ -118,8 +119,9 @@ import {
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Default currency</label>
-                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="ccy"
-                         [(ngModel)]="defaultCurrencyCode" placeholder="UGX">
+                  <orbix-search-select name="ccy" [options]="currencyOptions()"
+                                       [(ngModel)]="defaultCurrencyCode" placeholder="—">
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Lead time <span class="text-muted">(days)</span></label>
@@ -376,9 +378,16 @@ import {
 })
 export class SuppliersComponent implements OnInit {
   private readonly party = inject(PartyService);
+  private readonly currencyService = inject(CurrencyService);
 
   protected readonly suppliers = signal<Supplier[]>([]);
   protected readonly parties = signal<PartyResponse[]>([]);
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly tinMatch = signal<PartyResponse | null>(null);
@@ -436,6 +445,10 @@ export class SuppliersComponent implements OnInit {
     this.party.listParties().subscribe({
       next: list => this.parties.set(list),
       error: () => this.parties.set([])
+    });
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
     });
   }
 
