@@ -432,7 +432,7 @@ export class SuppliersComponent implements OnInit {
     });
   });
 
-  protected partyId: number | null = null;
+  protected partyId: string | null = null;
   protected partyDetails: PartyDetails = blankPartyDetails();
   protected paymentTermsDays = 0;
   protected defaultCurrencyCode: string | null = null;

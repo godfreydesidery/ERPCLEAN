@@ -11,12 +11,14 @@ import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -54,6 +56,7 @@ class SectionServiceImplTest {
         Branch branch = new Branch(COMPANY_ID, "DT", "Downtown", "RETAIL",
             "Africa/Kampala", false, ACTOR_ID);
         branch.setId(BRANCH_ID);
+        ReflectionTestUtils.setField(branch, "uid", UidGenerator.next());
         return branch;
     }
 
@@ -61,32 +64,37 @@ class SectionServiceImplTest {
         Section section = new Section(BRANCH_ID, "S" + id, "Section " + id, type, ACTOR_ID);
         section.setId(id);
         section.setStatus(status);
+        ReflectionTestUtils.setField(section, "uid", UidGenerator.next());
         return section;
     }
 
     @Test
     void createSection_savesUppercasedCode() {
-        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
+        Branch branch = activeBranch();
+        when(branches.findByUid(branch.getUid())).thenReturn(Optional.of(branch));
         when(sections.existsByBranchIdAndCode(BRANCH_ID, "BAKERY")).thenReturn(false);
         when(sections.save(any(Section.class))).thenAnswer(inv -> {
             Section s = inv.getArgument(0);
             s.setId(100L);
+            ReflectionTestUtils.setField(s, "uid", UidGenerator.next());
             return s;
         });
 
-        SectionResponseDto result = service.createSection(BRANCH_ID,
+        SectionResponseDto result = service.createSectionByBranchUid(branch.getUid(),
             new CreateSectionRequestDto(" bakery ", "Bakery", SectionType.BAKERY, null));
 
         assertThat(result.code()).isEqualTo("BAKERY");
         assertThat(result.type()).isEqualTo(SectionType.BAKERY);
+        assertThat(result.uid()).isNotBlank();
     }
 
     @Test
     void createSection_rejectsDuplicateCode() {
-        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
+        Branch branch = activeBranch();
+        when(branches.findByUid(branch.getUid())).thenReturn(Optional.of(branch));
         when(sections.existsByBranchIdAndCode(BRANCH_ID, "BAKERY")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.createSection(BRANCH_ID,
+        assertThatThrownBy(() -> service.createSectionByBranchUid(branch.getUid(),
             new CreateSectionRequestDto("BAKERY", "Bakery", SectionType.BAKERY, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
@@ -97,9 +105,9 @@ class SectionServiceImplTest {
     void createSection_rejectsInactiveBranch() {
         Branch branch = activeBranch();
         branch.setStatus(AdminStatus.INACTIVE);
-        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(branch));
+        when(branches.findByUid(branch.getUid())).thenReturn(Optional.of(branch));
 
-        assertThatThrownBy(() -> service.createSection(BRANCH_ID,
+        assertThatThrownBy(() -> service.createSectionByBranchUid(branch.getUid(),
             new CreateSectionRequestDto("BAKERY", "Bakery", SectionType.BAKERY, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("inactive branch");
@@ -108,10 +116,10 @@ class SectionServiceImplTest {
     @Test
     void updateSection_updatesDetails() {
         Section existing = section(100L, SectionType.BAKERY, AdminStatus.ACTIVE);
-        when(sections.findById(100L)).thenReturn(Optional.of(existing));
+        when(sections.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
         when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
 
-        SectionResponseDto result = service.updateSection(100L,
+        SectionResponseDto result = service.updateSectionByUid(existing.getUid(),
             new UpdateSectionRequestDto("Hot Bakery", SectionType.DELI, 7L));
 
         assertThat(result.name()).isEqualTo("Hot Bakery");
@@ -122,10 +130,10 @@ class SectionServiceImplTest {
     @Test
     void deactivateSection_allowsNonRetailFloor() {
         Section bakery = section(100L, SectionType.BAKERY, AdminStatus.ACTIVE);
-        when(sections.findById(100L)).thenReturn(Optional.of(bakery));
+        when(sections.findByUid(bakery.getUid())).thenReturn(Optional.of(bakery));
         when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
 
-        service.deactivateSection(100L);
+        service.deactivateSectionByUid(bakery.getUid());
 
         assertThat(bakery.getStatus()).isEqualTo(AdminStatus.INACTIVE);
     }
@@ -134,11 +142,11 @@ class SectionServiceImplTest {
     void deactivateSection_allowsRetailFloorWhenAnotherActiveOneRemains() {
         Section target = section(100L, SectionType.RETAIL_FLOOR, AdminStatus.ACTIVE);
         Section other = section(101L, SectionType.RETAIL_FLOOR, AdminStatus.ACTIVE);
-        when(sections.findById(100L)).thenReturn(Optional.of(target));
+        when(sections.findByUid(target.getUid())).thenReturn(Optional.of(target));
         when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
         when(sections.findByBranchId(BRANCH_ID)).thenReturn(List.of(target, other));
 
-        service.deactivateSection(100L);
+        service.deactivateSectionByUid(target.getUid());
 
         assertThat(target.getStatus()).isEqualTo(AdminStatus.INACTIVE);
     }
@@ -147,11 +155,11 @@ class SectionServiceImplTest {
     void deactivateSection_rejectsLastActiveRetailFloor() {
         Section target = section(100L, SectionType.RETAIL_FLOOR, AdminStatus.ACTIVE);
         Section bakery = section(101L, SectionType.BAKERY, AdminStatus.ACTIVE);
-        when(sections.findById(100L)).thenReturn(Optional.of(target));
+        when(sections.findByUid(target.getUid())).thenReturn(Optional.of(target));
         when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
         when(sections.findByBranchId(BRANCH_ID)).thenReturn(List.of(target, bakery));
 
-        assertThatThrownBy(() -> service.deactivateSection(100L))
+        assertThatThrownBy(() -> service.deactivateSectionByUid(target.getUid()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("last active RETAIL_FLOOR");
     }
@@ -159,19 +167,20 @@ class SectionServiceImplTest {
     @Test
     void deactivateSection_rejectsAlreadyInactiveSection() {
         Section target = section(100L, SectionType.BAKERY, AdminStatus.INACTIVE);
-        when(sections.findById(100L)).thenReturn(Optional.of(target));
+        when(sections.findByUid(target.getUid())).thenReturn(Optional.of(target));
         when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
 
-        assertThatThrownBy(() -> service.deactivateSection(100L))
+        assertThatThrownBy(() -> service.deactivateSectionByUid(target.getUid()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already inactive");
     }
 
     @Test
     void updateSection_notFound_throwsNoSuchElement() {
-        when(sections.findById(404L)).thenReturn(Optional.empty());
+        String missingUid = UidGenerator.next();
+        when(sections.findByUid(missingUid)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.updateSection(404L,
+        assertThatThrownBy(() -> service.updateSectionByUid(missingUid,
             new UpdateSectionRequestDto("x", SectionType.OTHER, null)))
             .isInstanceOf(NoSuchElementException.class);
     }

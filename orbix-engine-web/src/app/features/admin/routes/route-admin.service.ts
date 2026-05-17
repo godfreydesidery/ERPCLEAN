@@ -18,11 +18,11 @@ export class RouteAdminService {
     return unwrap(this.http.post<ApiResponse<Route>>(`${this.base}/routes`, request));
   }
 
-  updateRoute(id: number, request: UpdateRouteRequest): Observable<Route> {
-    return unwrap(this.http.patch<ApiResponse<Route>>(`${this.base}/routes/${id}`, request));
+  updateRoute(uid: string, request: UpdateRouteRequest): Observable<Route> {
+    return unwrap(this.http.patch<ApiResponse<Route>>(`${this.base}/routes/uid/${uid}`, request));
   }
 
-  deactivateRoute(id: number): Observable<void> {
-    return this.http.post(`${this.base}/routes/${id}/deactivate`, {}).pipe(map(() => void 0));
+  deactivateRoute(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/routes/uid/${uid}/deactivate`, {}).pipe(map(() => void 0));
   }
 }

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.admin.domain.entity;
 
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -13,12 +14,15 @@ import java.time.Instant;
 @Entity
 @Table(
     name = "branch",
-    uniqueConstraints = @UniqueConstraint(name = "uk_branch_company_code", columnNames = {"company_id", "code"})
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_branch_uid",          columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_branch_company_code", columnNames = {"company_id", "code"})
+    }
 )
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Branch {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Branch extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "branch_seq")

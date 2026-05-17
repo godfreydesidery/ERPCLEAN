@@ -3,6 +3,7 @@
 
 CREATE TABLE section (
     id              BIGINT      NOT NULL PRIMARY KEY,
+    uid             CHAR(26)    NOT NULL,
     branch_id       BIGINT      NOT NULL,
     code            VARCHAR(20) NOT NULL,
     name            VARCHAR(80) NOT NULL,
@@ -14,6 +15,7 @@ CREATE TABLE section (
     created_by      BIGINT      NOT NULL,
     updated_by      BIGINT      NOT NULL,
     version         INT         NOT NULL DEFAULT 0,
+    CONSTRAINT uk_section_uid         UNIQUE (uid),
     CONSTRAINT uk_section_branch_code UNIQUE (branch_id, code),
     CONSTRAINT fk_section_branch FOREIGN KEY (branch_id) REFERENCES branch (id)
 );

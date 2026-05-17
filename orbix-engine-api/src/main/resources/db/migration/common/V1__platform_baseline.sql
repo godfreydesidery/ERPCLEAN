@@ -47,6 +47,7 @@ CREATE TABLE company (
 
 CREATE TABLE branch (
     id                BIGINT       NOT NULL PRIMARY KEY,
+    uid               CHAR(26)     NOT NULL,
     company_id        BIGINT       NOT NULL,
     code              VARCHAR(20)  NOT NULL,
     name              VARCHAR(120) NOT NULL,
@@ -61,6 +62,7 @@ CREATE TABLE branch (
     created_by        BIGINT       NOT NULL,
     updated_by        BIGINT       NOT NULL,
     version           INT          NOT NULL DEFAULT 0,
+    CONSTRAINT uk_branch_uid          UNIQUE (uid),
     CONSTRAINT uk_branch_company_code UNIQUE (company_id, code),
     CONSTRAINT fk_branch_company FOREIGN KEY (company_id) REFERENCES company (id)
 );

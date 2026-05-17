@@ -25,14 +25,14 @@ export class StockService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listBalances(branchId: number): Observable<ItemBranchBalance[]> {
+  listBalances(branchId: string): Observable<ItemBranchBalance[]> {
     const params = new HttpParams().set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<ItemBranchBalance[]>>(
       `${this.base}/balances`, { params }
     ));
   }
 
-  stockCard(itemId: number, branchId: number, page: number, size: number): Observable<Page<StockMove>> {
+  stockCard(itemId: string, branchId: string, page: number, size: number): Observable<Page<StockMove>> {
     const params = new HttpParams()
       .set('itemId', itemId).set('branchId', branchId).set('page', page).set('size', size);
     return unwrap(this.http.get<ApiResponse<Page<StockMove>>>(
@@ -50,21 +50,21 @@ export class StockService {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts`, request));
   }
 
-  startCount(id: number): Observable<StockCount> {
+  startCount(id: string): Observable<StockCount> {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/start`, {}));
   }
 
-  recordCounts(id: number, request: RecordCountsRequest): Observable<StockCount> {
+  recordCounts(id: string, request: RecordCountsRequest): Observable<StockCount> {
     return unwrap(this.http.put<ApiResponse<StockCount>>(
       `${this.base}/stock-counts/${id}/counts`, request
     ));
   }
 
-  closeCount(id: number): Observable<StockCount> {
+  closeCount(id: string): Observable<StockCount> {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/close`, {}));
   }
 
-  postCount(id: number): Observable<StockCount> {
+  postCount(id: string): Observable<StockCount> {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/post`, {}));
   }
 
@@ -78,19 +78,19 @@ export class StockService {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(`${this.base}/stock-transfers`, request));
   }
 
-  issueTransfer(id: number): Observable<StockTransfer> {
+  issueTransfer(id: string): Observable<StockTransfer> {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(
       `${this.base}/stock-transfers/${id}/issue`, {}
     ));
   }
 
-  receiveTransfer(id: number, request: ReceiveTransferRequest): Observable<StockTransfer> {
+  receiveTransfer(id: string, request: ReceiveTransferRequest): Observable<StockTransfer> {
     return unwrap(this.http.put<ApiResponse<StockTransfer>>(
       `${this.base}/stock-transfers/${id}/receive`, request
     ));
   }
 
-  closeTransfer(id: number): Observable<StockTransfer> {
+  closeTransfer(id: string): Observable<StockTransfer> {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(
       `${this.base}/stock-transfers/${id}/close`, {}
     ));
@@ -98,7 +98,7 @@ export class StockService {
 
   // ---- stock batches (F2.4) -------------------------------------------------
 
-  listBatches(filter: { branchId?: number; itemId?: number; status?: StockBatchStatus } = {}):
+  listBatches(filter: { branchId?: string; itemId?: string; status?: StockBatchStatus } = {}):
       Observable<StockBatch[]> {
     let params = new HttpParams();
     if (filter.branchId != null) params = params.set('branchId', filter.branchId);
@@ -109,7 +109,7 @@ export class StockService {
     ));
   }
 
-  listExpiringSoon(branchId: number | null, daysAhead: number): Observable<StockBatch[]> {
+  listExpiringSoon(branchId: string | null, daysAhead: number): Observable<StockBatch[]> {
     let params = new HttpParams().set('daysAhead', daysAhead);
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<StockBatch[]>>(
@@ -117,7 +117,7 @@ export class StockService {
     ));
   }
 
-  recallBatch(id: number, request: RecallStockBatchRequest): Observable<StockBatch> {
+  recallBatch(id: string, request: RecallStockBatchRequest): Observable<StockBatch> {
     return unwrap(this.http.post<ApiResponse<StockBatch>>(
       `${this.base}/stock-batches/${id}/recall`, request
     ));

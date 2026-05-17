@@ -3,12 +3,12 @@
 export type AppUserStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'SUSPENDED';
 
 export interface UserSummary {
-  id: number;
+  id: string;
   username: string;
   displayName: string;
   email: string | null;
   phone: string | null;
-  defaultBranchId: number | null;
+  defaultBranchId: string | null;
   status: AppUserStatus;
   locked: boolean;
   mustChangePassword: boolean;
@@ -17,23 +17,23 @@ export interface UserSummary {
 }
 
 export interface RoleGrantSummary {
-  id: number;
-  userId: number;
-  roleId: number;
+  id: string;
+  userId: string;
+  roleId: string;
   username: string | null;
   displayName: string | null;
-  companyId: number;
-  branchId: number | null;
+  companyId: string;
+  branchId: string | null;
   grantedAt: string;
 }
 
 export interface UserDetail {
-  id: number;
+  id: string;
   username: string;
   displayName: string;
   email: string | null;
   phone: string | null;
-  defaultBranchId: number | null;
+  defaultBranchId: string | null;
   status: AppUserStatus;
   locked: boolean;
   lockedUntil: string | null;
@@ -49,7 +49,7 @@ export interface CreateUserRequest {
   displayName: string;
   email: string | null;
   phone: string | null;
-  defaultBranchId: number | null;
+  defaultBranchId: string | null;
   password: string | null;
   mustChangePassword: boolean | null;
 }
@@ -63,7 +63,7 @@ export interface UpdateUserRequest {
   displayName: string;
   email: string | null;
   phone: string | null;
-  defaultBranchId: number | null;
+  defaultBranchId: string | null;
 }
 
 export interface ResetPasswordRequest {

@@ -8,6 +8,7 @@
 
 CREATE TABLE route (
     id          BIGINT       NOT NULL PRIMARY KEY,
+    uid         CHAR(26)     NOT NULL,
     company_id  BIGINT       NOT NULL,
     code        VARCHAR(40)  NOT NULL,
     name        VARCHAR(120) NOT NULL,
@@ -18,6 +19,7 @@ CREATE TABLE route (
     created_by  BIGINT       NOT NULL,
     updated_by  BIGINT       NOT NULL,
     version     INT          NOT NULL DEFAULT 0,
+    CONSTRAINT uk_route_uid          UNIQUE (uid),
     CONSTRAINT uk_route_company_code UNIQUE (company_id, code),
     CONSTRAINT fk_route_company FOREIGN KEY (company_id) REFERENCES company (id)
 );

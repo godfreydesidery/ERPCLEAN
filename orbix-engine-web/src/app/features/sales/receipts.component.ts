@@ -18,7 +18,7 @@ import {
   SalesReceipt
 } from './sales.models';
 
-interface AllocRow { invoiceId: number | null; amount: number | null; outstanding: number; }
+interface AllocRow { invoiceId: string | null; amount: number | null; outstanding: number; }
 
 @Component({
   selector: 'orbix-sales-receipts',
@@ -408,7 +408,7 @@ export class ReceiptsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newCustomerId: number | null = null;
+  protected newCustomerId: string | null = null;
   protected newReceiptDate = new Date().toISOString().slice(0, 10);
   protected newMethod: ReceiptMethod = 'CASH';
   protected newReference = '';
@@ -449,7 +449,7 @@ export class ReceiptsComponent implements OnInit {
     });
   }
 
-  onInvoicePicked(row: AllocRow, invoiceId: number | null): void {
+  onInvoicePicked(row: AllocRow, invoiceId: string | null): void {
     const inv = this.openInvoices().find(i => i.id === invoiceId);
     row.outstanding = inv ? inv.totalAmount - inv.paidAmount : 0;
     if (row.amount === null && inv) row.amount = row.outstanding;
@@ -471,7 +471,7 @@ export class ReceiptsComponent implements OnInit {
     }
     const allocs: CreateReceiptAllocation[] = this.allocations
       .filter(r => r.invoiceId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ salesInvoiceId: r.invoiceId as number, amount: r.amount as number }));
+      .map(r => ({ salesInvoiceId: r.invoiceId as string, amount: r.amount as number }));
     this.run(this.sales.createReceipt({
       number: this.newNumber.trim(),
       branchId,

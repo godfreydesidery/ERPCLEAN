@@ -1,8 +1,9 @@
 /** Mirrors the backend admin route DTOs (RouteController). */
 
 export interface Route {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   description: string | null;

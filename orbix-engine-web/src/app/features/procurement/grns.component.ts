@@ -363,13 +363,13 @@ export class GrnsComponent implements OnInit {
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  protected lpoIdInput: number | null = null;
+  protected lpoIdInput: string | null = null;
   protected newNumber = '';
   protected receivedDate = new Date().toISOString().slice(0, 10);
   protected deliveryNote = '';
-  protected receiveQty: Record<number, number> = {};
-  protected receiveCost: Record<number, number> = {};
-  protected receiveBatch: Record<number, string> = {};
+  protected receiveQty: Record<string, number> = {};
+  protected receiveCost: Record<string, number> = {};
+  protected receiveBatch: Record<string, string> = {};
 
   ngOnInit(): void { this.refresh(); }
 

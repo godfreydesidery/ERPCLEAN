@@ -11,12 +11,12 @@ public interface RouteService {
 
     List<RouteDto> listRoutes();
 
-    RouteDto getRoute(Long routeId);
+    RouteDto getRouteByUid(String uid);
 
     RouteDto createRoute(CreateRouteRequestDto request);
 
-    RouteDto updateRoute(Long routeId, UpdateRouteRequestDto request);
+    RouteDto updateRouteByUid(String uid, UpdateRouteRequestDto request);
 
     /** Marks the route INACTIVE. Idempotency: rejects an already-inactive route. */
-    void deactivateRoute(Long routeId);
+    void deactivateRouteByUid(String uid);
 }

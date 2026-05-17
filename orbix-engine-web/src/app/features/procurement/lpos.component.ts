@@ -361,11 +361,11 @@ export class LposComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newSupplierId: number | null = null;
+  protected newSupplierId: string | null = null;
   protected newOrderDate = new Date().toISOString().slice(0, 10);
   protected newExpectedDelivery: string | null = null;
   protected newCurrency = 'TZS';
-  protected newItemId: number | null = null;
+  protected newItemId: string | null = null;
   protected newQty: number | null = null;
   protected newUnitPrice: number | null = null;
 

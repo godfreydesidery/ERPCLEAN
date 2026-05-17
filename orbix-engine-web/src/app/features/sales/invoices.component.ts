@@ -22,7 +22,7 @@ import {
 } from './sales.models';
 
 interface LineRow {
-  itemId: number | null;
+  itemId: string | null;
   qty: number | null;
   unitPrice: number | null;
   discountPct: number | null;
@@ -465,14 +465,14 @@ export class InvoicesComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newCustomerId: number | null = null;
-  protected newSalesAgentId: number | null = null;
+  protected newCustomerId: string | null = null;
+  protected newSalesAgentId: string | null = null;
   protected newInvoiceDate = new Date().toISOString().slice(0, 10);
   protected newDueDate: string | null = null;
   protected newPaymentTerms: PaymentTerms = 'CASH';
   protected newCurrency = 'TZS';
-  protected newPriceListId: number | null = null;
-  protected newDiscountApproverId: number | null = null;
+  protected newPriceListId: string | null = null;
+  protected newDiscountApproverId: string | null = null;
   protected newLines: LineRow[] = [{ itemId: null, qty: null, unitPrice: null, discountPct: null }];
 
   ngOnInit(): void {
@@ -536,7 +536,7 @@ export class InvoicesComponent implements OnInit {
     const lines: CreateSalesInvoiceLine[] = this.newLines
       .filter(r => r.itemId !== null && (r.qty ?? 0) > 0 && (r.unitPrice ?? 0) >= 0)
       .map(r => ({
-        itemId: r.itemId as number,
+        itemId: r.itemId as string,
         uomId: null,
         qty: r.qty as number,
         unitPrice: r.unitPrice as number,

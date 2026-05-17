@@ -37,13 +37,13 @@ export interface FirstRunRequest {
 }
 
 export interface FirstRunResponse {
-  organisationId: number;
-  companyId: number;
+  organisationId: string;
+  companyId: string;
   companyCode: string;
-  branchId: number;
+  branchId: string;
   branchCode: string;
-  defaultSectionId: number;
-  adminUserId: number;
+  defaultSectionId: string;
+  adminUserId: string;
   adminUsername: string;
 }
 

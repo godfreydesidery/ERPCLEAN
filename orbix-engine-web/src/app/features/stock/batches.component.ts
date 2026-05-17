@@ -69,7 +69,7 @@ type Mode = 'all' | 'expiring';
           </div>
           <div class="filter-cell">
             <label class="form-label small fw-semibold text-secondary mb-1">Item ID</label>
-            <input class="form-control form-control-sm" type="number" [(ngModel)]="itemIdFilterModel"
+            <input class="form-control form-control-sm" [(ngModel)]="itemIdFilterModel"
                    (change)="itemIdFilter.set(itemIdFilterModel); refresh()" placeholder="any">
           </div>
         } @else {
@@ -218,13 +218,13 @@ export class BatchesComponent implements OnInit {
 
   protected readonly mode = signal<Mode>('expiring');
   protected readonly statusFilter = signal<StockBatchStatus | null>(null);
-  protected readonly itemIdFilter = signal<number | null>(null);
+  protected readonly itemIdFilter = signal<string | null>(null);
   protected readonly daysAhead = signal<number>(30);
   protected readonly scopeToBranch = signal<boolean>(true);
 
   // ngModel mirrors for the filter controls
   protected statusFilterModel: StockBatchStatus | null = null;
-  protected itemIdFilterModel: number | null = null;
+  protected itemIdFilterModel: string | null = null;
   protected daysAheadModel = 30;
   protected scopeToBranchModel = true;
 

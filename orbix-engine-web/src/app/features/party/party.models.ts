@@ -21,8 +21,8 @@ export interface PartyDetails {
 }
 
 export interface PartyResponse {
-  id: number;
-  companyId: number;
+  id: string;
+  companyId: string;
   code: string;
   name: string;
   legalName: string | null;
@@ -39,25 +39,25 @@ export interface PartyResponse {
 }
 
 export interface Customer {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
   creditLimitAmount: number;
   creditTermsDays: number;
-  priceListId: number | null;
-  defaultSalesAgentId: number | null;
-  defaultBranchId: number | null;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
   walkIn: boolean;
   taxExempt: boolean;
 }
 
 export interface CreateCustomerRequest {
-  partyId: number | null;
+  partyId: string | null;
   party: PartyDetails | null;
   creditLimitAmount: number;
   creditTermsDays: number;
-  priceListId: number | null;
-  defaultSalesAgentId: number | null;
-  defaultBranchId: number | null;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
   taxExempt: boolean;
 }
 
@@ -65,14 +65,14 @@ export interface UpdateCustomerRequest {
   party: PartyDetails;
   creditLimitAmount: number;
   creditTermsDays: number;
-  priceListId: number | null;
-  defaultSalesAgentId: number | null;
-  defaultBranchId: number | null;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
   taxExempt: boolean;
 }
 
 export interface Supplier {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
   paymentTermsDays: number;
   creditLimitAmount: number;
@@ -83,7 +83,7 @@ export interface Supplier {
 }
 
 export interface CreateSupplierRequest {
-  partyId: number | null;
+  partyId: string | null;
   party: PartyDetails | null;
   paymentTermsDays: number;
   creditLimitAmount: number;
@@ -104,49 +104,49 @@ export interface UpdateSupplierRequest {
 }
 
 export interface Employee {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
-  appUserId: number | null;
+  appUserId: string | null;
   employeeCode: string;
   jobTitle: string | null;
-  branchId: number;
+  branchId: string;
   hireDate: string | null;
   terminationDate: string | null;
 }
 
 export interface CreateEmployeeRequest {
-  partyId: number | null;
+  partyId: string | null;
   party: PartyDetails | null;
   employeeCode: string;
-  appUserId: number | null;
+  appUserId: string | null;
   jobTitle: string | null;
-  branchId: number;
+  branchId: string;
   hireDate: string | null;
   terminationDate: string | null;
 }
 
 export interface UpdateEmployeeRequest {
   party: PartyDetails;
-  appUserId: number | null;
+  appUserId: string | null;
   jobTitle: string | null;
-  branchId: number;
+  branchId: string;
   hireDate: string | null;
   terminationDate: string | null;
 }
 
 export interface SalesAgent {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
-  appUserId: number | null;
+  appUserId: string | null;
   agentCode: string;
-  routeId: number | null;
+  routeId: string | null;
   commissionRate: number | null;
-  branchId: number;
+  branchId: string;
 }
 
 export interface CreateSalesAgentRequest {
   /** Set to promote an existing party into the sales-agent role. */
-  partyId: number | null;
+  partyId: string | null;
   /**
    * Required when {@link partyId} is null — details of the new party. The
    * backend allocates the party code from the AGT sequence; clients cannot
@@ -154,18 +154,18 @@ export interface CreateSalesAgentRequest {
    */
   party: PartyDetails | null;
   agentCode: string;
-  appUserId: number | null;
-  routeId: number | null;
+  appUserId: string | null;
+  routeId: string | null;
   commissionRate: number | null;
-  branchId: number;
+  branchId: string;
 }
 
 export interface UpdateSalesAgentRequest {
   party: PartyDetails;
-  appUserId: number | null;
-  routeId: number | null;
+  appUserId: string | null;
+  routeId: string | null;
   commissionRate: number | null;
-  branchId: number;
+  branchId: string;
 }
 
 export function blankPartyDetails(): PartyDetails {

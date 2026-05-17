@@ -617,7 +617,7 @@ export class ShellComponent implements OnInit {
     });
   }
 
-  onBranchPick(branchId: number): void {
+  onBranchPick(branchId: string): void {
     if (!Number.isFinite(branchId) || branchId === this.selectedBranchId()) {
       this.branchMenuOpen.set(false);
       return;

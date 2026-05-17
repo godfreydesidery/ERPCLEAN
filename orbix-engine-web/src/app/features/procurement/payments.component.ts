@@ -19,7 +19,7 @@ import {
 } from './procurement.models';
 
 interface AllocRow {
-  invoiceId: number | null;
+  invoiceId: string | null;
   amount: number | null;
   outstanding: number;
 }
@@ -411,7 +411,7 @@ export class PaymentsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newSupplierId: number | null = null;
+  protected newSupplierId: string | null = null;
   protected newPaymentDate = new Date().toISOString().slice(0, 10);
   protected newMethod: PaymentMethod = 'BANK_TRANSFER';
   protected newReference = '';
@@ -457,7 +457,7 @@ export class PaymentsComponent implements OnInit {
     });
   }
 
-  onInvoicePicked(row: AllocRow, invoiceId: number | null): void {
+  onInvoicePicked(row: AllocRow, invoiceId: string | null): void {
     const inv = this.openInvoices().find(i => i.id === invoiceId);
     row.outstanding = inv ? inv.totalAmount - inv.paidAmount : 0;
     if (row.amount === null && inv) {
@@ -488,7 +488,7 @@ export class PaymentsComponent implements OnInit {
     }
     const allocs: CreateSupplierPaymentAllocation[] = this.allocations
       .filter(r => r.invoiceId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ supplierInvoiceId: r.invoiceId as number, amount: r.amount as number }));
+      .map(r => ({ supplierInvoiceId: r.invoiceId as string, amount: r.amount as number }));
     if (allocs.length === 0) {
       this.error.set('Add at least one allocation with invoice + amount.');
       return;

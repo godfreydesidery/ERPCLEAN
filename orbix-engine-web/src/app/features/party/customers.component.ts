@@ -419,7 +419,7 @@ export class CustomersComponent implements OnInit {
     });
   });
 
-  protected partyId: number | null = null;
+  protected partyId: string | null = null;
   protected partyDetails: PartyDetails = blankPartyDetails();
   protected creditLimitAmount = 0;
   protected creditTermsDays = 0;
@@ -506,7 +506,7 @@ export class CustomersComponent implements OnInit {
     });
   }
 
-  private runUpdate(partyId: number): void {
+  private runUpdate(partyId: string): void {
     this.busy.set(true);
     this.error.set(null);
     const editing = this.editing()!;

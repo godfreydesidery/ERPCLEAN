@@ -142,12 +142,12 @@ export class InternalConsumptionComponent {
 
   protected readonly categories = CONSUMPTION_CATEGORIES;
 
-  protected readonly itemId = signal<number | null>(null);
+  protected readonly itemId = signal<string | null>(null);
   protected readonly qty = signal<number | null>(null);
   protected readonly category = signal<ConsumptionCategory>('CANTEEN');
-  protected readonly sectionId = signal<number | null>(null);
-  protected readonly authorisedByUserId = signal<number | null>(null);
-  protected readonly batchId = signal<number | null>(null);
+  protected readonly sectionId = signal<string | null>(null);
+  protected readonly authorisedByUserId = signal<string | null>(null);
+  protected readonly batchId = signal<string | null>(null);
   protected readonly reason = signal<string>('');
 
   protected itemIdModel: number | null = null;

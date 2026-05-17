@@ -413,11 +413,11 @@ export class EmployeesComponent implements OnInit {
     });
   });
 
-  protected partyId: number | null = null;
+  protected partyId: string | null = null;
   protected employeeCode = '';
   protected partyDetails: PartyDetails = blankPartyDetails();
   protected jobTitle: string | null = null;
-  protected branchId: number | null = null;
+  protected branchId: string | null = null;
   protected hireDate: string | null = null;
 
   ngOnInit(): void {
@@ -447,7 +447,7 @@ export class EmployeesComponent implements OnInit {
     }
   }
 
-  protected branchLabel(branchId: number | null): string {
+  protected branchLabel(branchId: string | null): string {
     if (branchId == null) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? `${b.code} · ${b.name}` : `#${branchId}`;
@@ -498,7 +498,7 @@ export class EmployeesComponent implements OnInit {
       employeeCode: this.employeeCode.trim(),
       appUserId: null,
       jobTitle: this.jobTitle,
-      branchId: Number(this.branchId),
+      branchId: this.branchId!,
       hireDate: this.hireDate,
       terminationDate: null
     }).subscribe({
@@ -507,7 +507,7 @@ export class EmployeesComponent implements OnInit {
     });
   }
 
-  private runUpdate(partyId: number): void {
+  private runUpdate(partyId: string): void {
     this.busy.set(true);
     this.error.set(null);
     const editing = this.editing()!;
@@ -515,7 +515,7 @@ export class EmployeesComponent implements OnInit {
       party: this.partyDetails,
       appUserId: editing.appUserId,
       jobTitle: this.jobTitle,
-      branchId: Number(this.branchId),
+      branchId: this.branchId!,
       hireDate: this.hireDate,
       terminationDate: editing.terminationDate
     };

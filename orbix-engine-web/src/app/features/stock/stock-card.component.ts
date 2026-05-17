@@ -121,7 +121,7 @@ export class StockCardComponent implements OnInit {
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
 
-  protected readonly itemId = signal<number | null>(null);
+  protected readonly itemId = signal<string | null>(null);
   protected readonly moves = signal<StockMove[]>([]);
   protected readonly error = signal<string | null>(null);
 
@@ -130,7 +130,7 @@ export class StockCardComponent implements OnInit {
   );
 
   ngOnInit(): void {
-    const itemId = Number(this.route.snapshot.paramMap.get('itemId'));
+    const itemId = this.route.snapshot.paramMap.get('itemId') ?? '';
     this.itemId.set(itemId);
     const branchId = this.branchId();
     if (branchId === null) {

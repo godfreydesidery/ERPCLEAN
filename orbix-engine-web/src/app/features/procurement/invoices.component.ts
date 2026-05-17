@@ -17,7 +17,7 @@ import {
 } from './procurement.models';
 
 interface AllocRow {
-  grnId: number | null;
+  grnId: string | null;
   amount: number | null;
 }
 
@@ -429,7 +429,7 @@ export class InvoicesComponent implements OnInit {
 
   protected newNumber = '';
   protected newSupplierInvoiceNo = '';
-  protected newSupplierId: number | null = null;
+  protected newSupplierId: string | null = null;
   protected newInvoiceDate = new Date().toISOString().slice(0, 10);
   protected newDueDate: string | null = null;
   protected newCurrency = 'TZS';
@@ -511,7 +511,7 @@ export class InvoicesComponent implements OnInit {
     }
     const allocs: SupplierInvoiceAllocation[] = this.allocations
       .filter(r => r.grnId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ grnId: r.grnId as number, amount: r.amount as number }));
+      .map(r => ({ grnId: r.grnId as string, amount: r.amount as number }));
     if (allocs.length === 0) {
       this.error.set('Add at least one allocation with grn + amount.');
       return;

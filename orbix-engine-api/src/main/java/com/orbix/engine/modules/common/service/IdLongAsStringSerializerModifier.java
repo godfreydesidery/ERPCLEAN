@@ -48,7 +48,9 @@ public class IdLongAsStringSerializerModifier extends BeanSerializerModifier {
             return false;
         }
         String name = writer.getName();
-        // exactly "id" or anything ending in "Id" (camelCase: companyId, itemGroupId, ...)
-        return "id".equals(name) || name.endsWith("Id");
+        // exactly "id" or anything ending in "Id" (camelCase: companyId, itemGroupId, ...).
+        // Also covers actor audit fields whose name ends in "By" — every *_by column
+        // in orbix is a user id (createdBy, updatedBy, postedBy, voidedBy, changedBy, ...).
+        return "id".equals(name) || name.endsWith("Id") || name.endsWith("By");
     }
 }

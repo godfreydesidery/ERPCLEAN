@@ -11,28 +11,28 @@ export interface Page<T> {
 export type StockMoveDirection = 'IN' | 'OUT';
 
 export interface StockMove {
-  id: number;
+  id: string;
   at: string;
-  itemId: number;
-  branchId: number;
-  companyId: number;
+  itemId: string;
+  branchId: string;
+  companyId: string;
   qty: number;
   costAmount: number;
   direction: StockMoveDirection;
   moveType: string;
   refType: string;
-  refId: number;
-  actorId: number;
+  refId: string;
+  actorId: string;
   notes: string | null;
-  batchId: number | null;
-  sectionId: number | null;
+  batchId: string | null;
+  sectionId: string | null;
   consumptionCategory: ConsumptionCategory | null;
-  authorisedByUserId: number | null;
+  authorisedByUserId: string | null;
 }
 
 export interface ItemBranchBalance {
-  itemId: number;
-  branchId: number;
+  itemId: string;
+  branchId: string;
   qtyOnHand: number;
   qtyReserved: number;
   qtyInTransit: number;
@@ -51,8 +51,8 @@ export type StockCountStatus = 'DRAFT' | 'IN_PROGRESS' | 'CLOSED' | 'POSTED';
 export const STOCK_COUNT_TYPES: StockCountType[] = ['FULL', 'CYCLE', 'SPOT'];
 
 export interface StockCountLine {
-  id: number;
-  itemId: number;
+  id: string;
+  itemId: string;
   systemQty: number;
   countedQty: number | null;
   varianceQty: number | null;
@@ -60,47 +60,47 @@ export interface StockCountLine {
 }
 
 export interface StockCount {
-  id: number;
+  id: string;
   number: string;
-  branchId: number;
-  companyId: number;
+  branchId: string;
+  companyId: string;
   countDate: string;
   type: StockCountType;
   status: StockCountStatus;
-  startedBy: number;
-  closedBy: number | null;
+  startedBy: string;
+  closedBy: string | null;
   postedAt: string | null;
   lines: StockCountLine[];
 }
 
 export interface CreateStockCountRequest {
   number: string;
-  branchId: number;
+  branchId: string;
   countDate: string;
   type: StockCountType;
   itemIds: number[];
 }
 
 export interface RecordCountsRequest {
-  counts: { lineId: number; countedQty: number; note: string | null }[];
+  counts: { lineId: string; countedQty: number; note: string | null }[];
 }
 
 export type StockTransferStatus = 'DRAFT' | 'ISSUED' | 'IN_TRANSIT' | 'RECEIVED' | 'CLOSED';
 
 export interface StockTransferLine {
-  id: number;
-  itemId: number;
+  id: string;
+  itemId: string;
   issuedQty: number;
   receivedQty: number | null;
   costAmount: number;
 }
 
 export interface StockTransfer {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  fromBranchId: number;
-  toBranchId: number;
+  companyId: string;
+  fromBranchId: string;
+  toBranchId: string;
   issuedAt: string | null;
   receivedAt: string | null;
   status: StockTransferStatus;
@@ -109,13 +109,13 @@ export interface StockTransfer {
 
 export interface CreateStockTransferRequest {
   number: string;
-  fromBranchId: number;
-  toBranchId: number;
-  lines: { itemId: number; issuedQty: number }[];
+  fromBranchId: string;
+  toBranchId: string;
+  lines: { itemId: string; issuedQty: number }[];
 }
 
 export interface ReceiveTransferRequest {
-  lines: { lineId: number; receivedQty: number }[];
+  lines: { lineId: string; receivedQty: number }[];
 }
 
 // ---- F2.4: stock batches + FEFO --------------------------------------------
@@ -124,10 +124,10 @@ export type StockBatchStatus = 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'RECALLED';
 export const STOCK_BATCH_STATUSES: StockBatchStatus[] = ['ACTIVE', 'EXHAUSTED', 'EXPIRED', 'RECALLED'];
 
 export interface StockBatch {
-  id: number;
-  itemId: number;
-  branchId: number;
-  companyId: number;
+  id: string;
+  itemId: string;
+  branchId: string;
+  companyId: string;
   batchNo: string;
   manufacturedAt: string | null;
   expiryAt: string | null;
@@ -135,7 +135,7 @@ export interface StockBatch {
   qtyOnHand: number;
   cost: number;
   sourceDocType: string;
-  sourceDocId: number;
+  sourceDocId: string;
   status: StockBatchStatus;
 }
 
@@ -151,24 +151,24 @@ export const CONSUMPTION_CATEGORIES: ConsumptionCategory[] =
   ['CANTEEN', 'DISPLAY', 'SAMPLES', 'DONATION', 'MAINTENANCE', 'OTHER'];
 
 export interface PostAdjustmentRequest {
-  itemId: number;
-  branchId: number;
+  itemId: string;
+  branchId: string;
   qty: number;
   unitCost: number | null;
   reason: string;
-  sectionId: number | null;
-  batchId: number | null;
-  authorisedByUserId: number | null;
+  sectionId: string | null;
+  batchId: string | null;
+  authorisedByUserId: string | null;
   allowOversell: boolean;
 }
 
 export interface PostInternalConsumptionRequest {
-  itemId: number;
-  branchId: number;
+  itemId: string;
+  branchId: string;
   qty: number;
   consumptionCategory: ConsumptionCategory;
-  sectionId: number;
-  authorisedByUserId: number;
+  sectionId: string;
+  authorisedByUserId: string;
   reason: string;
-  batchId: number | null;
+  batchId: string | null;
 }

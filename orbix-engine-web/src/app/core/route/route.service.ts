@@ -6,8 +6,9 @@ import { ApiResponse, unwrap } from '../api/api-response';
 
 /** A delivery route (sales territory) within the caller's company. */
 export interface Route {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   description: string | null;

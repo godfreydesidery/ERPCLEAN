@@ -278,11 +278,11 @@ export class TransfersComponent implements OnInit {
   protected readonly showForm = signal(false);
 
   protected newNumber = '';
-  protected newFrom: number | null = null;
-  protected newTo: number | null = null;
-  protected newItemId: number | null = null;
+  protected newFrom: string | null = null;
+  protected newTo: string | null = null;
+  protected newItemId: string | null = null;
   protected newQty: number | null = null;
-  protected receiveDraft: Record<number, number | null> = {};
+  protected receiveDraft: Record<string, number | null> = {};
 
   ngOnInit(): void { this.load(); }
 
@@ -299,9 +299,9 @@ export class TransfersComponent implements OnInit {
   create(): void {
     this.run(this.stock.createTransfer({
       number: this.newNumber.trim(),
-      fromBranchId: Number(this.newFrom),
-      toBranchId: Number(this.newTo),
-      lines: [{ itemId: Number(this.newItemId), issuedQty: Number(this.newQty) }]
+      fromBranchId: this.newFrom!,
+      toBranchId: this.newTo!,
+      lines: [{ itemId: this.newItemId!, issuedQty: Number(this.newQty) }]
     }), created => {
       this.newNumber = '';
       this.newItemId = null;

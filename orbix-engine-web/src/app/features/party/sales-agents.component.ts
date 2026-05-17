@@ -424,12 +424,12 @@ export class SalesAgentsComponent implements OnInit {
       ? 'Save and attach the sales-agent role to the chosen party'
       : 'Save the new party and assign the sales-agent role in one transaction';
   });
-  protected partyId: number | null = null;
+  protected partyId: string | null = null;
   protected agentCode = '';
   protected partyDetails: PartyDetails = blankPartyDetails();
-  protected routeId: number | null = null;
+  protected routeId: string | null = null;
   protected commissionRate: number | null = null;
-  protected branchId: number | null = null;
+  protected branchId: string | null = null;
 
   ngOnInit(): void {
     this.load();
@@ -459,13 +459,13 @@ export class SalesAgentsComponent implements OnInit {
     }
   }
 
-  protected branchLabel(branchId: number | null): string {
+  protected branchLabel(branchId: string | null): string {
     if (branchId == null) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? `${b.code} · ${b.name}` : `#${branchId}`;
   }
 
-  protected routeLabel(routeId: number | null): string {
+  protected routeLabel(routeId: string | null): string {
     if (routeId == null) return '—';
     const r = this.routes().find(x => x.id === routeId);
     return r ? `${r.code} · ${r.name}` : `#${routeId}`;
@@ -534,14 +534,14 @@ export class SalesAgentsComponent implements OnInit {
       appUserId: null,
       routeId: this.routeId,
       commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
-      branchId: Number(this.branchId)
+      branchId: this.branchId!
     }).subscribe({
       next: () => this.afterSave(),
       error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 
-  private runUpdate(partyId: number): void {
+  private runUpdate(partyId: string): void {
     this.busy.set(true);
     this.error.set(null);
     const payload: UpdateSalesAgentRequest = {
@@ -549,7 +549,7 @@ export class SalesAgentsComponent implements OnInit {
       appUserId: null,
       routeId: this.routeId,
       commissionRate: this.commissionRate == null ? null : Number(this.commissionRate),
-      branchId: Number(this.branchId)
+      branchId: this.branchId!
     };
     this.party.updateSalesAgent(partyId, payload).subscribe({
       next: () => this.afterSave(),
