@@ -28,4 +28,20 @@ public final class Permissions {
     public static final String ITEM_CREATE  = "ITEM.CREATE";
     public static final String ITEM_UPDATE  = "ITEM.UPDATE";
     public static final String ITEM_ARCHIVE = "ITEM.ARCHIVE";
+
+    // ---- party -------------------------------------------------------------
+    public static final String PARTY_MANAGE_CUSTOMERS = "PARTY.MANAGE_CUSTOMERS";
+    public static final String PARTY_MANAGE_SUPPLIERS = "PARTY.MANAGE_SUPPLIERS";
+    public static final String PARTY_MANAGE_EMPLOYEES = "PARTY.MANAGE_EMPLOYEES";
+    public static final String PARTY_MANAGE_AGENTS    = "PARTY.MANAGE_AGENTS";
+
+    // ---- day ---------------------------------------------------------------
+    public static final String DAY_OPEN     = "DAY.OPEN";
+    public static final String DAY_CLOSE    = "DAY.CLOSE";
+    public static final String DAY_OVERRIDE = "DAY.OVERRIDE";
+
+    // ---- stock -------------------------------------------------------------
+    public static final String STOCK_OVERSELL = "STOCK.OVERSELL";
+    public static final String STOCK_COUNT    = "STOCK.COUNT";
+    public static final String STOCK_TRANSFER = "STOCK.TRANSFER";
 }

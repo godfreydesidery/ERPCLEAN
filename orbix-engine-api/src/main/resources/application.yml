@@ -55,8 +55,11 @@ management:
 orbix:
   jwt:
     issuer: orbix-engine
-    access-ttl: PT15M
-    refresh-ttl: P30D
+    # 1h access trades a slightly wider leak-blast-radius for fewer
+    # mid-task refresh hiccups; 12h refresh aligns roughly with a
+    # single shift so a stolen laptop can't sit on a multi-week session.
+    access-ttl: PT1H
+    refresh-ttl: PT12H
     # Production: load RS256 keys from secret store. Local dev uses an in-memory key.
     signing-mode: ${JWT_SIGNING_MODE:dev-in-memory}
   search:
@@ -66,6 +69,62 @@ orbix:
     dispatch-interval-ms: 1000
     batch-size: 100
     max-attempts: 10
+  giftcard:
+    # F7.1 — daily auto-expiry of gift cards past expires_at. Default 00:10 UTC.
+    expiry-cron: "0 10 0 * * *"
+  production:
+    # F7.3b — yield variance gating on production output post.
+    # Hard 422 when actual output > planned × this multiple (TC-PROD-011).
+    yield-hard-reject-multiple: 2.0
+    # Informational soft-warn band: |actual / planned − 1| > this fraction
+    # surfaces a warning (TC-PROD-010). Currently surfaced via the response
+    # payload only; future work routes it through the notifications channel.
+    yield-soft-warn-fraction: 0.5
+  orders:
+    # F7.2 — default deposit-required percentage of total when the client
+    # omits depositRequiredAmount on order create.
+    deposit-required-pct: 30
+    # Default reserved-until horizons (in days from create) when the client
+    # omits reservedUntil. Layby keeps the goods for longer than a typical
+    # production lead time.
+    default-layby-reserve-days: 30
+    default-pre-order-reserve-days: 7
+    # Cancel-window: cancellations within this many days of create refund all
+    # prior payments on their original tender; cancellations outside the window
+    # forfeit the paid amount. Set to 0 to forfeit always (no-refund policy).
+    cancel-refund-window-days: 7
+    # Daily expiry sweep — runs at 00:15 UTC, ten minutes after the gift-card
+    # sweep so logs don't interleave.
+    expiry-cron: "0 15 0 * * *"
+  stock:
+    # FEFO expiry-flag job. Runs daily by default (cron: "0 5 0 * * *" = 00:05 UTC).
+    batch-expiry-cron: "0 5 0 * * *"
+    # Manual stock-adjustment monetary value above which an authoriser
+    # (`authorised_by_user_id`, must hold `STOCK.ADJUST_APPROVE`) is required.
+    # Currency-agnostic — denominated in the company's functional currency.
+    adjustment-threshold: 50000
+  procurement:
+    # LPO total at or below this value auto-approves on submit (skips
+    # PENDING_APPROVAL). Set to 0 to require approval for every LPO.
+    lpo-auto-approval-threshold: 0
+    # Allowable fractional difference between an invoice's total_amount and the
+    # sum of its GRN allocations (0.005 = ±0.5%). Above this the match is
+    # rejected — the operator must edit the allocations or the invoice totals.
+    invoice-match-tolerance-pct: 0.005
+  sales:
+    # Per-line discount percentage above which an authoriser holding
+    # `SALES.DISCOUNT_APPROVE` is required. Set to 100 to disable.
+    discount-threshold-pct: 10
+  pos:
+    # Absolute till-session variance (|declared - expected|) above which a
+    # supervisor holding POS.SESSION_VARIANCE_APPROVE must authorise the close.
+    session-variance-threshold: 1000
+    # Per-line discount percentage above which a supervisor holding
+    # POS.DISCOUNT_APPROVE must authorise the sale. Set to 100 to disable.
+    discount-threshold-pct: 10
+    # Refund total above which a supervisor holding POS.REFUND_APPROVE must
+    # authorise the refund. Currency-agnostic (functional currency).
+    refund-threshold: 10000
   flags:
     cache-ttl-seconds: 30
 

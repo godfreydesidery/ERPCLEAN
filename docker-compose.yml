@@ -9,26 +9,54 @@ name: orbix-erp
 
 services:
   mysql:
-    image: mysql:8.4
+    # Using MariaDB (not vanilla MySQL) because the Flyway mysql/ migrations
+    # use native CREATE SEQUENCE (MariaDB 10.3+) which vanilla MySQL doesn't
+    # support. Hibernate is configured with MariaDBDialect to match.
+    # Exposed on host port 3307 to avoid colliding with a host-installed
+    # MariaDB on 3306.
+    image: mariadb:11.4
     container_name: orbix-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootlocal}
-      MYSQL_DATABASE: orbix_erp
-      MYSQL_USER: orbix
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootlocal}
+      MARIADB_DATABASE: orbix_erp
+      MARIADB_USER: orbix
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
-      - ./infra/local-data/mysql:/var/lib/mysql
+      - ./infra/local-data/mariadb:/var/lib/mysql
     command:
-      - --default-authentication-plugin=caching_sha2_password
       - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_0900_ai_ci
+      - --collation-server=utf8mb4_unicode_ci
+      # Modern TIMESTAMP semantics — avoids the implicit DEFAULT CURRENT_TIMESTAMP
+      # on every bare TIMESTAMP column that the legacy MySQL/MariaDB default
+      # bakes in.
+      - --explicit-defaults-for-timestamp=ON
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
-      retries: 5
+      retries: 10
+
+  phpmyadmin:
+    # Web UI for the MariaDB above. Reachable at http://localhost:8090.
+    # Auto-logs in as the orbix user; switch to root on the login screen
+    # if you need to create users or databases. Host port is 8090 to keep
+    # 8080 free for the Spring Boot backend's default Tomcat port.
+    image: phpmyadmin:5
+    container_name: orbix-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: orbix
+      PMA_PASSWORD: ${MYSQL_PASSWORD:-orbixlocal}
+      UPLOAD_LIMIT: 256M
+    ports:
+      - "8090:80"
 
   postgres:
     image: postgres:15

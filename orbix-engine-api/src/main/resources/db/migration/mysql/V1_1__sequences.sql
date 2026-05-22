@@ -1,8 +1,5 @@
--- MySQL emulates Hibernate sequences via a table. One row per logical sequence.
-CREATE TABLE hibernate_sequence (
-    sequence_name VARCHAR(80)  NOT NULL PRIMARY KEY,
-    next_val      BIGINT       NOT NULL
-);
-
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('domain_event_seq', 1);
-INSERT INTO hibernate_sequence (sequence_name, next_val) VALUES ('item_seq', 1);
+-- Native MariaDB sequences (target = MariaDB 10.3+; vanilla MySQL 8 does not
+-- support CREATE SEQUENCE — switch to Postgres or use the postgres profile
+-- if you're on stock MySQL).
+CREATE SEQUENCE domain_event_seq START WITH 1 INCREMENT BY 50;
+CREATE SEQUENCE item_seq         START WITH 1 INCREMENT BY 50;

@@ -6,9 +6,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface FxRateRepository extends JpaRepository<FxRate, Long> {
+
+    /** Full quote history, newest first — backs the admin rate-history table. */
+    List<FxRate> findAllByOrderByEffectiveAtDesc();
 
     /** Most recent rate with effective_at &lt;= the supplied time. Used at POS tender step. */
     @Query("""

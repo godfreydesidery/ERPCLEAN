@@ -1,0 +1,482 @@
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { ApiResponse } from '../../../core/api/api-response';
+import { CatalogService } from '../catalog.service';
+import { PriceList, PriceListItem } from '../catalog.models';
+
+@Component({
+  selector: 'orbix-price-list',
+  standalone: true,
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  template: `
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
+          <a routerLink=".." class="text-decoration-none text-secondary">Catalog</a> &rsaquo; Price lists
+        </p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Price lists</h1>
+        <p class="text-secondary mb-0 small">{{ priceLists().length }} price book{{ priceLists().length === 1 ? '' : 's' }} configured.</p>
+      </div>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="startNew()">
+        <i class="bi bi-plus-lg"></i> New price list
+      </button>
+    </header>
+
+    @if (error()) {
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
+      </div>
+    }
+
+    <div class="row g-3 g-md-4">
+      <!-- Price list selector -->
+      <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm overflow-hidden">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">Price books</h2>
+            <span class="badge text-bg-light text-secondary">{{ priceLists().length }}</span>
+          </div>
+          @if (priceLists().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cash-stack"></i></div>
+              <p class="small text-secondary mb-0">No price lists yet.</p>
+            </div>
+          } @else {
+            <ul class="list-unstyled mb-0">
+              @for (list of priceLists(); track list.id) {
+                <li>
+                  <button type="button" class="pl-row"
+                          [class.is-active]="selected()?.id === list.id"
+                          (click)="select(list)">
+                    <div class="flex-grow-1 min-w-0">
+                      <p class="fw-semibold text-dark mb-0 text-truncate">{{ list.name }}</p>
+                      <p class="small text-secondary mb-0">
+                        <span class="font-monospace">{{ list.code }}</span> · {{ list.currencyCode }}
+                        @if (list.taxInclusive) { · tax-incl }
+                      </p>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                      @if (list.isDefault) {
+                        <span class="badge text-bg-primary-subtle text-primary">DEFAULT</span>
+                      }
+                      <span class="status-badge status-badge--{{ list.status.toLowerCase() }}">
+                        <span class="status-badge__dot"></span>{{ list.status }}
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
+
+      <!-- Detail / editor -->
+      <div class="col-12 col-lg-8">
+        @if (mode() === 'view' && !selected()) {
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
+              <h2 class="h6 fw-bold mb-1 text-dark">Pick a price book</h2>
+              <p class="small text-secondary mb-3">Or create a new one to start setting prices.</p>
+              <button class="btn btn-sm btn-primary mx-auto" (click)="startNew()">
+                <i class="bi bi-plus-lg me-1"></i> New price list
+              </button>
+            </div>
+          </div>
+        } @else if (mode() === 'create' || mode() === 'edit-list') {
+          <!-- Create / edit price list form -->
+          <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h2 class="h6 fw-bold mb-0 text-dark">
+                {{ mode() === 'create' ? 'New price list' : 'Edit price list' }}
+              </h2>
+              <button class="btn-close btn-sm" (click)="cancelListEdit()" aria-label="Close"></button>
+            </div>
+            <div class="card-body p-3">
+              <form (ngSubmit)="submitList()" #lf="ngForm" class="d-flex flex-column gap-3">
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Code</label>
+                    <input class="form-control" name="code" [(ngModel)]="listForm.code" required
+                           [disabled]="mode() === 'edit-list'" placeholder="e.g. RETAIL">
+                  </div>
+                  <div class="col-md-8">
+                    <label class="form-label small fw-semibold text-secondary">Name</label>
+                    <input class="form-control" name="name" [(ngModel)]="listForm.name" required
+                           placeholder="e.g. Retail price book">
+                  </div>
+                </div>
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Currency</label>
+                    <input class="form-control text-uppercase font-monospace" name="ccy"
+                           [(ngModel)]="listForm.currencyCode"
+                           required pattern="[A-Za-z]{3}" maxlength="3" placeholder="UGX">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Valid from</label>
+                    <input class="form-control" type="date" name="vf" [(ngModel)]="listForm.validFrom" required>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Valid to <span class="text-muted">(optional)</span></label>
+                    <input class="form-control" type="date" name="vt" [(ngModel)]="listForm.validTo">
+                  </div>
+                </div>
+                <div class="d-flex gap-3 flex-wrap">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="ti" name="ti"
+                           [(ngModel)]="listForm.taxInclusive">
+                    <label class="form-check-label small" for="ti">Tax inclusive</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="def" name="def"
+                           [(ngModel)]="listForm.isDefault">
+                    <label class="form-check-label small" for="def">Use as company default</label>
+                  </div>
+                </div>
+                <div class="d-flex gap-2 pt-2 border-top">
+                  <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                          [disabled]="busy() || lf.invalid">
+                    @if (busy()) {
+                      <span class="spinner-border spinner-border-sm"></span>
+                    } @else {
+                      <i class="bi" [class.bi-save]="mode() === 'edit-list'" [class.bi-plus-lg]="mode() === 'create'"></i>
+                    }
+                    {{ mode() === 'edit-list' ? 'Save changes' : 'Create price list' }}
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="cancelListEdit()">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        } @else {
+          @if (selected(); as list) {
+          <!-- Selected price-list detail -->
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4 d-flex flex-wrap align-items-start justify-content-between gap-3">
+              <div>
+                <p class="small text-secondary mb-1">
+                  <span class="font-monospace">{{ list.code }}</span> · {{ list.currencyCode }}
+                  @if (list.taxInclusive) { · tax-inclusive }
+                </p>
+                <h2 class="h5 fw-bold mb-1 text-dark">{{ list.name }}</h2>
+                <p class="small text-secondary mb-0">
+                  Valid {{ list.validFrom | date:'mediumDate' }}
+                  @if (list.validTo) { → {{ list.validTo | date:'mediumDate' }} }
+                  @else { onwards }
+                </p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                        (click)="editList(list)" [disabled]="busy()">
+                  <i class="bi bi-pencil"></i> Edit
+                </button>
+                @if (list.status === 'ACTIVE') {
+                  <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                          (click)="archiveList(list)" [disabled]="busy()">
+                    <i class="bi bi-archive"></i> Archive
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Set price form -->
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white border-bottom p-3">
+              <h3 class="h6 fw-bold mb-0 text-dark">Set a price</h3>
+              <p class="small text-secondary mb-0">Closes the item's current price the day before the effective date and opens a new one.</p>
+            </div>
+            <div class="card-body p-3">
+              <form (ngSubmit)="submitPrice(list)" #pf="ngForm" class="row g-2 align-items-end">
+                <div class="col-6 col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
+                  <input class="form-control" type="number" name="iid"
+                         [(ngModel)]="priceForm.itemId" required>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">UoM ID</label>
+                  <input class="form-control" type="number" name="uid"
+                         [(ngModel)]="priceForm.uomId" required>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small fw-semibold text-secondary">Price</label>
+                  <input class="form-control text-end" type="number" step="0.0001" name="prc"
+                         [(ngModel)]="priceForm.price" required>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">Effective from</label>
+                  <input class="form-control" type="date" name="eff"
+                         [(ngModel)]="priceForm.effectiveFrom" required>
+                </div>
+                <div class="col-12 col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">Reason <span class="text-muted">(optional)</span></label>
+                  <input class="form-control" name="rsn" [(ngModel)]="priceForm.reason" placeholder="e.g. cost rise">
+                </div>
+                <div class="col-12">
+                  <button class="btn btn-primary d-inline-flex align-items-center gap-2"
+                          [disabled]="busy() || pf.invalid">
+                    <i class="bi bi-cash-coin"></i> Set price
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Current prices -->
+          <div class="card border-0 shadow-sm overflow-hidden">
+            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+              <h3 class="h6 fw-bold mb-0 text-dark">Current prices</h3>
+              <span class="badge text-bg-light text-secondary">{{ prices().length }}</span>
+            </div>
+            @if (prices().length === 0) {
+              <div class="p-5 text-center">
+                <div class="empty-icon mx-auto mb-3"><i class="bi bi-tag"></i></div>
+                <p class="small text-secondary mb-0">No prices set on this list yet.</p>
+              </div>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 simple-table">
+                  <thead>
+                    <tr>
+                      <th>Item ID</th><th>UoM ID</th>
+                      <th class="text-end">Price ({{ list.currencyCode }})</th>
+                      <th>Valid from</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of prices(); track row.id) {
+                      <tr>
+                        <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ row.itemId }}</span></td>
+                        <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ row.uomId }}</span></td>
+                        <td class="text-end fw-semibold text-dark">{{ row.price | number:'1.2-4' }}</td>
+                        <td class="small text-secondary">{{ row.validFrom | date:'mediumDate' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+          }
+        }
+      </div>
+    </div>
+  `,
+  styles: [`
+    :host { display: block; }
+
+    .pl-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      background: #fff;
+      border: none;
+      border-bottom: 1px solid #f3f4f6;
+      text-align: left;
+      transition: background 0.1s ease;
+    }
+    .pl-row:hover { background: #f8fafc; }
+    .pl-row.is-active {
+      background: #eef4ff;
+      border-left: 3px solid #1d4ed8;
+      padding-left: calc(1rem - 3px);
+    }
+    .pl-row:last-child { border-bottom: none; }
+    .min-w-0 { min-width: 0; }
+
+    .simple-table thead th {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0.75rem 1rem;
+    }
+    .simple-table tbody td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+    .simple-table tbody tr:last-child td { border-bottom: none; }
+    .simple-table tbody tr:hover { background: #f8fafc; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.2rem 0.55rem; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .status-badge__dot { width: 5px; height: 5px; border-radius: 50%; }
+    .status-badge--active   { background: #d1fae5; color: #047857; }
+    .status-badge--active .status-badge__dot   { background: #10b981; }
+    .status-badge--inactive { background: #fef3c7; color: #92400e; }
+    .status-badge--inactive .status-badge__dot { background: #f59e0b; }
+    .status-badge--archived { background: #f3f4f6; color: #4b5563; }
+    .status-badge--archived .status-badge__dot { background: #9ca3af; }
+
+    .text-bg-primary-subtle { background: #e0ecff; color: #1d4ed8; }
+
+    .empty-icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: #ffe4e6; color: #be123c; font-size: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: #1d4ed8;
+      box-shadow: 0 0 0 0.2rem rgba(29, 78, 216, 0.12);
+    }
+  `]
+})
+export class PriceListComponent implements OnInit {
+  private readonly catalog = inject(CatalogService);
+
+  protected readonly priceLists = signal<PriceList[]>([]);
+  protected readonly selected = signal<PriceList | null>(null);
+  protected readonly prices = signal<PriceListItem[]>([]);
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
+
+  protected readonly mode = signal<'view' | 'create' | 'edit-list'>('view');
+
+  protected listForm = blankListForm();
+  protected priceForm = blankPriceForm();
+
+  ngOnInit(): void {
+    this.loadLists();
+  }
+
+  select(list: PriceList): void {
+    this.selected.set(list);
+    this.mode.set('view');
+    this.loadPrices(list.id);
+  }
+
+  startNew(): void {
+    this.mode.set('create');
+    this.selected.set(null);
+    this.listForm = blankListForm();
+  }
+
+  editList(list: PriceList): void {
+    this.mode.set('edit-list');
+    this.listForm = {
+      code: list.code,
+      name: list.name,
+      currencyCode: list.currencyCode,
+      validFrom: list.validFrom,
+      validTo: list.validTo ?? '',
+      isDefault: list.isDefault,
+      taxInclusive: list.taxInclusive
+    };
+  }
+
+  cancelListEdit(): void {
+    this.mode.set('view');
+    if (!this.selected()) {
+      this.listForm = blankListForm();
+    }
+  }
+
+  submitList(): void {
+    const isEdit = this.mode() === 'edit-list';
+    const id = isEdit ? this.selected()?.id ?? null : null;
+    const request = {
+      name: this.listForm.name.trim(),
+      currencyCode: this.listForm.currencyCode.trim().toUpperCase(),
+      validFrom: this.listForm.validFrom,
+      validTo: this.listForm.validTo || null,
+      isDefault: this.listForm.isDefault,
+      taxInclusive: this.listForm.taxInclusive
+    };
+    const source = id
+      ? this.catalog.updatePriceList(id, request)
+      : this.catalog.createPriceList({ code: this.listForm.code.trim(), ...request });
+    this.run(source, list => {
+      this.loadLists();
+      this.select(list);
+    });
+  }
+
+  archiveList(list: PriceList): void {
+    this.run(this.catalog.archivePriceList(list.id), () => {
+      this.selected.set(null);
+      this.mode.set('view');
+      this.loadLists();
+    });
+  }
+
+  submitPrice(list: PriceList): void {
+    this.run(this.catalog.setPrice(list.id, {
+      itemId: Number(this.priceForm.itemId),
+      uomId: Number(this.priceForm.uomId),
+      price: Number(this.priceForm.price),
+      effectiveFrom: this.priceForm.effectiveFrom,
+      reason: this.priceForm.reason.trim() || null
+    }), () => {
+      this.priceForm = blankPriceForm();
+      this.loadPrices(list.id);
+    });
+  }
+
+  private loadLists(): void {
+    this.catalog.listPriceLists().subscribe({
+      next: lists => this.priceLists.set(lists),
+      error: err => this.showError(err)
+    });
+  }
+
+  private loadPrices(priceListId: number): void {
+    this.catalog.listPrices(priceListId).subscribe({
+      next: prices => this.prices.set(prices),
+      error: err => this.showError(err)
+    });
+  }
+
+  private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
+    this.busy.set(true);
+    this.error.set(null);
+    source.subscribe({
+      next: value => { this.busy.set(false); onSuccess(value); },
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
+  }
+
+  private showError(err: unknown): void {
+    if (err instanceof HttpErrorResponse) {
+      const envelope = err.error as ApiResponse<unknown> | null;
+      this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+    } else {
+      this.error.set('Unexpected error');
+    }
+  }
+}
+
+function blankListForm() {
+  return {
+    code: '', name: '', currencyCode: 'UGX',
+    validFrom: new Date().toISOString().slice(0, 10), validTo: '',
+    isDefault: false, taxInclusive: false
+  };
+}
+
+function blankPriceForm() {
+  return {
+    itemId: null as number | null,
+    uomId: null as number | null,
+    price: null as number | null,
+    effectiveFrom: new Date().toISOString().slice(0, 10),
+    reason: ''
+  };
+}

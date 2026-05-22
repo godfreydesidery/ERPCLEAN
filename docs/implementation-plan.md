@@ -4,18 +4,91 @@ End-to-end vertical slices, ordered by dependency. Each feature spans backend + 
 
 ## 👉 Resume here
 
-**Last updated:** 2026-05-14 · **Branch:** `feature` · **Last commit:** `b4b013a` — F0.4 backend + permission rename sweep.
+**Last updated:** 2026-05-16 · **Branch:** `feature` · **Last commit:** `da107f3` — web admin sub-pages refresh. Uncommitted: F8.8 backend slice (VAT return export — per-VAT-group output + input rollup with grand totals for the tax filing).
+
+**▶ RESUME POINT:** Phase 8 backend is now COMPLETE. Next up is the **web reporting UI** (the `/reports/*` child routes — customer/supplier statements, AR/AP/Layby ageing, X/Z report, section P&L, sales summary, stock reports, **and the new VAT return**) and **Phase-0 test debt** (F0.1..F0.3 unit + integration tests). F8.10 WMS out of scope; F8.9 biometric defers. Deferred production follow-ups: custom-production no-BOM path (P2), PRE_ORDER ↔ production auto-wiring.
+
+**Progress:** Phases 0-7 backend complete; Phase 8 reporting backend is fully done — F8.1..F8.8 all `[x]`. Web UI deliverables remain on several slices and Phase-0 test debt is still outstanding — see "Pending across all of Phase 0" + per-slice "(web … deferred)" notes.
 
 **Done in Phase 0:**
 - F0.1 — first-run setup wizard (backend + web)
 - F0.2 — login + JWT (backend + web)
 - F0.3 — logout + refresh tokens with theft detection (backend + web)
 - F0.4 backend — RBAC wired; ADMIN role + 10 permissions seeded; JWT now carries real `perms[]`
+- F0.4b — `RoleAdminService`/`RoleAdminController` (role + permission + grant CRUD, gated by `IAM.MANAGE_ROLES`); web `RoleAdminComponent` + `HasPermissionDirective`; `AuthService` now decodes `perms[]` from the JWT
+- F0.4c — day-2 user administration. `UserAdminService` + `UserAdminController` at `/api/v1/users` (gated `IAM.MANAGE_USERS`) — list / get / create / update / reset-password / disable / enable / unlock / force-logout. Self-service `POST /users/me/change-password` (authenticated, no gate). `V58` adds `app_user.must_change_password BOOLEAN NOT NULL DEFAULT FALSE`; entity carries the flag and a `LoginResponseDto.UserSummaryDto.mustChangePassword` field surfaces it so the web bounces the user to `/change-password` on first login. Admin-issued create / reset-password can either accept a plaintext password or auto-generate a 12-char temporary one (unambiguous alphabet — no `1/I/l/0/O`) returned ONCE in the response; default is `mustChangePassword = true`. Reset + disable also revoke every active refresh token for the user — old session is dead, JWT still works until expiry but the refresh chain is severed. Self-mutation guard blocks `disable` on yourself. Web `/admin/users` page (list with avatar + status / locked / must-change badges, detail with grouped profile form + status pills + action buttons for disable / enable / unlock / reset-password / force-logout, temporary-password banner shown once on create or reset, active-grants table linking to `/admin/roles`). New `/change-password` standalone page outside the shell — premium login-card vibe, validates current + confirms new, clears the session on success so the user re-logs in clean. Tile added to admin hub (Users blue, first slot).
+- F0.5 — active-branch switching: `BranchAccessGuard` + `JwtAuthenticationFilter` 403-on-denied-override; `SessionController` (`/session/branches`, `/session/active-branch`); web branch dropdown in the app shell
 
-**Next slice (start here tomorrow):** **F0.4b web** — `RoleAdminComponent` for managing roles/permissions/user-role grants + `HasPermissionDirective` to hide UI per permission. Then **F0.5** — active-branch context switching in the shell.
+**Done in Phase 1:**
+- F1.1 — branch + section CRUD (admin module)
+- F1.2 — currency + FX rate (admin module)
+- F1.3 — catalog: item CRUD + groups (item list/get/patch/archive/activate, `ItemGroup` tree CRUD + move, web catalog screens)
+- F1.4 — catalog: barcodes, UoM, VAT groups (`Uom`/`VatGroup`/`ItemBarcode` entities + services + controllers, web UoM/VAT screens + barcode panel)
+- F1.5 — catalog: price lists + price-change audit (`PriceList`/`PriceListItem`/`PriceChangeLog`, close+open price flow, `ItemPriceChanged.v1`, web price-list screen + per-item price history)
+- F1.6 — catalog: weighed-item + batch-tracking flags (`item.is_weighed`/`weighing_unit` + `item_barcode.barcode_type` via migration `V6`; weighed↔unit + weighed-needs-PLU/embedded-weight-barcode validation; `ItemWeighingChanged`/`ItemBatchTracking*` events; web toggles + barcode-type dropdown)
+- F1.7 — party: customer, supplier, employee, sales agent (`party` + `party_address` + `party_contact` + 4 role tables via `V7`; shared-party-by-TIN reuse; per-branch walk-in customer hook; `@Pii` field marker; web screens under `/party/*`)
+- F1.8 — **deferred** to Phase 8 (biometric enrolment — not an MVP launch requirement)
+
+**Done in Phase 2:**
+- F2.1 — business day open/close/override (`BusinessDay` OPEN→CLOSING→CLOSED state machine + monotonic-date / single-non-closed-day invariants; `business_day_override` audit table via `V9`; `DayGuard` synchronous port; `DAY.*` permissions via `V10`; `BusinessDayController`; web `/day` dashboard)
+- F2.2 — stock ledger + balances (`StockMove` append-only + `ItemBranchBalance` cache via `V11`; moving-average cost on inbound, consume-at-average on outbound; negative-stock guard + `STOCK.OVERSELL` via `V12`; posting requires an open day via `DayGuard`; `StockMoved`/`BalanceUpdated`/`LowStockTriggered.v1`; web `/stock/balances` + `/stock/card/:itemId`)
+- F2.3 — stock counts + transfers (`StockCount`/`StockCountLine` DRAFT→IN_PROGRESS→CLOSED→POSTED with variance→ADJUSTMENT moves; `StockTransfer`/`StockTransferLine` DRAFT→ISSUED→RECEIVED→CLOSED with TRANSFER_OUT/IN moves; `V13`/`V14`; `STOCK.COUNT`/`STOCK.TRANSFER`; web `/stock/counts` + `/stock/transfers`)
+- F2.4 — batch tracking + FEFO consumption (`StockBatch` entity per (branch, item, batch_no) with ACTIVE/EXHAUSTED/EXPIRED/RECALLED lifecycle; `StockBatchService` exposes `createBatch` for inbound flows + `drainFefo` picker + `markExpired` + `recallBatch`; daily `StockBatchExpiryJob` flags ACTIVE rows past expiry; `EXPIRY_WRITE_OFF` move type + recall writes off remaining on-hand; `stock_move.batch_id` nullable column threads through `PostStockMoveRequestDto`; `V15` + `V16` migrations; `STOCK.BATCH` permission; F1.6 archive guard now blocks archive/disable-tracking while active batches exist; web `/stock/batches` expiring-soon + all-batches modes with recall action)
+- F2.5 — stock adjustments + internal consumption (`POST /api/v1/adjustments` posts ADJUSTMENT moves with a configurable monetary threshold — above threshold or for oversells an `authorisedByUserId` must hold `STOCK.ADJUST_APPROVE`; `POST /api/v1/internal-consumption` posts INTERNAL_CONSUMPTION moves with required category + section + authoriser; new `stock_move` columns `section_id` / `consumption_category` / `authorised_by_user_id` via `V17`; new move types `INTERNAL_CONSUMPTION`/`STAFF_PURCHASE`/`EMPLOYEE_GIFT`/`RESERVED`; `V18` seeds `STOCK.ADJUST` / `STOCK.ADJUST_APPROVE` / `STOCK.INTERNAL_CONSUMPTION`; web `/stock/adjust` + `/stock/internal-consumption` forms)
+
+**Done in Phase 3:**
+- F3.1 — LPO lifecycle (`LpoOrder` + `LpoOrderLine` entities; DRAFT → PENDING_APPROVAL → APPROVED state machine + DRAFT/PENDING → CANCELLED; submit auto-approves when total ≤ `orbix.procurement.lpo-auto-approval-threshold`; line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line; `LpoOrderCreated/Submitted/Approved/Cancelled.v1` events; `V19` + `V19_1` + `V20` migrations; `PROCUREMENT.MANAGE_LPO` / `PROCUREMENT.APPROVE_LPO` permissions; web `/procurement/lpos` list + draft creation + state-aware action buttons. PDF rendering + email subscriber on `LpoOrderApproved.v1` deferred — the event already fires.)
+- F3.2 — GRN posting + batch capture (`Grn` + `GrnLine` entities with DRAFT → POSTED terminal lifecycle + DRAFT → CANCELLED; LPO-bound flow validates each line against the parent `lpo_order_line` (item match + outstanding-qty over-receipt guard) and on post advances `received_qty` + flips LPO to PARTIALLY_RECEIVED or RECEIVED; direct GRN gated by `GRN.DIRECT`; posting routes through `StockMoveService` so DayGuard + moving-average + F2.4 batch creation are all reused — batch-tracked items create a `stock_batch` first and stamp `batch_id` on the move; `V21` + `V21_1` + `V22` migrations; `GRN.POST`/`GRN.DIRECT` permissions; `GrnCreated/Posted/Cancelled.v1` events; web `/procurement/grns` list + receive-against-LPO form with per-line outstanding + batch_no inputs + state-aware Post/Cancel.)
+- F3.3 — Supplier invoice + 3-way match (`SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities with DRAFT → POSTED lifecycle; DRAFT/POSTED → CANCELLED; per-branch unique invoice number + per-supplier unique `supplier_invoice_no`; allocations validated against each referenced GRN — POSTED + same supplier + cumulative amount ≤ `grn.total_amount` (over-allocation rejected; cancelled invoices excluded); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005); due date defaults to `invoice_date + supplier.payment_terms_days`; `V23` + `V23_1` + `V24` migrations; `PROCUREMENT.MANAGE_INVOICE` permission; `SupplierInvoiceCreated/Matched/Cancelled.v1` events; web `/procurement/invoices` list + per-supplier GRN picker + live tolerance hint + state-aware Post/Cancel.)
+- F3.4 — Supplier payment + invoice settlement (first floor of the cash module; `SupplierPayment` + `SupplierPaymentAllocation` entities with DRAFT → POSTED → terminal lifecycle + DRAFT → CANCELLED; per-branch unique payment number; `PaymentMethod` enum (CASH/BANK_TRANSFER/CHEQUE/MOBILE_MONEY); allocation guards — same-supplier + in-company + amount ≤ invoice outstanding + no-duplicate-invoice + Σ allocations ≤ payment total; posting requires `DayGuard.requireOpenDay`; `SupplierInvoice.applyPayment` advances `paid_amount` and flips to PARTIALLY_PAID until total → PAID; `V25` + `V25_1` + `V26` migrations seed `CASH.MANAGE_SUPPLIER_PAYMENT`; `SupplierPaymentCreated/Posted/Cancelled.v1` events for the F6.1 cash-side subscriber; web `/procurement/payments` list + supplier-scoped open-invoice picker + outstanding hint + state-aware Post/Cancel.)
+
+**Done in Phase 4:**
+- F4.1 — Sales quotation (**skipped** per plan: "Skip if pilot doesn't need quotations; jump to F4.2").
+- F4.2 — Sales invoice posting (`SalesInvoice` + `SalesInvoiceLine` (DATA-MODEL §6.3/§6.4); DRAFT → POSTED → (PARTIALLY_PAID/PAID via F4.3) | VOIDED | CANCELLED; per-branch unique number; `PaymentTerms` (CASH/CREDIT); business rules — credit-limit check against `customer.creditLimitAmount` + running outstanding debt; discount-threshold via `orbix.sales.discount-threshold-pct` requires `SALES.DISCOUNT_APPROVE` authoriser; `item.minSellPrice` enforced; same-business-day-only void writes RETURN_IN compensating moves at snapped line cost — batch-tracked items rejected (use F4.4 return instead); posting routes through `StockMoveService` with DayGuard + per-batch FEFO drains for batch-tracked items; `V27` + `V27_1` + `V28` migrations seed `SALES.MANAGE_INVOICE/DISCOUNT_APPROVE/MANAGE_RECEIPT/MANAGE_RETURN/MANAGE_PACKING`; `SalesInvoiceCreated/Posted/Voided/Cancelled.v1` events; web `/sales/invoices` list + multi-line draft form + state-aware Post/Void/Cancel.)
+- F4.3 — Sales receipt + allocation (`SalesReceipt` + `ReceiptAllocation` (DATA-MODEL §6.5/§6.6); DRAFT → POSTED → terminal + DRAFT → CANCELLED; `ReceiptMethod` (CASH/CARD/BANK_TRANSFER/MOBILE_MONEY/CHEQUE/STORE_CREDIT); allocation guards mirror F3.4 — same-customer, no-duplicate, amount ≤ outstanding, Σ ≤ total; tracks `unallocated_amount` for future customer-credit routing; DayGuard on post; `SalesInvoice.applyReceipt` flips PARTIALLY_PAID / PAID; `V29` + `V29_1`; `SalesReceiptCreated/Posted/Cancelled.v1` events; web `/sales/receipts` with customer-scoped open-invoice picker.)
+- F4.4 — Customer returns + credit notes (`CustomerReturn` + `CustomerReturnLine` (DATA-MODEL §6.7/§6.8); DRAFT → POSTED → CREDITED + DRAFT → CANCELLED; `ReturnReason` (DAMAGED/EXPIRED/WRONG_ITEM/BUYER_REMORSE/OTHER); on post (DayGuard required) writes RETURN_IN moves when `restock=true`, DAMAGE moves otherwise — batch-tracked items rejected for now (restock-to-original-batch is a follow-on); issue-credit-note transitions POSTED → CREDITED and creates `CustomerCreditNote` (DATA-MODEL §6.9) at full return amount — allocation to open invoices is follow-on work; `V30` + `V30_1`; `CustomerReturnCreated/Posted/Cancelled.v1` + `CustomerCreditNoteIssued.v1` events; web `/sales/returns` with state-aware action buttons.)
+- F4.5 — Packing lists (`PackingList` + `PackingListLine` (DATA-MODEL §6.10/§6.11); DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED; created against POSTED/PARTIALLY_PAID/PAID invoices; tracking-only — no stock moves (parent invoice already decremented on post); `V31` + `V31_1`; `PackingListCreated/Dispatched/Delivered/Cancelled.v1` events; web `/sales/packing-lists` with per-invoice-line tick + qty picker.)
+
+**Done in Phase 5:**
+- F5.1 — Till + till-session lifecycle (`Till` + `TillSession` entities; DATA-MODEL §7.1/§7.2; OPEN → CLOSED → RECONCILED with at-most-one-OPEN-per-till invariant; opening requires `DayGuard.requireOpenDay`; close computes `expected_cash = opening_float` + variance; variance above `orbix.pos.session-variance-threshold` (default 1000) needs a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`; `V32` + `V32_1` + `V33` migrations seed 5 POS permissions; `TillCreated/Activated/Deactivated.v1` + `TillSessionOpened/Closed/Reconciled.v1` events; web `/admin/tills` admin screen. Flutter cashier UI deferred.)
+- F5.2 — Basic POS sale (cash + mixed tender) — backend ships the full server-side contract; Flutter till app deferred. `PosSale` + `PosSaleLine` + `PosPayment` entities (DATA-MODEL §7.3-§7.5 + Phase 1.1 §17.12 additions); POS sales committed locally and pushed as POSTED (no DRAFT); idempotent on `clientOpId` per company. Validation: OPEN till session, `section_id` matches the till's branch (required), customer exists, tender ≥ total. Posting writes outbound SALE stock moves via `StockMoveService` (DayGuard inherited) — batch-tracked items drain FEFO via `StockBatchService` and emit one stock_move per pick. Mixed tender (cash + card + mobile money + voucher + store credit) via N `pos_payment` rows; card terminals record `terminal_id` + `last4` only. `V34` + `V34_1` + `V35` migrations seed `POS.SALE_POST`. Event: `PosSaleClosed.v1`. Web: read-only `/admin/pos-sales` viewer for managers.
+- F5.3 — POS discounts, header discount, void path (per-line discount above `orbix.pos.discount-threshold-pct` requires a `discountApproverId` holding `POS.DISCOUNT_APPROVE`, must differ from caller; optional `headerDiscountAmount` applied after line tax, rejected when negative or > subtotal; same-business-day `POST /pos-sales/{id}/void` writes RETURN_IN compensating moves at the snapped line cost and rejects batch-tracked lines; `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`; `PosSaleVoided.v1`; web `/admin/pos-sales` gains the Void button + header-discount display.)
+- F5.4 — Offline-sync server contract (backend-complete; Flutter app deferred). `POST /api/v1/sync/push` batch-pushes locally-committed POS sales — each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch; idempotency on `clientOpId` was already in place from F5.2. `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` returns active items + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty + all barcodes (so the till's local DB can scan EAN/PLU offline). `GET /api/v1/sync/balances/snapshot?branchId=` returns current `item_branch_balance` rows for a soft pre-flight oversell check. `V37` seeds `POS.SYNC`.
+- F5.5 — Refund at till (backend). Same-business-day refund flow rejecting batch-tracked items and writing RETURN_IN compensating stock moves at the original snapped line cost; `orbix.pos.refund-threshold` (default 10000) requires a `supervisorId` holding `POS.REFUND_APPROVE` (different from the cashier); `PosSaleKind.REFUND` rows reuse `pos_sale` / `pos_sale_line` / `pos_payment` with `refunded_from_sale_id` linking back to the original; `V38` seeds `POS.REFUND_POST` + `POS.REFUND_APPROVE`; `PosSaleRefunded.v1` event.
+- F5.6 — FX tender at till (backend). `pos_payment` can now snap a non-functional `tender_currency` + `fx_rate` per row (functional-currency `amount` is still the audit value used for totals/variance); till must accept the currency via `till_currency` (managed under `POS.TILL_CURRENCY_MANAGE` at `/api/v1/tills/{id}/currencies`); FX rate resolved most-recent-on-or-before the sale `at` from `fx_rate`; `V39` adds the `till_currency` table + the `pos_payment.tender_currency`/`tender_amount`/`fx_rate` columns + seeds `POS.TILL_CURRENCY_MANAGE`. Flutter tender-screen UI deferred.
+- F5.7 — Gift card tender at POS (backend; Flutter tender screen deferred). Added `GIFT_CARD` to `PosPaymentMethod`. `PosSaleServiceImpl.post` redeems each GIFT_CARD tender row via `GiftCardService.redeem` (idempotency ref-doc = `("PosPayment", pos_payment.id)` so the same card scanned twice on one sale produces two independent REDEEM txns and a client retry resolves to the same triple without double-debiting); `refund` credits back each GIFT_CARD refund row via `GiftCardService.refundCredit` (ref = `("PosRefundPayment", refund_payment.id)`); `voidSale` credits back the original sale's GIFT_CARD rows (ref = `("PosVoidPayment", original_payment.id)`). Tender requires the card code in `pos_payment.reference` or 422. No `cash_entry` is posted for a GIFT_CARD payment — gift-card redemption is a liability transfer, not a cash movement. Gift cards are functional-currency-only at MVP. **Phase 5 POS module is now backend-complete** (modulo Z-report PDF + Flutter app).
+- F5.8 — Weighed items + barcode parser (backend; Flutter scale integration deferred). `BarcodeResolverService` + `GET /api/v1/pos/barcode-lookup?code=…` resolve a scanned code → `ResolvedBarcodeDto { itemId, code, name, uomId, vatGroupId, weighed, batchTracked, weighingUnit, minSellPrice, qty, barcodeType }`. Plain symbologies (UPC/EAN13/EAN8/PLU) match `item_barcode.barcode` exactly with `qty = packQty`; scale-printed EAN-13 (13 digits, leading `2`) falls back to a 7-char prefix lookup against `EMBEDDED_WEIGHT` barcodes and decodes weight bytes 8..12 as `int / 1000` in the item's `WeighingUnit` (per the README §11 layout `2 + 6-digit PLU + 5-digit weight + check digit`). Archived / cross-company items rejected; zero-weight scans rejected. `ItemBarcodeServiceImpl.addBarcode` now shape-checks each symbology (EAN13=13 digits, EAN8=8, UPC=12) and enforces EMBEDDED_WEIGHT = 7 digits leading with `2` against a weighed item.
+- F5.9 — Cash pickup + petty cash (backend; Flutter cashier flow deferred). `cash_pickup` + `petty_cash` tables (DATA-MODEL §7.6 / §7.7); `V42` schema + `V42_1` sequences (per dialect) + `V43` seeds `POS.CASH_PICKUP` / `POS.PETTY_CASH`. `CashPickupService` writes paired cash-ledger entries (OUT-TILL + IN-CASH_BOX, same `refType=CashPickup`/`refId`, idempotent by direction) on `POST /api/v1/cash-pickups`; `PettyCashService` writes a single OUT-TILL with `gl_category = PETTY` on `POST /api/v1/petty-cash` (no paired IN — petty cash leaves the system). Both require an OPEN till session + OPEN business day + a different-user authoriser holding the matching permission. `PettyCashCategory` enum: TRANSPORT/OFFICE/MAINTENANCE/OTHER. `CashPickupRecorded.v1` + `PettyCashPaid.v1` events. `TillSessionServiceImpl.computeExpectedCash` now folds in cash sales (POSTED + SALE +cash, POSTED + REFUND −cash, VOIDED 0) minus pickups minus petty cash, so close-till variance is meaningful end-to-end.
+- F5.10 — X / Z reports (backend data contract; PDF rendering + object-storage upload deferred). `TillReportDto` carries the full close shape (per-tender-method breakdown for sales + refunds, voids count, gross / discount / tax / net totals, pickups, petty cash per category, opening float, expected cash, declared, variance, plus per-line refs). `TillReportService.xReport(tillSessionId)` requires an OPEN session and recomputes live; `zReport(tillSessionId)` requires CLOSED / RECONCILED and recomputes from the immutable source tables (`pos_sale` + `pos_payment` + `cash_pickup` + `petty_cash`) — no new schema and no `pos_z_report` snapshot table needed. Endpoints: `GET /api/v1/reports/x-report?tillSessionId=…` (gated by `POS.SALE_POST` or `POS.MANAGE_TILL`) + `GET /api/v1/reports/z-report?tillSessionId=…` (gated by `POS.MANAGE_TILL` or `POS.SESSION_CLOSE`).
+
+**Done in Phase 6:**
+- F6.1 — Cash entries + cash book (backend; web `/cash/ledger` + `/cash/cash-book` screens deferred). `cash_entry` append-only ledger + `cash_book` write-through projection (per-branch / per-account / per-business-date opening + in + out + closing); idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call is a no-op; CashLedgerService is the posting port — all source modules call it in the same transaction so a rolled-back source doc rolls back the cash entry too; `V40` schema + `V40_1` sequence (per dialect) + `V41` seeds `CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`; `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1` events. Producer wiring landed in this slice: POS sale closes write IN-TILL per CASH `pos_payment` (`ref_type = PosSalePayment`); POS refunds write OUT-TILL per CASH refund payment (`PosRefundPayment`, `gl_category = CASH_REFUND`); same-day voids reverse the original CASH rows (`PosVoidPayment`); TillSession open writes the opening-float IN-TILL (`TillFloat` / `TILL_FLOAT`); TillSession close writes a variance entry on non-zero variance (surplus = IN, shortage = OUT, `TillVariance` / `VARIANCE`); SalesReceipt posts an IN entry on the method-mapped account (`CASH_BOX` / `BANK` / `MOBILE_MONEY`; CARD + STORE_CREDIT settle off-ledger); SupplierPayment posts an OUT entry on the method-mapped account. Read API at `GET /api/v1/cash-entries` + `GET /api/v1/cash-book` (gated by `CASH.READ`). Direct supervisor-adjustment + bank-deposit endpoints + cash pickup / petty cash consumers + multi-currency book deferred to follow-on slices.
+- F6.2 — Multi-currency cash book (backend). `V44` extends `cash_book` PK from `(branch_id, account, business_date)` to `(branch_id, account, currency_code, business_date)` so the projection splits per tender currency (US-DAY-006); `cash_entry` gains `tender_amount` + `fx_rate_snapshot` columns and the existing `currency_code` is re-interpreted as the tender currency (functional-currency rows backfill cleanly with `fx_rate_snapshot = 1`). `CashLedgerService.post` signature now takes `(tenderAmount, fxRateSnapshot, tenderCurrency, …)` and derives the functional `amount = tenderAmount × fxRateSnapshot`. POS sale/refund/void cash entries now flow the FX info from `pos_payment` straight through (so a USD tender lands in a per-USD `cash_book` bucket with the snapped rate); TillSession open/close, SalesReceipt, SupplierPayment, CashPickup, PettyCash stay functional-only with `fx_rate_snapshot = 1`. `cash_book` amounts are stored in the row's own tender currency so per-currency variance is a direct row read with no FX involved. Per-currency close variance (the cashier declares per currency) is deferred to a follow-on — needs `declaredCashByCurrency` on the close request.
+- F6.3 — End-of-day banking + supervisor adjustment (backend). `V45` adds `cash_adjustment` and `bank_deposit` audit-doc tables so direct-write cash entries have a stable `ref_id`. `CashAdjustmentService` posts a single `cash_entry` with `gl_category = ADJUSTMENT` (mandatory reason carried both on the audit-doc and as the entry's notes); `BankDepositService` posts paired entries — OUT-CASH_BOX (`gl=CASH`) + IN-BANK (`gl=BANK`) — with the deposit row's id as `ref_id` and `ref_type = BankDeposit` (idempotency UNIQUE accepts both legs because direction differs). Both flows `DayGuard.requireOpenDay` so a closed day rejects 422. New endpoints: `POST /api/v1/cash-adjustments` (gated `CASH.ADJUST`, seeded in F6.1) + `POST /api/v1/bank-deposits` (gated `CASH.BANKING`, seeded in F6.1), plus per-branch / per-date `GET` listers. `CashAdjustmentPosted.v1` + `BankDepositPosted.v1` events. Two new `CashRefType` constants — `CashAdjustment`, `BankDeposit`. **Phase 6 cash module is now backend-complete** (modulo per-currency close variance + Z-report PDF + web screens).
+
+**Done in Phase 7:**
+- F7.1 — Gift cards (backend; Flutter issue-card flow + redeem-tender wiring in F5.7 + admin web screens deferred). `gift_card` (bearer code UNIQUE, lifecycle status ACTIVE/FULLY_REDEEMED/EXPIRED/FROZEN/REFUNDED) + append-only `gift_card_txn` (LOAD/REDEEM/REFUND/EXPIRE, idempotency UNIQUE on `(gift_card_id, ref_doc_type, ref_doc_id, kind)`) — `V46` schema + `V46_1` per-dialect sequences. `V47` seeds `GIFTCARD.ISSUE` / `GIFTCARD.REDEEM` / `GIFTCARD.LOOKUP` / `GIFTCARD.FREEZE` permissions. `GiftCardService.issue` writes the card + LOAD txn AND the cash-side entry via `CashLedgerService` in the same transaction (`ref_type = GiftCardIssue`, `gl_category = GIFT_CARD_ISSUE_PROCEEDS`, CARD-method skips cash side); `redeem` debits balance (rejects FROZEN/EXPIRED/over-balance/expired-at-time, idempotent on the txn ref-doc triple — POS retries can't double-debit); `refundCredit` adds back to balance and re-activates FULLY_REDEEMED cards; `freeze`/`unfreeze` toggle lock state; `lookup`/`listTransactions` are read-only inquiries. Bearer code auto-generates as a 12-digit random numeric with collision-check fallback to the UNIQUE constraint; supplying a pre-printed code from physical-card inventory is also supported. `GiftCardController` exposes `POST /api/v1/gift-cards` + `GET /api/v1/gift-cards/{code}` + `GET /api/v1/gift-cards/{code}/transactions` + `POST /api/v1/gift-cards/{code}/{redeem|refund|freeze|unfreeze}`. Scheduled `GiftCardExpiryJob` runs daily at 00:10 UTC (`orbix.giftcard.expiry-cron`) — finds ACTIVE cards past `expires_at`, posts an EXPIRE txn for the remaining balance, flips status to EXPIRED, emits `GiftCardExpired.v1`. Two new `CashRefType` constants — `GiftCardIssue`. Code is bearer-secret — `GiftCard.toString` excludes it and audit notes mask to last-4 (`****1234`).
+- F7.5 — EOD orchestration (backend; US-DAY-002 / TC-DAY-004 / TC-DAY-006..009 / TC-DAY-025). New `EodGuard` port + `EodBlockerDto` record in `day/service` — each posting module's guard is auto-discovered by Spring's `List<EodGuard>` injection. `BusinessDayServiceImpl.startClosing` aggregates blockers across all guards (a guard throwing is caught + converted to a synthetic blocker so a misbehaving module can never falsely allow close), and on non-empty list throws `EodBlockedException` which the `GlobalExceptionHandler` maps to 422 + `DAY_EOD_BLOCKED` with every blocker carried as an `ApiErrorDto`. Three guard implementations: `PosEodGuard` blocks on `TillSession` rows for `(branchId, businessDate)` whose status is OPEN or CLOSED-but-not-RECONCILED (cashier must close + supervisor reconcile any variance — TC-DAY-007); `ProcurementEodGuard` blocks on DRAFT GRNs for the branch (operator must post or cancel — TC-DAY-008; supplier-invoice / payment / LPO DRAFTs are decoupled from the business-day cycle since they legitimately live across days while awaiting supplier paperwork); `ProductionEodGuard` blocks on production_batch rows that are neither CANCELLED nor lifecycle-CLOSED (operator must advance to CLOSED or cancel a PLANNED batch — TC-DAY-009). `closeDay` auto-rolls into the next business day on success — creates the next-day OPEN row with `opened_by = 0L` (SYSTEM), skipped idempotently if the next day already exists (TC-DAY-004); fires a second `BusinessDayOpened.v1` with `autoRolledFrom` metadata. New `endDay(branchId, date, key)` convenience runs startClosing + closeDay + auto-roll in one call, and an already-CLOSED day returns as-is without re-emitting events (TC-DAY-025 idempotency). New endpoints `GET /api/v1/business-days/{date}/blockers` (read-only preview, gated `DAY.OPEN` or `DAY.CLOSE`) + `POST /api/v1/business-days/{date}/end` (gated `DAY.CLOSE`). New `ResponseCode.DAY_EOD_BLOCKED`. **Phase 7 module is now complete** (modulo deferred custom-production / PRE_ORDER auto-wiring follow-ups). Existing `BusinessDayServiceImplTest` updated to pass `List.of()` for the guards collection + assert auto-roll + new idempotency semantics; all 9 tests pass.
+- F7.4 — Production variance report + conversions (backend). `conversion` table (DATA-MODEL §9.6) via `V56` schema + `V56_1` per-dialect sequence. `V57` seeds `PROD.CONVERT` + `PROD.READ_REPORT` permissions. `Conversion` entity with DRAFT → POSTED terminal lifecycle (+ DRAFT → CANCELLED branch); per-branch unique `number` auto-generated as `CONV-BR{branchId}-{epoch-suffix}` when omitted; from-item / to-item rejected when equal. `ConversionServiceImpl` orchestrates create / post / cancel. Post derives the output unit_cost as `from.avg_cost × from_qty / to_qty` so total value is preserved across a one-to-many split (sack of flour → many small packs), then writes paired `StockMoveType.PROD_CONSUME` (outbound from_item, qty negated) + `StockMoveType.PROD_OUTPUT` (inbound to_item with the derived unit_cost) via `StockMoveService.post` in one transaction — DayGuard + moving-average inherited. Events: `ConversionCreated.v1` / `ConversionPosted.v1` / `ConversionCancelled.v1`. `ConversionController` at `/api/v1/conversions` with `POST` (gated `PROD.CONVERT`) + `GET` (filterable by branchId / status, gated `PROD.CONVERT` or `PROD.READ_REPORT`) + `GET /{id}` + `POST /{id}/{post|cancel}`. Production variance report at `GET /api/v1/reports/production-variance` (gated `PROD.READ_REPORT` or `PROD.MANAGE_BATCH`) — per-batch rows with planned_qty / actual_qty / yield_pct (actual ÷ planned × 100) / total_consumption_cost (Σ actual_qty × unit_cost) / total_wastage_qty / wastage breakdown by `WastageCategory` (EnumMap). Filterable by branchId / sectionId / bomId / planned-at date range. `ProductionVarianceRowDto` returns the full shape ready for the (future) Phase 8 dashboard.
+- F7.3c — Production lifecycle states + wastage + close (backend; custom-production / conversion / PRE_ORDER auto-wiring deferred). `production_wastage` table (DATA-MODEL §17.11) via `V54` schema + `V54_1` per-dialect sequence. `V55` seeds `PROD.RECORD_WASTAGE` permission (distinct from `PROD.MANAGE_BATCH` so senior signoff on donations / write-offs is independent of the operator's batch-management grant). `ProductionWastage` is append-only with mandatory `reason` (TC-PROD-013); `WastageCategory` enum BURNT / EXPIRED / DROPPED / SAMPLED / DONATED / OTHER (TC-PROD-014). `ProductionWastageServiceImpl.record` writes the row + emits `ProductionWastageRecorded.v1` (rejects CANCELLED batches; no `stock_move` — wastage is a side-channel record per the README). `ProductionWastageController` at `/api/v1/production-wastage` with `POST` (gated `PROD.RECORD_WASTAGE`) + `GET?productionBatchId=…` (gated `PROD.RECORD_WASTAGE` or `PROD.READ_BATCH`). Extended `ProductionBatch` entity with `advanceLifecycle` (forward-only HOT→COLD→DISCOUNTED, throws if status ≠ COMPLETED), `markDonatedOrWriteOff` (any OUTPUT_* state → terminal donated / write-off, throws if already terminal), `markClosed` (sets lifecycle = CLOSED; status must be COMPLETED). `ProductionBatchServiceImpl.advanceLifecycle` routes to the forward transition for HOT→COLD / DISCOUNTED; for OUTPUT_DONATED / OUTPUT_WRITE_OFF walks every `production_output` row with a non-null `batchId` and calls `StockBatchService.recallBatch` with the reason (or a default `{state}{number}` reason if omitted) — that writes the compensating EXPIRY_WRITE_OFF `stock_move` per batch and flips the `stock_batch` to RECALLED. Non-batch-tracked outputs aren't selectively tracked per production batch in MVP — their qty stays in the general balance until normal sale / consumption (acknowledged limitation). `close()` flips lifecycle to CLOSED (terminal, immutable). Events `ProductionLifecycleAdvanced.v1` carries the new state + reason; `ProductionBatchClosed.v1` on close. New endpoints `POST /api/v1/production-batches/{id}/{advance-lifecycle|close}` on the existing controller.
+- F7.3b — Production batch: plan + start + record output (backend; lifecycle states + wastage + custom-production + conversion + PRE_ORDER consumer wait on F7.3c). `production_batch` + `production_consumption` + `production_output` tables (DATA-MODEL §9.3 / §9.4 / §9.5 + Phase 1.1 additions `section_id` + `lifecycle_state` on batch, `is_pack_by_weight` + `batch_id` on output) via `V52` schema + `V52_1` per-dialect sequences. `V53` seeds `PROD.MANAGE_BATCH` + `PROD.READ_BATCH` permissions. New `BomExplosionService` recursively walks `bom_line.sub_bom_id` pointers down to raw materials, scales each terminal line by `plannedQty / bom.output_qty` and bumps by per-line `wastage_pct`, then aggregates per `input_item_id` (rejects mixed UoMs across paths and sub-BOMs not in ACTIVE status). `ProductionBatchServiceImpl.plan` runs the explosion, pre-flights availability via `StockReservationService.available` (one clean 422 if any material short), then atomically reserves per material via `StockReservationService.reserve` and writes one `production_consumption` row at planned qty; status = PLANNED, lifecycle_state = PLANNED. `start` releases each reservation, posts a PROD_CONSUME outbound stock_move via `StockMoveService.post` (DayGuard + moving-average inherited), captures `unit_cost` + `actual_qty = planned_qty` on each consumption row; status = IN_PROGRESS. `postOutput` computes total consumption cost, validates yield against `orbix.production.yield-hard-reject-multiple` (default 2.0× hard 422), derives a uniform per-output `unit_cost = total_cost / total_output_qty`, then per output line creates a `stock_batch` via `StockBatchService.createBatch` when the output item is batch-tracked (rejects missing batchNo), posts a PROD_OUTPUT inbound stock_move with `batchId` stamped when applicable, and writes a `production_output` row carrying `is_pack_by_weight` + `is_primary` + `manufactured_at` + `expiry_at`; status = COMPLETED, lifecycle_state = OUTPUT_HOT_DISPLAY. Re-post of a COMPLETED batch is a silent no-op (idempotency). `cancel` allowed only from PLANNED — releases each reservation (IN_PROGRESS cancel routes through the lifecycle write-off path in F7.3c). Per-branch unique `number` auto-generated as `BATCH-BR{branchId}-{epoch-suffix}` when omitted. Events: `ProductionBatchPlanned/Started/Cancelled.v1` + `ProductionConsumePosted.v1` + `ProductionOutputPosted.v1`. `ProductionBatchController` at `/api/v1/production-batches` with `POST` (plan), `GET` (branchId / sectionId / status filters), `GET /{id}`, `POST /{id}/{start|post-output|cancel}`. New config keys `orbix.production.yield-hard-reject-multiple` (default 2.0) + `orbix.production.yield-soft-warn-fraction` (default 0.5, currently informational).
+- F7.3a — Production BOM authoring (backend). `bom` + `bom_line` tables (DATA-MODEL §9.1/§9.2 + Phase 1.1 additions for `parent_bom_id` + `section_id`) via `V50` schema + `V50_1` per-dialect sequences. `V51` seeds `PROD.MANAGE_BOM` / `PROD.READ_BOM` permissions. `Bom` entity carries DRAFT → ACTIVE → RETIRED lifecycle with per-(output_item_id, version) UNIQUE so multiple recipe revisions coexist for variance reporting. `BomLine` references EITHER `inputItemId` (a raw material consumed at plan time) OR `subBomId` (a sub-recipe exploded at plan time by F7.3b) — never both, validated at the DTO level via `@AssertTrue`. `BomServiceImpl` orchestrates create / patch (DRAFT only — lines fully replaced) / activate / retire / version. Activate runs a BFS over the sub-BOM graph rooted at the new BOM; re-encountering its own id throws (TC-PROD-004 cycle detection). Activate also auto-retires any prior ACTIVE version of the same output item at `validFrom - 1` so reporting can date-slice cleanly. Version clones the current ACTIVE row + its lines into a fresh DRAFT at N+1 — the operator then patches and activates separately. Events: `BomDefined.v1` / `BomPatched.v1` / `BomActivated.v1` / `BomRetired.v1` / `BomVersioned.v1`. `BomController` at `/api/v1/boms` — `POST` to create, `GET` (filter by sectionId / outputItemId / status), `GET/PATCH/{id}`, `POST /{id}/{activate|retire|version}`. Production batch lifecycle + consumption + output deferred to F7.3b/c.
+- F7.2 — Layby + pre-order (backend; web `/orders` + Flutter at-till collection deferred). `customer_order` + `customer_order_line` + `customer_order_payment` tables (DATA-MODEL §17.8/§17.9/§17.10) via `V48` schema + `V48_1` per-dialect sequences. `V49` seeds `ORDER.MANAGE` / `ORDER.COLLECT` / `ORDER.READ` permissions. New `StockReservationService` port + impl — `reserve` increments `item_branch_balance.qty_reserved` after checking availability (`qty_on_hand − qty_reserved ≥ qty`) and writes a `move_type = RESERVED` audit row at `qty = +qty`; `release` mirrors with `qty = −qty`; reservations never touch `qty_on_hand`. `CustomerOrder` entity carries the DRAFT → RESERVED → DEPOSIT_PAID → PARTIALLY_PAID → READY → COLLECTED state machine + CANCELLED / EXPIRED branches with `applyPayment` deriving the next status from `depositPaidAmount` vs `depositRequiredAmount` and `balanceDue` (LAYBY flips straight to READY on balance_due = 0; PRE_ORDER waits for production via the deferred `markReady` endpoint until F7.3 lands the `ProductionOutputPosted.v1` consumer). `CustomerOrderServiceImpl` orchestrates create / patch (DRAFT only) / reserve (LAYBY locks per line, PRE_ORDER skips) / pay / cancel / markReady / collect / expiry. Payment posts route through `CashLedgerService` for CASH / BANK_TRANSFER / MOBILE_MONEY / CHEQUE (`CashRefType.ORDER_PAYMENT`, `GlCategory.ORDER_DEPOSIT`, single-currency / `fx_rate = 1`) and through `GiftCardService.redeem` for GIFT_CARD method (idempotency ref-doc triple = `("CustomerOrderPayment", payment.id, REDEEM)` so a client retry resolves to the same triple without double-debiting); CARD method has no cash side. Per-order idempotency on `(customer_order_id, idempotency_key)` UNIQUE blocks accidental double-post on a network retry. Cancel-refund follows `orbix.orders.cancel-refund-window-days` (default 7) — within window writes paired OUT cash entries + `GiftCardService.refundCredit` rows on the original tender methods; outside window forfeits paid amount (no refund posted, `forfeited_amount` accumulated for audit). Collection (LAYBY) releases reservation per line then posts `StockMoveType.SALE` moves via `StockMoveService.post`; batch-tracked items rejected for collection at MVP (use POS sale path instead). `CustomerOrderExpiryJob` scheduled at `orbix.orders.expiry-cron` (default 00:15 UTC, ten minutes after the gift-card sweep) — finds orders in {RESERVED, DEPOSIT_PAID, PARTIALLY_PAID} past `reserved_until`, releases reservation if LAYBY, forfeits the paid amount, flips to EXPIRED, emits `CustomerOrderExpired.v1`. Per-branch unique `number` auto-generated as `ORD-BR{branchId}-{epoch-suffix}` when omitted. Events: `LaybyCreated.v1` / `PreOrderCreated.v1` / `CustomerOrderReserved.v1` / `OrderDepositPaid.v1` / `OrderInstallmentPaid.v1` / `CustomerOrderReady.v1` / `CustomerOrderCollected.v1` / `CustomerOrderCancelled.v1` / `CustomerOrderExpired.v1`. Two new `CashRefType` constants — `OrderPayment` + `OrderRefund`. New config keys under `orbix.orders.*` for deposit-pct, default reserve days (LAYBY 30 / PRE_ORDER 7), cancel-refund window, expiry cron.
+
+**Done in Phase 8:**
+- F8.8 — VAT return export (backend; US-NFR-COMP-001 / TC-NFR-COMP-001). Per-VAT-group output (sales) + input (procurement) rollup over a `[from, to]` window with grand-total summary for the tax filing. Output composition: `sales_invoice_line` (joined against `sales_invoice` filtered to POSTED / PARTIALLY_PAID / PAID by `posted_business_date`, VOIDED + DRAFT + CANCELLED excluded since they never crystallised revenue) plus `pos_sale_line` driven by `pos_sale.business_date` — SALE rows add, REFUND rows subtract so a same-window refund cleanly reverses the original output VAT obligation. VOIDED POS sales are excluded — the void already wrote an OFFSET POS pair so the net is zero. Input composition: `grn_line` joined through `grn` filtered to POSTED by `received_date` — input VAT computed per row as `line_total × vat_group.rate` to match how `GrnServiceImpl` rolls header tax (GRN lines store `line_total` pre-tax; sales lines store it tax-inclusive). New repo methods: `SalesInvoiceLineRepository.aggregateOutputVat(companyId, branchId, from, to)`, `PosSaleLineRepository.aggregateOutputVat(companyId, branchId, from, to, status, kind)`, `GrnLineRepository.aggregateInputVat(companyId, branchId, from, to)`. `VatReturnReportServiceImpl` seeds a bucket for every VAT group on the company so zero-activity groups still appear (auditors expect every active rate to show), folds all aggregations into per-group `outputNet/outputVat/inputNet/inputVat`, and sorts rows by VAT-group code asc. Returns `VatReturnDto` (envelope: from / to / branchId / rows / totalOutputNet / totalOutputVat / totalInputNet / totalInputVat / netPayable) + per-row `VatReturnRowDto` (vatGroupId / code / name / rate / outputNet / outputVat / inputNet / inputVat / netVatPayable). `netPayable = totalOutputVat − totalInputVat` (positive = owe revenue authority, negative = refund / carry-forward). DTOs live under `common/domain/dto/` for cross-module reuse. Endpoint `GET /api/v1/reports/vat-return?branchId=&from=&to=` on the existing `SalesReportController`; defaults to the **previous full calendar month** when `from` / `to` are omitted (matches the typical filing cycle). Not @PreAuthorize-gated — finance / accountants are the typical consumers and the controller pattern matches the rest of `/api/v1/reports/*`.
+- F8.7 — Customer / supplier statements (backend). Per-party chronological AR / AP statement with opening balance carried forward, period debits + credits, and rolling closing balance. AR composition: `sales_invoice` (debit) + `sales_receipt` (credit) + `customer_credit_note` (credit) — VOIDED sales invoices appear in the timeline with zero debit/credit so the auditor can trace the original entry. AP composition: `supplier_invoice` (debit) + `supplier_payment` (credit). Shared `StatementEntryDto` (date / kind / refId / number / reference / debit / credit / running balance / voided) and `PartyStatementDto` envelope (partyId / partyType / from / to / opening / periodDebits / periodCredits / closing / entries) live under `common/domain/dto` so both AR + AP reuse the shape. Six new repo methods — `findForStatement(partyId, from, to)` + `sumXxxBefore(partyId, from)` — on `SalesInvoiceRepository`, `SalesReceiptRepository`, `CustomerCreditNoteRepository`, `SupplierInvoiceRepository`, `SupplierPaymentRepository`. `StatementReportServiceImpl` loads each source list once, sorts the merged window by date then kind, walks the timeline computing the running balance + period totals. Endpoints: `GET /api/v1/reports/customer-statement?customerId=&from=&to=` + `GET /api/v1/reports/supplier-statement?supplierId=&from=&to=` — defaults to last 30 days when from/to omitted; not @PreAuthorize-gated matching the existing controller pattern.
+- F8.6 — Layby / pre-order ageing (backend). Open `customer_order` rows (status in DRAFT / RESERVED / DEPOSIT_PAID / PARTIALLY_PAID / READY) bucketed by days-since-create into 0-7 / 8-30 / 31-60 / 61-90 / 91+ ranges. New queries `CustomerOrderRepository.findByCompanyId{And BranchId}AndStatusInOrderByCreatedAtAsc` return the open set oldest-first. `LaybyAgeingReportServiceImpl` walks the list once, classifying each into a `(type, bucket)` BucketKey while folding per-type totals into `balanceByType` + `countByType` and pushing the order into the flat drill-down with computed `ageDays` + `daysUntilExpiry` (vs `reserved_until`). Bucket rows sorted by type asc then minDays asc; drill-down already oldest-first from the JPQL ORDER BY. Envelope `LaybyAgeingReportDto` carries `asOf` (defaults to "now"), per-type top-line maps, bucket rollup, and the per-order drill-down. Endpoint `GET /api/v1/reports/layby-ageing?branchId=&type=&asOf=` (gated `ORDER.READ` or `ORDER.MANAGE`) — optional `type` filter (LAYBY / PRE_ORDER) for chefs who only want pre-orders or the customer-service desk who only chase laybys.
+- F8.5 — Gift card outstanding liability (backend). Per-currency rollup of outstanding balance plus a per-(status, currency, branch) drill-down. New JPQL aggregation `GiftCardRepository.aggregateLiability` groups by `(status, currency_code, issued_by_branch_id)` and sums `current_balance`, returning `(status, currency, branchId, sumBalance, cardCount)` with optional `branchId` scope + optional `asOf` cutoff (`issued_at <= cutoff`) so finance can run the report for a period close. `GiftCardLiabilityReportServiceImpl` flags ACTIVE + FROZEN as outstanding (we still owe the bearer); FULLY_REDEEMED / EXPIRED / REFUNDED surface for audit but don't roll into the top-level liability total. The envelope DTO `GiftCardLiabilityReportDto` carries `outstandingByCurrency` + `outstandingCountByCurrency` maps for the dashboard headline, plus the rows sorted outstanding-first then by currency / status. Endpoint `GET /api/v1/reports/gift-card-liability?branchId=&asOf=` (gated `GIFTCARD.LOOKUP` so finance can run it without holding the broader issue / redeem / freeze rights).
+- F8.4 — Production wastage rollup (backend). Wastage-only summary report at `GET /api/v1/reports/production-wastage` (gated `PROD.READ_REPORT` or `PROD.RECORD_WASTAGE`) — per-(section, category) totals over a window for the chef-manager dashboard. New JPQL aggregation `ProductionWastageRepository.aggregateBySectionCategoryItem` joins `production_wastage × production_batch` over an Instant range and groups by `(pb.section_id, w.category, w.item_id)` returning `(sectionId, category, itemId, sumQty, count)` — service folds across items per (section, category) bucket. Optional filters: `branchId`, `sectionId`, `category`. Default 30-day window when `from` / `to` omitted. `WastageReportRowDto` carries sectionCode + sectionName + branchId + category + totalQty + totalCost (qty × item.avg_cost summed; best-effort since avg cost drifts post-event) + distinctItemCount + recordCount. Sorted by section name asc, then totalCost desc inside the section so the highest-loss category surfaces first per section. The per-batch variance side (planned vs actual + per-row wastage list per batch) already shipped in F7.4 at `/api/v1/reports/production-variance`; per-batch wastage drill-down already at `GET /api/v1/production-wastage?productionBatchId=…` (F7.3c).
+- F8.3 — Section P&L (backend; web `/reports/section-pnl` dashboard deferred). POS-only at MVP — back-office `sales_invoice` doesn't carry a section dimension (DATA-MODEL.md §2129). New JPQL aggregations: `PosSaleLineRepository.aggregateBySection` joins `pos_sale × pos_sale_line` grouping by `pos_sale.section_id` (header carries it, not line) and returns `(sectionId, revenue, cogs, headerCount)` for a given `(branchId, from, to, status, kind)` — service calls it once with `(POSTED, SALE)` and once with `(POSTED, REFUND)` so refunds subtract cleanly from both revenue and COGS (reversal returns stock to shelf so the COGS contribution flips back). `ProductionWastageRepository.aggregateBySectionAndItem` joins `production_wastage × production_batch` over an Instant range returning `(sectionId, itemId, qty)`; the service multiplies by `item.avg_cost` for a best-effort wastage cost — drifts from cost-at-event but close enough for a daily dashboard. `SectionPnlRowDto` returns sectionCode + sectionName + branchId + revenue + refunds + cogs + grossMargin (revenue − refunds − cogs) + wastageQty + wastageCost + sale / refund counts; sorted by revenue descending. New endpoint `GET /api/v1/reports/section-pnl?branchId=&from=&to=` on the existing `SalesReportController`; default 30-day window when from/to omitted.
+- F8.2 — Sales reporting (backend; web `/reports/sales` dashboard deferred). Three reports under `/api/v1/reports/`. `sales-daily` (US-RPT-001) blends back-office sales_invoice + POS pos_sale rows for a (branch, business_date) into a flat `DailySalesRowDto` list, sorted by occurredAt asc; each row carries `Source` (SALES_INVOICE | POS_SALE), id, number, customerId, totals, status, payment terms (null for POS) — POS status composes kind + lifecycle (`SALE_POSTED`, `REFUND_POSTED`, `SALE_VOIDED`, …). New queries: `SalesInvoiceRepository.findPostedOnDate` (POSTED/PARTIALLY_PAID/PAID/VOIDED filter on `posted_business_date`), `PosSaleRepository.findByCompanyId{And BranchId}AndBusinessDateOrderByIdAsc`. `sales-summary` (US-RPT-002) returns `DailySummaryDto` — invoice + POS net + grand total in `SalesBlock` (refunds contribute negatively, VOIDED skipped), `purchases` rolls up POSTED `grn.total_amount` for the day via new `GrnRepository.findByCompanyId{And BranchId}AndReceivedDateAndStatus`, `cash` sums `cash_book` rows for the day with `closingByAccount` EnumMap keyed by `CashAccount` (CASH_BOX / BANK / MOBILE_MONEY / TILL). `z-history` (US-RPT-003) returns `ZHistoryEntryDto` per till session whose `business_date` falls in `[from, to]` (defaults: last 7 days), each carrying the full `TillReportDto` from the existing `TillReportService.zReport`; OPEN sessions skipped (Z-report not yet computable), a single failing Z computation surfaces as an entry with null report rather than killing the whole window. New query `TillSessionRepository.findByCompanyId{And BranchId}AndBusinessDateBetweenOrderByIdDesc`. `SalesReportController` matches existing `SalesInvoiceController` pattern — not @PreAuthorize-gated.
+- F8.1 — Stock reporting (backend; web `/reports/stock` dashboard deferred). Three reports for the storekeeper / merchandiser, all under `/api/v1/reports/`. `negativeOnHand` (US-RPT-006) — `ItemBranchBalanceRepository.findNegativeOnHand(branchId)` JPQL query returns every (item, branch) row where `qty_on_hand < 0`, sorted most-negative first, optional branch filter; surface for investigation of oversells / missed adjustments. `fastMovers` + `slowMovers` (US-RPT-005) — new `StockMoveRepository.aggregateMovementByItem` JPQL aggregation sums `ABS(qty)` per `item_id` for the selected `move_type` subset over a `(from, to)` date window (Instant-converted at UTC midnight, inclusive of both endpoints); ranks descending for fast / ascending for slow. Default `move_type` filter is just `SALE`; pass `moveTypes=SALE,PROD_CONSUME` etc. to broaden the throughput view. Default date range is the last 30 days when `from` / `to` are omitted. Slow movers includes zero-movement items so a long-tail item that hasn't sold in the window still surfaces — left-joins the aggregation against every ACTIVE item via `ItemRepository.findByCompanyIdAndStatusOrderByIdAsc(companyId, ACTIVE)`. `ItemMovementRowDto` returns `(itemId, itemCode, itemName, movedQty, qtyOnHand)`; when `branchId` is null the on-hand is summed across all branches. `StockReportController` at `/api/v1/reports/stock-{negative|fast-movers|slow-movers}` — not @PreAuthorize-gated, matching the existing `StockController` reads (authentication is still required). The stock-card endpoint already lives at `GET /api/v1/stock-card` from F2.2 (US-RPT-004 — no new work needed).
+
+**Next slice (start here):** Phase 8 backend is **COMPLETE**. Pick from the deferred backlog: (a) **web `/reports/*` child routes** — statements, ageing, X/Z, section P&L, sales summary, stock reports, VAT return — so finance/managers can actually consume the data; (b) **Phase-0 test debt** — F0.1 / F0.2 / F0.3 unit + integration tests; (c) **F5.10 PDF + object-storage upload** for X/Z reports (follow-on infra slice); (d) **F6.2 per-currency close variance** (needs `declaredCashByCurrency` on the close request); (e) **F7.2 web `/orders` + Flutter at-till collection + PRE_ORDER `ProductionOutputPosted.v1` consumer** (replaces the manual `/ready` endpoint); (f) deferred production follow-ups — custom-production no-BOM path (P2), PRE_ORDER ↔ production auto-wiring. F3.5 (vendor return) deferred to Phase 8; F4.1 (quotation) skipped; Flutter POS deferred.
 
 **Pending across all of Phase 0 (tests + docs):**
-- Unit + integration tests for F0.1 / F0.2 / F0.3 / F0.4 — none authored yet; the per-module + e2e test catalogue in [docs/qa/](qa/) describes what needs to land.
+- Unit + integration tests for F0.1 / F0.2 / F0.3 — none authored yet. F0.4 has `RoleAdminServiceImplTest`; F0.5 has `BranchAccessGuardTest`. Integration/system layers still pending. See [docs/qa/](qa/).
 - POS (Flutter) login wiring — deferred until F5.1 (till session work).
 - "Logout everywhere" button — backend endpoint exists; UI button still missing.
 
@@ -161,19 +234,19 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.4 — RBAC wiring (permissions in JWT)
 
-**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[~]` (backend done — commit `b4b013a`; web admin UI pending)
+**Story:** US-IAM-008, US-IAM-009 · **Size:** M · **Status:** `[x]` (backend `b4b013a`; F0.4b admin UI + endpoints follow-up)
 **Dependencies:** F0.2.
 
 **Backend:**
 - [x] `Role`, `Permission`, `UserRole` entities + repos (role_permission via `@ManyToMany` join table).
-- [ ] `RoleAdminService` + Impl + `RoleAdminController` for CRUD — **NEXT** (admin endpoints for managing roles + grants).
+- [x] `RoleAdminService` + Impl + `RoleAdminController` — role CRUD, permission assignment, grant/revoke endpoints, all gated by `@PreAuthorize("hasAuthority('IAM.MANAGE_ROLES')")`. System roles are mutation-locked.
 - [x] `AuthServiceImpl.login()` + `refresh()` load permissions via `PermissionResolverService.resolve(userId, companyId, branchId)`.
 - [x] JWT `perms[]` populated from resolver instead of `List.of()`.
 - [x] Flyway `V4` seeds 10 permissions + ADMIN role + grants all-to-ADMIN. Bootstrap (FirstRunSetupService + DevSeed) assigns ADMIN role to the admin user.
 
 **Web:**
-- [ ] `RoleAdminComponent` for admins to create roles, assign permissions, grant to users — **NEXT**.
-- [ ] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission — **NEXT**.
+- [x] `RoleAdminComponent` (`/admin/roles`) — create roles, edit details, assign permissions (grouped by module), grant/revoke to users.
+- [x] `HasPermissionDirective` (`*orbixHasPermission="'ITEM.CREATE'"`) hides UI per permission; `AuthService` decodes the JWT `perms[]` claim into a signal.
 
 **Tests:**
 - **Unit:** `RoleAdminServiceImplTest`, `AuthServiceImplTest` extended to load permissions.
@@ -186,21 +259,21 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F0.5 — Active branch context switching
 
-**Story:** US-COMP-005 · **Size:** S · **Status:** `[ ]`
+**Story:** US-COMP-005 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [x] `JwtAuthenticationFilter` already reads `X-Branch-Id` header to override JWT's `bid` (verify only).
-- [ ] `BranchAccessGuard` verifies the user has a `user_role` grant for that branch; returns 403 otherwise.
-- [ ] `PUT /api/v1/session/active-branch` persists preference on `app_user` (optional — purely UX).
+- [x] `JwtAuthenticationFilter` reads `X-Branch-Id` to override JWT's `bid`; when the override differs from the token branch it runs `BranchAccessGuard` and sends 403 if denied.
+- [x] `BranchAccessGuard` verifies the user holds an active `user_role` grant covering that branch (branch-specific or company-wide); throws `AccessDeniedException` otherwise.
+- [x] `SessionService` + `SessionController` — `GET /api/v1/session/branches` (branches the caller can switch into) and `PUT /api/v1/session/active-branch` (persists `default_branch_id` on `app_user`, access-guarded).
 
 **Web:**
-- [ ] Branch dropdown in the app shell. On change, persist to `sessionStorage` + add `X-Branch-Id` to all calls.
+- [x] Branch dropdown in the app shell (shown when the user has >1 accessible branch). On change it calls `PUT /session/active-branch`, persists to `localStorage` (`orbix.activeBranchId`, already read by `AuthInterceptor` as `X-Branch-Id`), then reloads. `AuthService` clears the key on login/logout.
 
 **Tests:**
-- **Unit:** `BranchAccessGuardTest`.
-- **Integration:** Switching branch then making a request — verify `RequestContext.branchId` matches.
-- **System:** `TC-ADMIN-018`, `TC-ADMIN-019`.
+- **Unit:** `BranchAccessGuardTest` — done (allow / deny / incomplete-context).
+- **Integration:** Switching branch then making a request — verify `RequestContext.branchId` matches. *(pending — Phase-0 test debt)*
+- **System:** `TC-ADMIN-018`, `TC-ADMIN-019`. *(pending)*
 
 **DoD:** A multi-branch user switches in the dropdown and reads / writes are scoped to the new branch.
 
@@ -212,165 +285,168 @@ Update the plan as you go; commit the change alongside the feature.
 
 ## F1.1 — Branch + section CRUD (admin module)
 
-**Story:** US-COMP-004, US-ADMIN-001, US-ADMIN-002 · **Size:** M · **Status:** `[ ]`
+**Story:** US-COMP-004, US-ADMIN-001, US-ADMIN-002 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [ ] `BranchService` + Impl + `BranchController` (`POST /api/v1/branches`, `PATCH`, `POST /{id}/deactivate`).
-- [ ] `SectionService` + Impl + `SectionController` (`POST /api/v1/branches/{id}/sections`, `PATCH`, `POST /{id}/deactivate`).
-- [ ] On branch create: auto-create default RETAIL_FLOOR section + per-branch number sequences (LPO, GRN, INV, RCT, TILL, ORD, GC) + walk-in customer (via `party` — deferred to F1.3).
-- [ ] Invariants: branch can't deactivate with open till; can't deactivate last RETAIL_FLOOR section; section can't deactivate with active tills / BOMs.
+- [x] `BranchService` + Impl + `BranchController` — list / get / `POST` / `PATCH` / `POST /{id}/deactivate`, gated by `ADMIN.MANAGE_BRANCHES`. Emits `BranchCreated/Updated/Deactivated.v1`.
+- [x] `SectionService` + Impl + `SectionController` — `GET|POST /api/v1/branches/{id}/sections`, `PATCH /sections/{id}`, `POST /sections/{id}/deactivate`, gated by `ADMIN.MANAGE_SECTIONS`. Emits `SectionCreated/Updated/Deactivated.v1`.
+- [x] On branch create: auto-create default `MAIN` RETAIL_FLOOR section. *(Per-branch number sequences deferred — `number_sequence` is a `common`-module concern, not yet built; walk-in customer deferred to F1.3 per plan.)*
+- [x] Invariants: can't deactivate the last active RETAIL_FLOOR section in a branch; can't deactivate an already-inactive branch/section. *(Open-till / active-BOM checks are TODO markers — those entities land in F5.1 / F7.3.)*
 
 **Web:**
-- [ ] `BranchListComponent`, `BranchEditComponent` under `/admin/branches`.
-- [ ] `SectionListComponent` under each branch.
+- [x] `BranchAdminComponent` under `/admin/branches` — branch list + create + edit + deactivate, and per-branch section list with create / edit / deactivate. (Single cohesive component, matching the `RoleAdminComponent` precedent rather than the 3-component split originally sketched.)
 
 **Tests:**
-- **Unit:** `BranchServiceImplTest`, `SectionServiceImplTest`.
-- **Integration:** Branch deactivate with open till → 422.
-- **System:** `TC-ADMIN-004` .. `TC-ADMIN-012`.
+- **Unit:** `BranchServiceImplTest` (6), `SectionServiceImplTest` (9) — done.
+- **Integration:** Branch deactivate with open till → 422. *(pending — needs the Till entity)*
+- **System:** `TC-ADMIN-004` .. `TC-ADMIN-012`. *(pending)*
 
-**DoD:** Admin creates a second branch, adds a Bakery section, sees both in the dropdown.
+**DoD:** Admin creates a second branch, adds a Bakery section, sees both in the dropdown. *(Branch dropdown wired in F0.5; the new branch appears once the user has a grant covering it.)*
 
 ---
 
 ## F1.2 — Currency + FX rate
 
-**Story:** US-ADMIN-003, US-ADMIN-004, US-ADMIN-006 · **Size:** S · **Status:** `[ ]`
+**Story:** US-ADMIN-003, US-ADMIN-004, US-ADMIN-006 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F1.1.
 
 **Backend:**
-- [ ] `Currency`, `FxRate`, `TillCurrency` entities + repos.
-- [ ] `CurrencyService` + Impl, `FxRateService` + Impl with "most recent ≤ time" lookup.
-- [ ] Controllers: `POST /api/v1/currencies`, `POST /api/v1/fx-rates`, `PUT /api/v1/tills/{id}/currencies`.
+- [x] `Currency`, `FxRate` entities + repos (pre-existing from V3). *(`TillCurrency` deferred to F5.1 — needs the Till entity.)*
+- [x] `CurrencyService` + Impl, `FxRateService` + Impl. FX `effectiveRate(from,to,at)` does the "most recent ≤ time" lookup; `quoteRate` is append-only and rejects same-currency / non-positive / unknown-currency quotes.
+- [x] Controllers: `CurrencyController` (`GET`, `POST`, `POST /{code}/enable|disable`, gated `ADMIN.MANAGE_CURRENCIES`); `FxRateController` (`GET`, `POST`, `GET /effective`, gated `ADMIN.MANAGE_FX`). *(`PUT /api/v1/tills/{id}/currencies` deferred to F5.1.)*
 
 **Web:**
-- [ ] `/admin/currencies` enable / disable currencies.
-- [ ] `/admin/fx-rates` quote form + history table.
+- [x] `/admin/currencies` — currency table with enable/disable + add-currency form.
+- [x] `/admin/fx-rates` — quote form + rate-history table.
 
 **Tests:**
-- **Unit:** `FxRateServiceImplTest` — most-recent lookup; rejects same-currency rate; rejects rate ≤ 0.
-- **Integration:** Quote rate, look up at various timestamps.
-- **System:** `TC-ADMIN-013`, `TC-ADMIN-014`, `TC-ADMIN-015`, `TC-ADMIN-016`.
+- **Unit:** `FxRateServiceImplTest` (7) — done (most-recent lookup, same-currency, rate ≤ 0, unknown currency).
+- **Integration:** Quote rate, look up at various timestamps. *(pending)*
+- **System:** `TC-ADMIN-013` .. `TC-ADMIN-016`. *(pending)*
 
-**DoD:** Admin enables USD, quotes today's rate; till accepts USD.
+**DoD:** Admin enables USD, quotes today's rate. *(Till-accepts-USD half deferred with `TillCurrency` to F5.1.)*
 
 ---
 
 ## F1.3 — Catalog: item CRUD + groups
 
-**Story:** US-CAT-001, US-CAT-002, US-CAT-004 · **Size:** M · **Status:** `[~]` (Item entity exists; controller exists)
+**Story:** US-CAT-001, US-CAT-002, US-CAT-004 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
 - [x] `Item` entity + `ItemRepository` + `ItemServiceImpl.create()` + `ItemController` (POST).
-- [ ] Add: `GET /api/v1/items` (paged), `GET /{id}`, `PATCH /{id}`, `POST /{id}/archive`, `POST /{id}/activate`.
-- [ ] `ItemGroup` entity + tree-CRUD (`POST /api/v1/item-groups`, `POST /{id}/move`).
-- [ ] Soft-delete via `status = ARCHIVED`; archive blocked if active promotion (later) or active batches (later).
-- [ ] Meilisearch indexer that subscribes to `ItemCreated.v1` / `ItemUpdated.v1` / `BarcodeAdded.v1`.
+- [x] `GET /api/v1/items` (paged, optional `status` filter, `PageDto<T>` envelope), `GET /{id}`, `PATCH /{id}`, `POST /{id}/archive`, `POST /{id}/activate`. Emits `ItemUpdated/Archived/Activated.v1`.
+- [x] `ItemGroup` entity + repository + `ItemGroupService` tree-CRUD — `GET`, `POST /api/v1/item-groups`, `PATCH /{id}` (rename), `POST /{id}/move` (re-parents subtree, recomputes `level`, rejects cycles), `POST /{id}/archive`. Migration `V4_2` adds `item_group_seq` (mysql + postgres).
+- [x] Soft-delete via `status = ARCHIVED`; archive idempotency guarded. *(Active-promotion / active-batch blocks are TODO — those entities land in F1.5 / F2.4.)*
+- [ ] Meilisearch indexer that subscribes to `ItemCreated.v1` / `ItemUpdated.v1` / `BarcodeAdded.v1` — **deferred**: `platform.search` owns the indexer; catalog only emits the events (already does).
 
 **Web:**
-- [ ] `/catalog/items` list + filter + paged grid.
-- [ ] `/catalog/items/new` and `/catalog/items/:id/edit`.
-- [ ] `/catalog/groups` tree view + drag-to-reparent.
+- [x] `/catalog/items` list + status filter + paged grid (`ItemListComponent`).
+- [x] `/catalog/items/new` and `/catalog/items/:id/edit` (`ItemEditComponent`). *(UoM / VAT-group are raw id inputs pending F1.4 list endpoints.)*
+- [x] `/catalog/groups` tree view + move-under-parent (`ItemGroupComponent`). *(Move via parent dropdown rather than drag-and-drop.)*
 
 **Tests:**
-- **Unit:** `ItemServiceImplTest` covers create, edit, archive blocking rules.
-- **Integration:** Create item, search Meilisearch within 1s.
-- **System:** `TC-CAT-001` .. `TC-CAT-008`.
+- **Unit:** `ItemServiceImplTest` (10), `ItemGroupServiceImplTest` (8) — create / edit / archive / activate / list / move / cycle rejection.
+- **Integration:** Create item, search Meilisearch within 1s. *(pending — needs the search module)*
+- **System:** `TC-CAT-001` .. `TC-CAT-008`. *(pending)*
 
-**DoD:** Admin creates an item via the web form, sees it in the list, archives it, sees it disappear from default filters.
+**DoD:** Admin creates an item via the web form, sees it in the list, archives it, filters it back. Item-group tree is editable.
 
 ---
 
 ## F1.4 — Catalog: barcodes, UoM, VAT groups
 
-**Story:** US-CAT-003, US-COMP-006, US-COMP-007 · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-003, US-COMP-006, US-COMP-007 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.3.
 
 **Backend:**
-- [ ] `ItemBarcode`, `Uom`, `UomConversion`, `VatGroup` entities + repos.
-- [ ] CRUD endpoints.
-- [ ] Barcode UNIQUE per company; weighed item requires EMBEDDED_WEIGHT / PLU barcode.
+- [x] `Uom`, `VatGroup`, `ItemBarcode` entities + repos. Migration `V4_3` adds `uom_seq` / `vat_group_seq` / `item_barcode_seq` (mysql + postgres).
+- [x] CRUD endpoints — `UomController` (`/api/v1/uoms`), `VatGroupController` (`/api/v1/vat-groups`, + archive), `ItemBarcodeController` (`/api/v1/items/{id}/barcodes`, `DELETE /barcodes/{id}`). Gated by the `ITEM.*` catalog permissions.
+- [x] Barcode globally unique (matches the `uk_item_barcode` DDL); VAT group enforces single company default; `BarcodeAdded.v1` emitted.
+- [ ] `UomConversion` — **deferred**: no `uom_conversion` table yet (needs its own migration) and no UI in F1.4 scope; revisit alongside pack-conversion work.
+- [ ] Weighed-item requires EMBEDDED_WEIGHT / PLU barcode — **deferred to F1.6**: `item.is_weighed` and `item_barcode.barcode_type` are Phase-1.1 columns not yet added.
 
 **Web:**
-- [ ] `BarcodesPanelComponent` inside the item edit screen (add / remove rows).
-- [ ] `/admin/uoms`, `/admin/vat-groups`.
+- [x] `BarcodesPanelComponent` embedded in the item edit screen (add / remove rows).
+- [x] `/catalog/uoms` and `/catalog/vat-groups` screens. *(Placed under `/catalog` rather than `/admin` — the backend is the catalog module; linked from the catalog landing page.)*
 
 **Tests:**
-- **Unit:** Barcode uniqueness; UoM conversion arithmetic.
-- **Integration:** Create item with 3 barcodes, scan each.
-- **System:** `TC-CAT-010` .. `TC-CAT-015`.
+- **Unit:** `UomServiceImplTest` (4), `VatGroupServiceImplTest` (7), `ItemBarcodeServiceImplTest` (5) — code uniqueness, single-default, barcode uniqueness, company scoping.
+- **Integration:** Create item with 3 barcodes, scan each. *(pending)*
+- **System:** `TC-CAT-010` .. `TC-CAT-015`. *(pending)*
 
-**DoD:** A weighed item has both an `EAN13` and `EMBEDDED_WEIGHT` barcode; conversions are bidirectional.
+**DoD:** UoM + VAT registries are editable; an item can have multiple barcodes added/removed. *(Weighed-item barcode rule lands with F1.6; UoM conversions deferred.)*
 
 ---
 
 ## F1.5 — Catalog: price lists + price-change audit
 
-**Story:** US-CAT-007, US-CAT-008, US-CAT-014 · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-007, US-CAT-008, US-CAT-014 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.3, F1.4.
 
 **Backend:**
-- [ ] `PriceList`, `PriceListItem`, `PriceChangeLog` entities.
-- [ ] `PriceListService` + Impl. Setting a new price **closes** the prior `price_list_item` row (`valid_to = effective_from − 1`) and **appends** to `price_change_log`.
-- [ ] `ItemPriceChanged.v1` emitted.
+- [x] `PriceList`, `PriceListItem`, `PriceChangeLog` entities + repos. Migration `V5` creates the three tables; `V5_1` seeds their sequences (mysql + postgres).
+- [x] `PriceListService` + Impl + `PriceListController` (`/api/v1/price-lists` CRUD + archive, `GET|PUT /{id}/items`, `GET /items/{id}/price-changes`). `setPrice` **closes** the prior open `price_list_item` row (`valid_to = effective_from − 1`) and **appends** to `price_change_log`; rejects an effective date not after the current row's start. Single company-default invariant. Gated by `ITEM.*`.
+- [x] `ItemPriceChanged.v1` emitted on every price set.
 
 **Web:**
-- [ ] `/catalog/price-lists` with bulk-edit grid (CSV-style).
-- [ ] Price-change-log read-only view per item.
+- [x] `/catalog/price-lists` — price-list list + create/edit/archive, and a per-list current-price grid with a "set price" form (close+open). *(Form-driven rather than a CSV-style bulk grid.)*
+- [x] Price-change-log read-only view per item — `PriceHistoryPanelComponent` embedded in the item edit screen.
 
 **Tests:**
-- **Unit:** Close+open atomic; append-only price_change_log.
-- **Integration:** Multiple price changes — query log shows full history.
-- **System:** `TC-CAT-016` .. `TC-CAT-019`.
+- **Unit:** `PriceListServiceImplTest` (10) — close+open flow, null old-price on first set, effective-date guard, single-default, company scoping.
+- **Integration:** Multiple price changes — query log shows full history. *(pending)*
+- **System:** `TC-CAT-016` .. `TC-CAT-019`. *(pending)*
 
-**DoD:** Buyer changes RETAIL price for 10 items; reports show the old prices for sales made before the change.
+**DoD:** Buyer sets a price on a list; the prior row closes and the change is logged; per-item price history shows the trail.
 
 ---
 
 ## F1.6 — Catalog: weighed-item + batch-tracking flags
 
-**Story:** US-CAT-015, US-CAT-017 · **Size:** S · **Status:** `[ ]`
+**Story:** US-CAT-015, US-CAT-017 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F1.3.
 
 **Backend:**
-- [ ] Flyway adds `is_weighed`, `weighing_unit`, `tracks_batches` to `item` (V8 migration).
-- [ ] Validation: weighed item needs PLU / EMBEDDED_WEIGHT barcode; un-set `tracks_batches = false` blocked when active batches exist.
+- [x] Migration `V6` adds `item.is_weighed` + `item.weighing_unit` and `item_barcode.barcode_type`. *(`item.is_batch_tracked` already existed from the V2 baseline — it is now mapped on the entity as `batchTracked`; the plan's `tracks_batches` name resolves to that column.)*
+- [x] Validation in `ItemServiceImpl.updateItem`: `weighing_unit` set iff `weighed`; a weighed item needs ≥1 PLU / EMBEDDED_WEIGHT barcode. Emits `ItemWeighingChanged.v1`, `ItemBatchTrackingEnabled/Disabled.v1`.
+- [x] Un-set `batch_tracked` / archive blocked when active batches exist (F2.4 wired the `StockBatchRepository` lookup; covered by `ItemServiceImplTest`).
 
 **Web:**
-- [ ] Toggles on the item edit form.
+- [x] Weighed + batch-tracked toggles and a weighing-unit dropdown on the item edit form; barcode-type dropdown in the barcodes panel.
 
 **Tests:**
-- **Unit:** Validation rules.
-- **System:** `TC-CAT-025`, `TC-CAT-026`, `TC-CAT-027`.
+- **Unit:** `ItemServiceImplTest` extended (15) — weighed↔unit rule, weighed-needs-capable-barcode, weighing + batch-tracking events.
+- **System:** `TC-CAT-025`, `TC-CAT-026`, `TC-CAT-027`. *(pending)*
 
-**DoD:** "Bananas — KG" item has `is_weighed = true`, `weighing_unit = KG`, with a PLU barcode.
+**DoD:** A "Bananas — KG" item with a PLU barcode can be flagged `weighed = true`, `weighing_unit = KG`; flagging it weighed without such a barcode is rejected.
 
 ---
 
 ## F1.7 — Party: customer, supplier, employee, sales agent
 
-**Story:** US-PROC-001, US-SALES-001, US-SALES-002, US-HR-001, US-HR-002 · **Size:** L · **Status:** `[ ]`
+**Story:** US-PROC-001, US-SALES-001, US-SALES-002, US-HR-001, US-HR-002 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F0.4.
 
 **Backend:**
-- [ ] `Party`, `PartyAddress`, `PartyContact`, `Customer`, `Supplier`, `Employee`, `SalesAgent` entities.
-- [ ] Repos and services per role.
-- [ ] Shared-party logic: adding `customer` role to an existing party (by matching TIN) does NOT create a new party row.
-- [ ] Walk-in `customer` per branch created from F1.1 hook.
-- [ ] PII tagging — fields scrubbed from `audit_log` and outbound events.
+- [x] `Party`, `PartyAddress`, `PartyContact`, `Customer`, `Supplier`, `Employee`, `SalesAgent` entities (migration `V7` + `V7_1` sequences). Role tables share the party PK. `V8` seeds the 4 `PARTY.MANAGE_*` permissions.
+- [x] Repos + a service per role (`CustomerService` / `SupplierService` / `EmployeeService` / `SalesAgentService`) over a shared `PartyService`; controllers gated by `PARTY.MANAGE_*`.
+- [x] Shared-party logic: `PartyService.resolveOrCreate` reuses an existing company party with the same TIN rather than inserting a new row; a `GET /api/v1/parties/by-tin` lookup backs the web hint.
+- [x] Walk-in `customer` per branch — `BranchServiceImpl.createBranch` now calls `CustomerService.createWalkInCustomer` (idempotent).
+- [~] PII tagging — `@Pii` field marker added on party PII fields; the audit-log / event scrubbing that consumes it is **deferred** (touches shared `AuditAspect` / `EventPublisher` infra).
+- [ ] `PartyAddress` / `PartyContact` CRUD endpoints — entities + tables exist; per-address/contact endpoints **deferred** (core party carries inline phone/email/address).
 
 **Web:**
-- [ ] `/customers`, `/suppliers`, `/employees`, `/agents` list + edit screens.
-- [ ] On "create supplier" with an existing TIN: "Looks like a customer with this TIN exists — add supplier role to existing party?" modal.
+- [x] `/party/customers`, `/party/suppliers`, `/party/employees`, `/party/agents` list + create screens, sharing a `PartyDetailsFormComponent`.
+- [x] On create-customer / create-supplier with an existing TIN: an inline hint shows the matching party and that the role will attach to it (form-driven rather than a modal).
 
 **Tests:**
-- **Unit:** Each service's create / edit / deactivate; PII redaction.
-- **Integration:** Customer credit-limit + deactivate flow.
-- **System:** `TC-PARTY-001` .. `TC-PARTY-018`.
+- **Unit:** `PartyServiceImplTest` (6), `CustomerServiceImplTest` (6), `SupplierServiceImplTest` (4) — shared-party reuse, duplicate-role rejection, walk-in idempotency, company scoping.
+- **Integration:** Customer credit-limit + deactivate flow. *(pending)*
+- **System:** `TC-PARTY-001` .. `TC-PARTY-018`. *(pending)*
 
-**DoD:** Back-office user creates a B2B customer, a vendor, and an employee. Walk-in customer exists per branch.
+**DoD:** Back-office user creates a B2B customer, a vendor, and an employee; a second supplier created with an existing customer's TIN attaches to that party instead of duplicating it. Walk-in customer is provisioned with every new branch.
 
 ---
 
@@ -387,117 +463,120 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F2.1 — Business day open / close / override
 
-**Story:** US-DAY-001 .. US-DAY-005 · **Size:** M · **Status:** `[ ]`
+**Story:** US-DAY-001 .. US-DAY-005 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F1.1.
 
 **Backend:**
-- [ ] `BusinessDay`, `BusinessDayOverride` entities (tables in V1 baseline).
-- [ ] `BusinessDayService` + Impl. State machine OPEN → CLOSING → CLOSED.
-- [ ] `DayGuard` synchronous port consumed by every other module's posting service.
-- [ ] EOD pre-flight checks (delegated calls into pos / procurement / stock / production).
-- [ ] Scheduled job: auto-warn 30h, auto-revoke expired override.
-- [ ] Events: `BusinessDayOpened.v1`, `BusinessDayClosingStarted.v1`, `BusinessDayClosed.v1`, `BusinessDayOverrideOpened.v1`, `BusinessDayOverrideExpired.v1`.
+- [x] `BusinessDay` (composite PK, `@IdClass`) + `BusinessDayOverride` entities. `business_day` ships in V1; `V9` adds `business_day_override`, `V9_1` its sequence, `V10` seeds `DAY.*` permissions.
+- [x] `BusinessDayService` + Impl — OPEN → CLOSING → CLOSED state machine; invariants: at most one non-closed day per branch, monotonic business dates (no backdating an open). `BusinessDayController` gated by `DAY.OPEN` / `DAY.CLOSE`.
+- [x] `DayGuard` synchronous port — `requireOpenDay(branchId)` for other modules' posting services to consume.
+- [~] EOD pre-flight checks — `startClosing` is the hook; the delegated calls into pos / procurement / stock / production are **deferred** until those posting modules exist (TODO marker in place).
+- [ ] Scheduled job (auto-warn 30h, auto-revoke override) — **deferred**: the `business_day_override` schema is an audit record (no expiry/standing window), so the plan's `OverrideExpired` model doesn't match; revisit if a standing-override model is wanted.
+- [x] Events: `BusinessDayOpened.v1`, `BusinessDayClosingStarted.v1`, `BusinessDayClosed.v1`.
 
 **Web:**
-- [ ] `/day` dashboard: branch status, open day, end day, override dialog.
+- [x] `/day` dashboard: current-day status for the active branch, open-day form, start-closing + close-day actions (gated by `DAY.*`), recent-days table. *(Override dialog deferred — overrides are written when back-dating posts, which don't exist yet.)*
 
 **Tests:**
-- **Unit:** State transitions, monotonic-date, lockout on backdating.
-- **Integration:** Open day → fail EOD (open till) → close after till closes.
-- **System:** `TC-DAY-001` .. `TC-DAY-025`; cross-module `TC-E2E-017`, `TC-E2E-018`.
+- **Unit:** `BusinessDayServiceImplTest` (9) — open / start-closing / close transitions, single-non-closed-day + monotonic-date guards, company scoping.
+- **Integration:** Open day → fail EOD (open till) → close after till closes. *(pending — needs the till module)*
+- **System:** `TC-DAY-001` .. `TC-DAY-025`; cross-module `TC-E2E-017`, `TC-E2E-018`. *(pending)*
 
-**DoD:** Branch manager opens the day, runs through transactions, ends the day. Closed day rejects backdated postings unless an override is active.
+**DoD:** Branch manager opens the day on the `/day` dashboard and ends it (start-closing → close); a second open is rejected while one is non-closed; backdated opens are rejected.
 
 ---
 
 ## F2.2 — Stock ledger + balances
 
-**Story:** US-STOCK-001, US-STOCK-002, US-STOCK-009, US-STOCK-010 · **Size:** L · **Status:** `[ ]`
+**Story:** US-STOCK-001, US-STOCK-002, US-STOCK-009, US-STOCK-010 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.3 (items), F1.1 (branches).
 
 **Backend:**
-- [ ] `StockMove`, `ItemBranchBalance` entities + repos.
-- [ ] `StockMoveService` + Impl. Append-only — DB CHECK constraint rejects UPDATE.
-- [ ] Moving-average cost on inbound; outbound consumes at current `avg_cost`.
-- [ ] Negative-stock guard with supervisor override (`STOCK.OVERSELL` permission).
-- [ ] Events: `StockMoved.v1`, `BalanceUpdated.v1`, `LowStockTriggered.v1`, `NegativeStockBlocked.v1`.
-- [ ] `GET /api/v1/stock-moves` (paged, filtered), `GET /api/v1/balances`.
+- [x] `StockMove` (append-only, immutable) + `ItemBranchBalance` (composite-PK cache) entities + repos. Migration `V11` + `V11_1` sequence. Append-only is enforced at the app layer (no update path) — a portable DB-level UPDATE-reject trigger was skipped.
+- [x] `StockMoveService.post` updates the balance in the same transaction; moving-average cost on inbound, consume-at-`avg_cost` on outbound. Posting requires the branch's open business day (`DayGuard`).
+- [x] Negative-stock guard with `STOCK.OVERSELL` override (`V12` seeds the permission). *(`NegativeStockBlocked.v1` not emitted — a blocking throw rolls back the outbox row; needs a separate-tx emit, deferred.)*
+- [x] Events: `StockMoved.v1`, `BalanceUpdated.v1`, `LowStockTriggered.v1`.
+- [x] `GET /api/v1/stock-moves` (paged, branch filter), `GET /api/v1/balances`, `GET /api/v1/stock-card`. No POST endpoint — moves are posted by the modules that own the causing document (and F2.5 adjustments).
 
 **Web:**
-- [ ] `/stock/balances` grid with filters.
-- [ ] `/stock/card/:itemId` movement ledger per item.
+- [x] `/stock/balances` grid (active branch, low-stock rows highlighted).
+- [x] `/stock/card/:itemId` movement ledger per item.
 
 **Tests:**
-- **Unit:** Moving-average math; oversell block; same-tx event emission.
-- **Integration:** Replay stock_move to rebuild balance — match.
-- **System:** `TC-STOCK-001` .. `TC-STOCK-004`, `TC-STOCK-012`, `TC-STOCK-013`; `TC-E2E-021`.
+- **Unit:** `StockMoveServiceImplTest` (8) — moving-average math, oversell block + override, open-day requirement, same-tx event emission.
+- **Integration:** Replay stock_move to rebuild balance — match. *(pending)*
+- **System:** `TC-STOCK-001` .. `TC-STOCK-004`, `TC-STOCK-012`, `TC-STOCK-013`; `TC-E2E-021`. *(pending)*
 
-**DoD:** Stock balance updates atomically with every move. Stock card per item is queryable.
+**DoD:** A posted move updates `item_branch_balance` atomically (moving-average maintained); the per-item stock card is queryable; oversell is blocked without `STOCK.OVERSELL`.
 
 ---
 
 ## F2.3 — Stock counts + transfers
 
-**Story:** US-STOCK-004 .. US-STOCK-008 · **Size:** M · **Status:** `[ ]`
+**Story:** US-STOCK-004 .. US-STOCK-008 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F2.2.
 
 **Backend:**
-- [ ] `StockCount`, `StockCountLine`, `StockTransfer`, `StockTransferLine`.
-- [ ] Count lifecycle: DRAFT → IN_PROGRESS → CLOSED → POSTED.
-- [ ] Transfer lifecycle: DRAFT → ISSUED (in-transit) → RECEIVED → CLOSED.
+- [x] `StockCount`, `StockCountLine`, `StockTransfer`, `StockTransferLine` entities + repos. Migration `V13` / `V13_1` sequences; `V14` seeds `STOCK.COUNT` + `STOCK.TRANSFER`.
+- [x] Count lifecycle DRAFT → IN_PROGRESS → CLOSED → POSTED — create freezes system qty from the balance; close computes per-line variance; post turns every non-zero variance into an `ADJUSTMENT` move (`allowOversell`, posted at the item's current avg cost). `StockCountController` gated by `STOCK.COUNT`.
+- [x] Transfer lifecycle DRAFT → ISSUED → RECEIVED → CLOSED — issue posts `TRANSFER_OUT` from the source branch (cost frozen from its avg cost), receive posts `TRANSFER_IN` into the destination at that cost. `StockTransferController` gated by `STOCK.TRANSFER`. *(`IN_TRANSIT` is in the enum but the flow goes ISSUED→RECEIVED directly; revisit if a separate in-transit confirmation step is wanted.)*
 
 **Web:**
-- [ ] `/stock/counts` and `/stock/transfers` flows.
+- [x] `/stock/counts` — list + create + lifecycle (start / record counts / close / post).
+- [x] `/stock/transfers` — list + create + lifecycle (issue / receive / close).
 
 **Tests:**
-- **Unit:** Variance posting on count close; transfer in-transit accounting.
-- **System:** `TC-STOCK-005` .. `TC-STOCK-011`; `TC-E2E-020`.
+- **Unit:** `StockCountServiceImplTest` (5), `StockTransferServiceImplTest` (5) — variance compute + post, dup-number rejection, issue freezes cost + posts TRANSFER_OUT, receive posts TRANSFER_IN, non-ISSUED receive rejected.
+- **System:** `TC-STOCK-005` .. `TC-STOCK-011`; `TC-E2E-020`. *(pending)*
 
-**DoD:** Storekeeper runs a cycle count; variances post as adjustment moves. Inter-branch transfer flows end-to-end.
+**DoD:** Storekeeper runs a cycle count; non-zero variances post as ADJUSTMENT moves. An inter-branch transfer flows DRAFT → ISSUED → RECEIVED → CLOSED with the matching stock moves.
 
 ---
 
 ## F2.4 — Batch tracking + FEFO consumption
 
-**Story:** US-STOCK-011, US-STOCK-012, US-STOCK-013, US-STOCK-014 · **Size:** L · **Status:** `[ ]`
+**Story:** US-STOCK-011, US-STOCK-012, US-STOCK-013, US-STOCK-014 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F2.2, F1.6.
 
 **Backend:**
-- [ ] `StockBatch` entity, `StockBatchRepository`, `StockBatchService` + Impl.
-- [ ] On GRN of batch-tracked items: create `stock_batch` row.
-- [ ] On consumption: FEFO picker — earliest-expiry ACTIVE batch wins.
-- [ ] Scheduled expiry-flag job; `EXPIRY_WRITE_OFF` move type; `BatchRecalled.v1`.
+- [x] `StockBatch` entity (per (branch, item, batch_no), `ACTIVE`/`EXHAUSTED`/`EXPIRED`/`RECALLED`), `StockBatchRepository`, `StockBatchService` + Impl. `stock_move` gains a nullable `batch_id`; `PostStockMoveRequestDto` threads it through so callers can attribute a move to a specific batch.
+- [x] `StockBatchService.createBatch` — used by inbound flows (GRN / production output / opening) once they land. The actual call sites land with F3.2 / F7.3; for now F2.4 ships the service surface + the recall write-off path that already exercises it.
+- [x] `StockBatchService.drainFefo(itemId, branchId, qty)` — earliest-expiry first; drains each batch, flips it to `EXHAUSTED` when on-hand hits zero, emits `StockBatchExhausted.v1`, returns per-batch picks. Callers split outbound moves accordingly (POS / production wire it in F5.2 / F7.3).
+- [x] `StockBatchExpiryJob` `@Scheduled(cron = ...)` — flips ACTIVE rows whose `expiry_at` is before today to `EXPIRED`, emits `StockBatchExpired.v1` per row. Doesn't write `stock_move` rows itself; the matching write-off is an operator action (recall endpoint).
+- [x] `EXPIRY_WRITE_OFF` move type. `recallBatch(batchId, reason)` writes off remaining on-hand as an `EXPIRY_WRITE_OFF` move (with the right `batch_id` stamped) and emits `BatchRecalled.v1`.
+- [x] `V15` / `V15_1` migrations create `stock_batch` + add `stock_move.batch_id`; `V16` seeds `STOCK.BATCH` permission. `StockBatchController` gated by it.
 
 **Web:**
-- [ ] `/stock/batches` filter view + expiring-soon report.
+- [x] `/stock/batches` — "Expiring soon" (default; days-ahead configurable) and "All batches" (status / item / branch filters) modes; recall button on ACTIVE rows prompts for a reason.
 
 **Tests:**
-- **Unit:** FEFO picker; cost flows from chosen batch.
-- **Integration:** Mixed-batch consumption; expiry job marks batches.
-- **System:** `TC-STOCK-014` .. `TC-STOCK-019`; `TC-E2E-009`, `TC-E2E-010`.
+- **Unit:** `StockBatchServiceImplTest` (10) — create + dup rejection, FEFO order + exhaustion + insufficient-batches throw, mark-expired emits event, recall writes off remaining + emits event, recall on zero on-hand skips the move, foreign-company recall 404, expiring-soon filter. `StockMoveServiceImplTest` extended to cover `batchId` pass-through. `ItemServiceImplTest` extended with archive-guard + disable-tracking guard against active batches.
+- **Integration:** Mixed-batch consumption; expiry job marks batches. *(pending — slots in with F3.2 GRN integration)*
+- **System:** `TC-STOCK-014` .. `TC-STOCK-019`; `TC-E2E-009`, `TC-E2E-010`. *(pending)*
 
-**DoD:** Batch-tracked item's stock card shows per-batch breakdown; POS pulls earliest expiry first.
+**DoD:** Batch-tracked item's stock card shows per-batch breakdown; POS pulls earliest expiry first. *(POS wiring lands with F5.2; stock card per-batch view lands when callers start stamping `batch_id` on moves.)*
 
 ---
 
 ## F2.5 — Stock adjustments + internal consumption
 
-**Story:** US-STOCK-003, US-STOCK-015, US-STOCK-016 · **Size:** S · **Status:** `[ ]`
+**Story:** US-STOCK-003, US-STOCK-015, US-STOCK-016 · **Size:** S · **Status:** `[x]`
 **Dependencies:** F2.2.
 
 **Backend:**
-- [ ] `POST /api/v1/adjustments` + supervisor-threshold rule.
-- [ ] `POST /api/v1/internal-consumption` with `consumption_category` + `authorised_by_user_id`.
-- [ ] Section-tagged moves for section-to-section transfer.
+- [x] `POST /api/v1/adjustments` (`AdjustmentService` + Impl, gated by `STOCK.ADJUST`) — posts an `ADJUSTMENT` stock move; supervisor-threshold rule: when `|qty × cost|` exceeds `orbix.stock.adjustment-threshold` (default 50000) or `allowOversell = true`, an `authorisedByUserId` is required, must differ from the caller, and must hold `STOCK.ADJUST_APPROVE` (verified via `PermissionResolverService`).
+- [x] `POST /api/v1/internal-consumption` (`InternalConsumptionService` + Impl, gated by `STOCK.INTERNAL_CONSUMPTION`) — outbound `INTERNAL_CONSUMPTION` move with required `consumptionCategory` (CANTEEN / DISPLAY / SAMPLES / DONATION / MAINTENANCE / OTHER), `sectionId`, and `authorisedByUserId` (must hold the same permission and differ from caller).
+- [x] Section-tagged moves: `stock_move` gains nullable `section_id` / `consumption_category` / `authorised_by_user_id` (`V17`); `PostStockMoveRequestDto` threads them so any future section-to-section transfer path can stamp them.
 
 **Web:**
-- [ ] `/stock/adjust` form (manager).
-- [ ] `/stock/internal-consumption` form.
+- [x] `/stock/adjust` form — signed qty + reason + optional section / batch / authoriser + oversell checkbox.
+- [x] `/stock/internal-consumption` form — qty + category dropdown + required section / authoriser / reason.
 
 **Tests:**
-- **System:** `TC-STOCK-007`, `TC-STOCK-008`, `TC-STOCK-023`, `TC-STOCK-024`, `TC-STOCK-025`.
+- **Unit:** `AdjustmentServiceImplTest` (8) — below-threshold solo, above-threshold rejection without authoriser / self-authoriser / authoriser missing permission, above-threshold with approved authoriser, oversell forces authoriser, zero qty rejected, inbound uses unit cost for threshold. `InternalConsumptionServiceImplTest` (3) — happy path stamps category/section/authoriser, self-authoriser rejected, authoriser without `STOCK.INTERNAL_CONSUMPTION` 403.
+- **System:** `TC-STOCK-007`, `TC-STOCK-008`, `TC-STOCK-023`, `TC-STOCK-024`, `TC-STOCK-025`. *(pending)*
 
-**DoD:** Staff canteen draws stock; report shows consumption by category.
+**DoD:** Staff canteen draws stock; report shows consumption by category. *(Reporting view lands with F8.1/F8.2; F2.5 ships the posting path + per-category data on the move row.)*
 
 ---
 
@@ -505,78 +584,94 @@ Defer to Phase 8 unless biometric-cashier-login is a launch requirement.
 
 ## F3.1 — LPO lifecycle
 
-**Story:** US-PROC-002, US-PROC-003, US-PROC-011, US-PROC-012 · **Size:** L · **Status:** `[ ]`
-**Dependencies:** F1.7 (suppliers), F1.3 (items), F2.1 (day).
+**Story:** US-PROC-002, US-PROC-003, US-PROC-011, US-PROC-012 · **Size:** L · **Status:** `[x]`
+**Dependencies:** F1.7 (suppliers), F1.3 (items), F2.1 (day — declared but not enforced here; the day-guard kicks in at F3.2 when GRN posts stock).
 
 **Backend:**
-- [ ] `LpoOrder`, `LpoOrderLine` entities.
-- [ ] `LpoOrderService` + Impl. State machine DRAFT → PENDING_APPROVAL → APPROVED → CANCELLED.
-- [ ] Auto-approval below configured threshold; approval flow above.
-- [ ] PDF / email export via `LpoOrderRenderer` + email subscriber on `LpoOrderApproved.v1`.
+- [x] `LpoOrder` + `LpoOrderLine` entities (`V19` + `V19_1`); `LpoOrderRepository` + `LpoOrderLineRepository`. Header carries supplier / order date / expected delivery / currency / totals / status. Per-branch unique LPO number.
+- [x] `LpoOrderService` + Impl with state machine DRAFT → PENDING_APPROVAL → APPROVED; DRAFT/PENDING → CANCELLED. PARTIALLY_RECEIVED / RECEIVED transitions land with F3.2 (GRN). Line totals = `ordered_qty × unit_price × (1 − discount_pct/100)`; header tax rolls up from `vat_group.rate` snapshot per line.
+- [x] Auto-approval: when `total ≤ orbix.procurement.lpo-auto-approval-threshold` (defaults to 0 = always require explicit approval), `submit` skips PENDING_APPROVAL and goes straight to APPROVED. Approval endpoint is gated by `PROCUREMENT.APPROVE_LPO`.
+- [x] Events: `LpoOrderCreated/Submitted/Approved/Cancelled.v1` via the outbox.
+- [ ] PDF / email export via `LpoOrderRenderer` + email subscriber on `LpoOrderApproved.v1` — **deferred**: the event already fires, so a subscriber can land later without touching this service.
 
 **Web:**
-- [ ] `/procurement/lpos` list + new / view.
-- [ ] PDF preview, "send to supplier" action.
+- [x] `/procurement/lpos` — list (with status badges), draft creation (single-line via the form), and state-aware Submit / Approve / Cancel buttons. View pane shows header + lines + approved-by/at + notes.
+- [ ] PDF preview, "send to supplier" action — **deferred** with the renderer/email work above.
 
 **Tests:**
-- **Unit:** State transitions, threshold rule.
-- **System:** `TC-PROC-004` .. `TC-PROC-009`.
+- **Unit:** `LpoOrderServiceImplTest` (12) — create rolls up subtotal/tax/total + emits LpoOrderCreated.v1; line discount applied; duplicate number rejected; submit auto-approves below threshold + emits Approved (not Submitted); submit above threshold goes to PENDING_APPROVAL; submit with threshold=0 always pending; approve from PENDING_APPROVAL sets approvedBy/at + emits Approved; approve direct from DRAFT rejected; cancel from DRAFT works + emits Cancelled; cancel from APPROVED rejected; get-foreign-company 404; updateDraft deletes & replaces lines and re-rolls totals.
+- **Integration:** Multi-line LPO with mixed tax classes; auto-approval boundary. *(pending)*
+- **System:** `TC-PROC-004` .. `TC-PROC-009`. *(pending)*
 
-**DoD:** Merchandiser creates an LPO, sends for approval, manager approves, PDF emails to supplier.
+**DoD:** Merchandiser creates an LPO, sends for approval, manager approves. *(Partial DoD: PDF / email to supplier deferred with the renderer.)*
 
 ---
 
 ## F3.2 — GRN posting (+ batch capture)
 
-**Story:** US-PROC-004, US-PROC-005, US-STOCK-011 · **Size:** L · **Status:** `[ ]`
+**Story:** US-PROC-004, US-PROC-005, US-STOCK-011 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F3.1, F2.2, F2.4.
 
 **Backend:**
-- [ ] `Grn`, `GrnLine` entities (line carries `batch_no`, `expiry_at` for batch-tracked items).
-- [ ] `GrnService` + Impl. Validates against LPO line quantities; over-receipt rejected.
-- [ ] Direct GRN under `GRN.DIRECT` permission.
-- [ ] `GrnPosted.v1` → stock module writes `stock_move` rows (and `stock_batch` rows for batch-tracked items).
+- [x] `Grn` + `GrnLine` entities (`V21` + `V21_1`). Line carries `lpo_order_line_id` (nullable for direct), `batch_no`, `expiry_date`. Per-branch unique GRN number.
+- [x] `GrnService` + Impl. LPO-bound: requires APPROVED or PARTIALLY_RECEIVED LPO; matches supplier + branch; validates each line against `lpo_order_line.outstandingQty()` (over-receipt rejected); on post advances `received_qty` per LPO line and flips the LPO to PARTIALLY_RECEIVED or RECEIVED (all lines fully received). Header subtotal = Σ(received_qty × unit_cost); tax rolled up from `vat_group.rate` per line.
+- [x] Direct GRN: `lpoOrderId = null`. Gated by `GRN.DIRECT` (checked at the controller — the create endpoint inspects the security context).
+- [x] `GrnPosted.v1` event; posting routes through `StockMoveService.post` (DayGuard + moving-average reused). Batch-tracked items create a `stock_batch` via `StockBatchService.createBatch` first, then post the `stock_move` with the new `batch_id`. Validation: batch-tracked items require a non-blank `batchNo`.
+- [x] `V22` seeds `GRN.POST` (everyday receiving) + `GRN.DIRECT` (no-LPO receiving).
 
 **Web:**
-- [ ] `/procurement/grns` flow; "Receive against LPO" workflow.
+- [x] `/procurement/grns` — list (status badges) + "Receive against LPO" form that loads an LPO by id, surfaces per-line `outstandingQty`, and accepts qty / unit cost / batch_no per line. State-aware Post / Cancel buttons.
+- [ ] Direct (no-LPO) GRN form — **deferred**: the backend supports it (`GRN.DIRECT`), but the UI currently only drives receive-against-LPO. Add a separate flow when direct purchases land in pilot use.
 
 **Tests:**
-- **Integration:** GRN post → stock_batch + stock_move + avg_cost recomputed.
-- **System:** `TC-PROC-010` .. `TC-PROC-015`; `TC-E2E-002`, `TC-E2E-009`.
+- **Unit:** `GrnServiceImplTest` (10) — create against LPO rolls up subtotal/tax/total + emits Created; over-receipt rejected; LPO not in APPROVED/PARTIALLY_RECEIVED rejected; batch-tracked item without batch_no rejected; post writes stock moves with the right type + cost + emits Posted; batch-tracked item creates stock_batch and stamps batch_id on the move; partial receipt flips LPO to PARTIALLY_RECEIVED; full receipt flips to RECEIVED; cancel from DRAFT works; duplicate number rejected.
+- **Integration:** GRN post → stock_batch + stock_move + avg_cost recomputed. *(pending — exercised end-to-end once Testcontainers fixtures land)*
+- **System:** `TC-PROC-010` .. `TC-PROC-015`; `TC-E2E-002`, `TC-E2E-009`. *(pending)*
 
-**DoD:** Storekeeper receives goods against LPO; stock balance updates; batch-tracked items get batch rows.
+**DoD:** Storekeeper receives goods against LPO; stock balance updates; batch-tracked items get batch rows. *(Direct-GRN UI deferred; backend ready.)*
 
 ---
 
 ## F3.3 — Supplier invoice match (3-way)
 
-**Story:** US-PROC-006 · **Size:** M · **Status:** `[ ]`
+**Story:** US-PROC-006 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F3.2.
 
 **Backend:**
-- [ ] `SupplierInvoice`, `SupplierInvoiceGrn` entities.
-- [ ] `SupplierInvoiceService` + Impl. Match invoice to one or more GRNs; tolerance check; `SupplierInvoiceMatched.v1`.
+- [x] `SupplierInvoice` + `SupplierInvoiceGrn` (composite-PK junction) entities (`V23` + `V23_1`). DRAFT → POSTED lifecycle; DRAFT or POSTED → CANCELLED; settlement transitions (PARTIALLY_PAID / PAID) land with F3.4. Per-branch unique `number`, per-supplier unique `supplier_invoice_no`.
+- [x] `SupplierInvoiceService` + Impl. Match validation: every referenced GRN must be POSTED and from the same supplier; cumulative allocations to a GRN may not exceed `grn.total_amount` (over-allocation rejected; cancelled invoices excluded from the running total); Σ allocations must match `invoice.total_amount` within `orbix.procurement.invoice-match-tolerance-pct` (defaults 0.005 = ±0.5%). Due date defaults to `invoice_date + supplier.payment_terms_days`; can be overridden in the request. `SupplierInvoiceCreated/Matched/Cancelled.v1` events.
+- [x] `V24` seeds `PROCUREMENT.MANAGE_INVOICE` — controller gates all paths.
 
 **Web:**
-- [ ] `/procurement/invoices` match grid (drag GRN lines).
+- [x] `/procurement/invoices` — list with status-coloured badges; new-invoice form loads the chosen supplier's POSTED GRNs into a dropdown, each row adds one `(grnId, amount)` allocation, a live "Total / Allocated / Diff" banner warns when the match is outside tolerance; state-aware Post / Cancel buttons.
 
 **Tests:**
-- **System:** `TC-PROC-017` .. `TC-PROC-021`.
+- **Unit:** `SupplierInvoiceServiceImplTest` (13) — single-GRN full match + due-date from supplier terms; multi-GRN match within tolerance; outside-tolerance rejected; over-allocation rejected; foreign-supplier GRN rejected; unposted GRN rejected; explicit dueDate overrides supplier terms; post emits Matched event; post re-checks tolerance with current allocations; cancel from DRAFT works; duplicate branch number + duplicate supplier_invoice_no rejected; foreign-company 404.
+- **System:** `TC-PROC-017` .. `TC-PROC-021`. *(pending)*
 
-**DoD:** Accountant matches an invoice covering 2 GRNs; supplier debt opens correctly.
+**DoD:** Accountant matches an invoice covering 2 GRNs; supplier debt opens correctly. *(Payable status changes land with F3.4; F3.3 ships the matched invoice + its allocations + the events the cash module will consume.)*
 
 ---
 
 ## F3.4 — Supplier payment
 
-**Story:** US-PROC-007 · **Size:** M · **Status:** `[ ]`
-**Dependencies:** F3.3, F6.1 (cash entries).
+**Story:** US-PROC-007 · **Size:** M · **Status:** `[x]`
+**Dependencies:** F3.3 (invoices). F6.1 (cash entries / cash_book mirror) listens via event subscriber; F3.4 ships the payable side ahead of it.
 
 **Backend:**
-- [ ] `SupplierPayment`, `SupplierPaymentAllocation` entities (lives in `cash` module).
-- [ ] `SupplierPaymentService` + Impl.
+- [x] `SupplierPayment` + `SupplierPaymentAllocation` entities (lives in `cash` module, `V25` + `V25_1`). Per-branch unique payment number. DRAFT → POSTED → terminal lifecycle (POSTED writes settlement); DRAFT → CANCELLED. `PaymentMethod` enum: CASH / BANK_TRANSFER / CHEQUE / MOBILE_MONEY. `SupplierPaymentStatus` enum.
+- [x] `SupplierPaymentService` + Impl. Allocation guards: each invoice in-company + same supplier + no-duplicate-in-payment + `amount ≤ invoice.outstandingAmount()` + Σ allocations ≤ payment total. Posting requires `DayGuard.requireOpenDay(branchId)`. `SupplierInvoice` gained `outstandingAmount()` + `applyPayment(amount, actorId)` — flips to PARTIALLY_PAID until fully paid → PAID.
+- [x] Events: `SupplierPaymentCreated/Posted/Cancelled.v1`. The cash-side mirror (cash_entry OUT + cash_book delta) is owned by F6.1 and subscribes to `SupplierPaymentPosted.v1`.
+- [x] `V26` seeds `CASH.MANAGE_SUPPLIER_PAYMENT`; controller gates all paths.
 
-**Tests:** `TC-PROC-022` .. `TC-PROC-025`; `TC-E2E-002`.
+**Web:**
+- [x] `/procurement/payments` — supplier-scoped open-invoice picker (loads POSTED + PARTIALLY_PAID invoices for the chosen supplier); each allocation row shows the invoice's outstanding amount and pre-fills the input; live Total / Allocated / Remaining hint; state-aware Post / Cancel. (Mounted under `/procurement` for now; gets its own top-level `/cash` menu when F6.1 lands.)
+
+**Tests:**
+- **Unit:** `SupplierPaymentServiceImplTest` (10) — createDraft captures allocations + emits Created without touching invoices; allocation > outstanding rejected; Σ allocations > payment total rejected; foreign-supplier invoice rejected; duplicate-invoice allocation rejected; post advances paid_amount + flips PARTIALLY_PAID; full settlement flips to PAID; post requires DayGuard.requireOpenDay; cancel from DRAFT works; duplicate branch number rejected.
+- **System:** `TC-PROC-022` .. `TC-PROC-025`; `TC-E2E-002`. *(pending)*
+
+**DoD:** Accountant records a payment to a supplier; matched invoices flip to PARTIALLY_PAID / PAID; the `SupplierPaymentPosted.v1` event is queued for the F6.1 cash-side mirror.
 
 ---
 
@@ -593,29 +688,31 @@ Defer to Phase 8 if not used in pilot.
 
 ## F4.1 — Sales quotation
 
-**Story:** US-SALES-003, US-SALES-004 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-003, US-SALES-004 · **Size:** M · **Status:** `[skipped]`
 **Dependencies:** F1.7 (customers), F1.5 (price lists).
 
-Skip if pilot doesn't need quotations; jump to F4.2.
+Skipped — per plan "Skip if pilot doesn't need quotations; jump to F4.2." Revisit when a sales-quote flow is requested.
 
 ---
 
 ## F4.2 — Sales invoice posting (cash + credit)
 
-**Story:** US-SALES-005, US-SALES-006, US-SALES-007 · **Size:** L · **Status:** `[ ]`
+**Story:** US-SALES-005, US-SALES-006, US-SALES-007 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.7, F1.5, F2.2, F2.1.
 
 **Backend:**
-- [ ] `SalesInvoice`, `SalesInvoiceLine` entities.
-- [ ] `SalesInvoiceService` + Impl. Credit-limit check; discount-threshold rule; `min_sell_price` rule.
-- [ ] Void rule: same business day only.
-- [ ] Events: `SalesInvoicePosted.v1`, `SalesInvoiceVoided.v1`.
+- [x] `SalesInvoice` + `SalesInvoiceLine` entities (`V27` + `V27_1`); per-branch unique number; `PaymentTerms` (CASH/CREDIT). DRAFT → POSTED → settlement-via-F4.3 → VOIDED | CANCELLED.
+- [x] `SalesInvoiceService` + Impl. Credit-limit check sums POSTED + PARTIALLY_PAID outstanding debt against `customer.creditLimitAmount`; zero-limit rejects credit. Discount-threshold via `orbix.sales.discount-threshold-pct` requires `SALES.DISCOUNT_APPROVE` authoriser (verified via `PermissionResolverService`). `item.minSellPrice` enforced post-discount.
+- [x] Same-business-day-only void writes RETURN_IN compensating moves at the snapped line cost. Rejects voids on invoices with any payment or any batch-tracked line (use F4.4 customer return instead).
+- [x] Posting writes outbound SALE moves via `StockMoveService` (DayGuard + moving-average reused); batch-tracked items drain FEFO via `StockBatchService` and emit one move per pick — `line.cost_amount` becomes the qty-weighted cost across picks.
+- [x] Events: `SalesInvoiceCreated/Posted/Voided/Cancelled.v1`. `V28` seeds the 5 sales permissions in one shot.
 
 **Web:**
-- [ ] `/sales/invoices` flow; copy-from-quotation; line discounting.
+- [x] `/sales/invoices` — list with status-coloured badges + multi-line draft form (customer / agent / dates / terms / currency / price list / discount approver / per-line items). State-aware Post / Void / Cancel buttons.
 
 **Tests:**
-- **System:** `TC-SALES-001` .. `TC-SALES-013`; `TC-E2E-003`.
+- **Unit:** `SalesInvoiceServiceImplTest` (14) — create + totals, credit-limit + zero-limit, discount-threshold (missing / wrong-permission / approved authoriser), min-sell-price, post writes stock moves, batch-tracked FEFO drain, day-closed, same-day void, void-on-different-day rejected, void-with-batch rejected, cancel from draft.
+- **System:** `TC-SALES-001` .. `TC-SALES-013`; `TC-E2E-003`. *(pending)*
 
 **DoD:** Back-office user raises a credit invoice; debt opens.
 
@@ -623,35 +720,55 @@ Skip if pilot doesn't need quotations; jump to F4.2.
 
 ## F4.3 — Sales receipt + allocation
 
-**Story:** US-SALES-008, US-SALES-009 · **Size:** M · **Status:** `[ ]`
-**Dependencies:** F4.2, F6.1.
+**Story:** US-SALES-008, US-SALES-009 · **Size:** M · **Status:** `[x]`
+**Dependencies:** F4.2.
 
 **Backend:**
-- [ ] `SalesReceipt`, `ReceiptAllocation` entities + service.
-- [ ] Allocation oldest-first by default; surplus held as customer credit.
+- [x] `SalesReceipt` + `ReceiptAllocation` entities (`V29` + `V29_1`). DRAFT → POSTED → terminal + DRAFT → CANCELLED. `ReceiptMethod`: CASH/CARD/BANK_TRANSFER/MOBILE_MONEY/CHEQUE/STORE_CREDIT.
+- [x] `SalesReceiptService` + Impl. Allocation guards mirror F3.4: same-customer + in-company + no-duplicate-invoice + amount ≤ outstanding + Σ ≤ receipt total. Surplus tracked on `unallocated_amount`; customer-credit routing is follow-on work.
+- [x] DayGuard on post; `SalesInvoice.applyReceipt` flips PARTIALLY_PAID / PAID. `SalesReceiptCreated/Posted/Cancelled.v1` events.
 
 **Web:**
-- [ ] `/sales/receipts` flow; allocation grid.
+- [x] `/sales/receipts` with customer-scoped open-invoice picker that pre-fills the allocation amount from outstanding. State-aware Post / Cancel.
 
-**Tests:** `TC-SALES-014` .. `TC-SALES-017`; `TC-E2E-003`.
+**Tests:**
+- **Unit:** `SalesReceiptServiceImplTest` (9) — capture allocations + unallocated math; outstanding/total overruns rejected; foreign customer rejected; post advances invoice paid + flips PARTIALLY_PAID; full settlement → PAID; day-closed; cancel; duplicate number.
+- **System:** `TC-SALES-014` .. `TC-SALES-017`; `TC-E2E-003`. *(pending)*
 
 ---
 
 ## F4.4 — Customer return + credit note
 
-**Story:** US-SALES-010, US-SALES-011 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-010, US-SALES-011 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F4.2.
 
-**Tests:** `TC-SALES-018` .. `TC-SALES-021`.
+**Backend:**
+- [x] `CustomerReturn` + `CustomerReturnLine` entities (`V30` + `V30_1`). DRAFT → POSTED → CREDITED + DRAFT → CANCELLED. `ReturnReason`: DAMAGED/EXPIRED/WRONG_ITEM/BUYER_REMORSE/OTHER.
+- [x] On post (DayGuard required) writes RETURN_IN moves when `restock=true`, DAMAGE moves otherwise. Batch-tracked items rejected — restock-to-original-batch needs a separate slice.
+- [x] Issue-credit-note transitions POSTED → CREDITED and creates a `CustomerCreditNote` (DATA-MODEL §6.9) at the full return total. Allocation of the credit note to open invoices is a follow-on slice.
+- [x] Events: `CustomerReturnCreated/Posted/Cancelled.v1`, `CustomerCreditNoteIssued.v1`.
+
+**Web:**
+- [x] `/sales/returns` — list + draft form with reason + restock toggle + per-line items. State-aware Post / Cancel / Issue-credit-note.
+
+**Tests:** `TC-SALES-018` .. `TC-SALES-021`. *(pending)*
 
 ---
 
 ## F4.5 — Packing list
 
-**Story:** US-SALES-012 · **Size:** M · **Status:** `[ ]`
+**Story:** US-SALES-012 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F4.2.
 
-**Tests:** `TC-SALES-022` .. `TC-SALES-024`.
+**Backend:**
+- [x] `PackingList` + `PackingListLine` entities (`V31` + `V31_1`). DRAFT → DISPATCHED → DELIVERED → terminal + DRAFT → CANCELLED. Created against POSTED / PARTIALLY_PAID / PAID invoices.
+- [x] Tracking-only — no stock moves are written by the packing list itself; the parent sales invoice already decremented stock on post. The IN_TRANSIT split mentioned in DATA-MODEL §6.10 is deferred to a follow-on slice when packing-then-invoice workflow becomes a real customer ask.
+- [x] Events: `PackingListCreated/Dispatched/Delivered/Cancelled.v1`.
+
+**Web:**
+- [x] `/sales/packing-lists` — load invoice by id, tick lines + qty, draft → dispatch → deliver. State-aware buttons.
+
+**Tests:** `TC-SALES-022` .. `TC-SALES-024`. *(pending)*
 
 ---
 
@@ -661,150 +778,222 @@ The biggest phase. Strongly recommend doing F5.1 → F5.2 → F5.4 (offline sync
 
 ## F5.1 — Till + session lifecycle
 
-**Story:** US-POS-002, US-POS-016 · **Size:** L · **Status:** `[ ]`
+**Story:** US-POS-002, US-POS-016 · **Size:** L · **Status:** `[x]`
 **Dependencies:** F1.1, F2.1, F0.2.
 
 **Backend:**
-- [ ] `Till`, `TillSession` entities.
-- [ ] `TillSessionService` + Impl. Open with float; close with declared cash + variance; supervisor PIN above threshold.
-- [ ] `TillSessionOpened.v1`, `TillSessionClosed.v1`.
+- [x] `Till` + `TillSession` entities (`V32` + `V32_1`). Till status ACTIVE / INACTIVE; cannot deactivate while a session is OPEN.
+- [x] `TillSessionService` + Impl. OPEN → CLOSED → RECONCILED; at most one OPEN per till. Opening requires `DayGuard.requireOpenDay`. On close: `expected_cash = opening_float` (POS-sale cash + pickups + petty-cash contributions wire in F5.2+); `variance = declared - expected`. When `|variance| > orbix.pos.session-variance-threshold` (defaults to 1000), the close request requires a `supervisorId` holding `POS.SESSION_VARIANCE_APPROVE`, different from the caller (`PermissionResolverService` verifies).
+- [x] Events: `TillCreated/Activated/Deactivated.v1`, `TillSessionOpened/Closed/Reconciled.v1`.
+- [x] `V33` seeds `POS.MANAGE_TILL` / `SESSION_OPEN` / `SESSION_CLOSE` / `SESSION_RECONCILE` / `SESSION_VARIANCE_APPROVE`.
 
 **Flutter POS:**
-- [ ] Till-open screen, cashier+supervisor PIN flow.
-- [ ] Till-close screen; declare cash; show variance.
+- [ ] Till-open screen, cashier+supervisor PIN flow — **deferred** to the Flutter POS slice. F5.1 ships the backend + a web admin screen at `/admin/tills` so managers can manage tills and inspect / close / reconcile sessions while the cashier flow lives in the upcoming Flutter app.
+- [ ] Till-close screen; declare cash; show variance — same deferral.
+
+**Web:**
+- [x] `/admin/tills` — list + create + activate/deactivate tills; open / close / reconcile sessions; live variance display per session.
 
 **Tests:**
-- **Unit (backend):** Variance math, lockout on second open.
-- **Integration:** Open → multiple sales → close.
-- **System:** `TC-POS-001` .. `TC-POS-004`, `TC-POS-020`, `TC-POS-021`.
+- **Unit (backend):** `TillSessionServiceImplTest` (11) — open succeeds + emits event; rejects when an OPEN session exists; rejects inactive till; requires open business day; close below threshold succeeds; close above threshold without supervisor / with self-supervisor / with unauthorised supervisor / with approved supervisor; reconcile from CLOSED succeeds; reconcile from OPEN rejected.
+- **Integration:** Open → multiple sales → close. *(pending until F5.2 lands cash sales)*
+- **System:** `TC-POS-001` .. `TC-POS-004`, `TC-POS-020`, `TC-POS-021`. *(pending)*
 
-**DoD:** Cashier signs in, opens till, signs out at end of shift.
+**DoD:** Cashier signs in, opens till, signs out at end of shift. *(Backend ready; Flutter cashier UI lands with the POS sale slice.)*
 
 ---
 
 ## F5.2 — Basic POS sale (cash tender)
 
-**Story:** US-POS-003, US-POS-004, US-POS-009, US-POS-010 · **Size:** L · **Status:** `[ ]`
+**Story:** US-POS-003, US-POS-004, US-POS-009, US-POS-010 · **Size:** L · **Status:** `[x]` *(backend-complete; Flutter till app deferred)*
 **Dependencies:** F5.1, F2.2.
 
 **Backend:**
-- [ ] `PosSale`, `PosSaleLine`, `PosPayment` entities.
-- [ ] `PosSaleService` + Impl. Validates tender sum, section stamp, day open, stock available.
-- [ ] `PosSaleClosed.v1`.
+- [x] `PosSale` + `PosSaleLine` + `PosPayment` entities (`V34` + `V34_1`). POS sales are committed locally and pushed as POSTED — there is no DRAFT. Per-company unique `(number, client_op_id)`; section_id required on the header per Phase 1.1 §17.12.
+- [x] `PosSaleService` + Impl. Validates: idempotent retry on `clientOpId`; till session must be OPEN; section must belong to the till's branch; customer in-company; tender sum ≥ total → `change_amount = tender - total`. Posting routes through `StockMoveService` so DayGuard + moving-average + per-batch FEFO drains are reused. Batch-tracked items emit one stock_move per FEFO pick with `batch_id` stamped; `line.cost_amount` is the qty-weighted cost.
+- [x] Mixed tender supported via N `pos_payment` rows (CASH / CARD / MOBILE_MONEY / VOUCHER / STORE_CREDIT). Card payments record `terminal_id` + `last4` only — never the PAN.
+- [x] Events: `PosSaleClosed.v1`. `V35` seeds `POS.SALE_POST`.
 
 **Flutter POS:**
-- [ ] Barcode scan / typeahead → cart.
-- [ ] Tender + cash drawer interaction.
-- [ ] Thermal-printer receipt.
+- [ ] Barcode scan / typeahead → cart — **deferred** to the Flutter app slice.
+- [ ] Tender + cash drawer interaction — **deferred**.
+- [ ] Thermal-printer receipt — **deferred**.
+
+**Web:**
+- [x] `/admin/pos-sales` read-only viewer for managers (the push endpoint will be hit by the Flutter app; the admin web page lets managers inspect each sale's lines + payments).
 
 **Tests:**
-- **System:** `TC-POS-005` .. `TC-POS-011`; `TC-E2E-001`.
+- **Unit:** `PosSaleServiceImplTest` (10) — single-line cash sale + stock move + change; tender < total rejected; mixed-tender sums to zero change; idempotent retry on same `clientOpId` returns the prior sale without re-posting stock; closed till session rejected; section from wrong branch rejected; duplicate number rejected; batch-tracked FEFO drain emits one move per pick; closed business day propagates from `StockMoveService`; card payment persists reference / terminal / last4.
+- **System:** `TC-POS-005` .. `TC-POS-011`; `TC-E2E-001`. *(pending — exercise once Flutter app + Testcontainers end-to-end stack lands)*
 
-**DoD:** Cashier scans 5 items, takes cash, prints receipt.
+**DoD:** Cashier scans 5 items, takes cash, prints receipt. *(Backend ready; cashier UI lands with the Flutter app slice.)*
 
 ---
 
 ## F5.3 — Discounts, voids, mixed tender
 
-**Story:** US-POS-005, US-POS-006, US-POS-009 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-005, US-POS-006, US-POS-009 · **Size:** M · **Status:** `[x]`
 **Dependencies:** F5.2.
 
-**Tests:** `TC-POS-012` .. `TC-POS-015`.
+**Backend:**
+- [x] Per-line discount threshold via `orbix.pos.discount-threshold-pct` (default 10%); above-threshold lines require `discountApproverId` (must differ from caller, must hold `POS.DISCOUNT_APPROVE`).
+- [x] Optional header-level `headerDiscountAmount` on the request — applied after per-line tax; rejected when negative or > subtotal.
+- [x] Same-business-day void path: `POST /api/v1/pos-sales/{id}/void` (gated by `POS.SALE_VOID`). Writes RETURN_IN compensating stock moves at the snapped line cost; rejects voids on a different business day or on sales containing batch-tracked lines (use F5.5 refund there).
+- [x] Mixed tender (CASH / CARD / MOBILE_MONEY / VOUCHER / STORE_CREDIT) already live from F5.2 — F5.3 doesn't re-touch it.
+- [x] `V36` seeds `POS.SALE_VOID` + `POS.DISCOUNT_APPROVE`. Event: `PosSaleVoided.v1`.
+
+**Web:**
+- [x] `/admin/pos-sales` gains a Void button on POSTED sales (prompts for a reason); detail pane shows the header discount.
+
+**Tests:**
+- **Unit:** `PosSaleServiceImplTest` extended (+9 cases) — discount-threshold rejection / self-approver / unauthorised / approved-approver; header discount applied after tax; header discount > subtotal rejected; same-day void writes RETURN_IN + emits Voided event; different-day void rejected; batch-tracked void rejected.
+- **System:** `TC-POS-012` .. `TC-POS-015`. *(pending)*
 
 ---
 
 ## F5.4 — Offline sync
 
-**Story:** US-POS-017, US-POS-018 · **Size:** XL · **Status:** `[ ]`
+**Story:** US-POS-017, US-POS-018 · **Size:** XL · **Status:** `[x]` *(backend-complete; Flutter app deferred)*
 **Dependencies:** F5.2.
 
 Split into:
-- **F5.4a** Local SQLite catalog + balance snapshot pull.
-- **F5.4b** Outbox queue + sync push with `client_op_id` idempotency.
-- **F5.4c** Conflict resolution + re-order handling.
+- **F5.4a** Local SQLite catalog + balance snapshot pull — **server contract shipped**, Flutter side deferred.
+- **F5.4b** Outbox queue + sync push with `client_op_id` idempotency — **server contract shipped**, Flutter outbox deferred.
+- **F5.4c** Conflict resolution + re-order handling — partly served by per-item rejection in the batch push response; full UI deferred with the Flutter app.
 
 **Backend:**
-- [ ] `POST /api/v1/sync/push` endpoint accepting batched operations.
-- [ ] Idempotency on `client_op_id` (UNIQUE on `pos_sale`).
+- [x] `POST /api/v1/sync/push` — batched POS-sale push. Each item runs in its own `PosSaleService.post` transaction so partial failures don't drop the batch. The response carries per-item accepted/rejected verdicts keyed by `clientOpId` for the till to ack its outbox.
+- [x] Idempotency on `client_op_id` (UNIQUE on `pos_sale` per company) was already in place from F5.2; the sync push reuses it — the same `clientOpId` returns the prior sale's id without re-posting stock.
+- [x] `GET /api/v1/sync/catalog/snapshot?branchId=&priceListId=` — active items + barcodes + vat rate + weighed/batch flags + min sell price + current price-list price + per-branch on-hand qty (so the till can scan offline and warn on oversell).
+- [x] `GET /api/v1/sync/balances/snapshot?branchId=` — current `item_branch_balance` rows for a soft pre-flight oversell check.
+- [x] `V37` seeds `POS.SYNC`.
 
 **Flutter POS:**
-- [ ] Local DB (Drift): items, prices, recent sales, outbox.
-- [ ] Sync poller, retry, backoff.
-- [ ] Conflict UI when server rejects.
+- [ ] Local DB (Drift): items, prices, recent sales, outbox — **deferred** to the Flutter app slice. The server contract is locked.
+- [ ] Sync poller, retry, backoff — **deferred**.
+- [ ] Conflict UI when server rejects — **deferred** (server already returns per-item rejection reasons via the batch push DTO).
 
 **Tests:**
-- **Integration:** Push duplicate → no second row.
-- **System:** `TC-POS-022` .. `TC-POS-025`; `TC-E2E-004`.
+- **Unit:** `SyncServiceImplTest` (4) — all-accepted batch push; partial-failure isolation (one bad item, others still POSTED); catalog snapshot returns items + barcodes + price + on-hand correctly; balance snapshot returns branch rows.
+- **Integration:** Push duplicate → no second row. *(idempotency is already covered in `PosSaleServiceImplTest`)*
+- **System:** `TC-POS-022` .. `TC-POS-025`; `TC-E2E-004`. *(pending — need the Flutter app to drive end-to-end)*
 
-**DoD:** POS sells offline for 30 minutes, then catches up the moment network returns.
+**DoD:** POS sells offline for 30 minutes, then catches up the moment network returns. *(Backend ready; cashier UI lands with the Flutter app slice.)*
 
 ---
 
 ## F5.5 — Refund at till
 
-**Story:** US-POS-019, US-POS-020 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-019, US-POS-020 · **Size:** M · **Status:** `[x]` backend (cash-out wiring deferred to F6.1)
 **Dependencies:** F5.2, F6.1.
 
 **Backend:**
-- [ ] `pos_sale.kind = REFUND` flow; threshold rule + supervisor override.
-- [ ] Cash refund posts `cash_entry` OUT.
+- [x] `pos_sale.kind = REFUND` flow: `POST /api/v1/pos-sales/refund` gated by `POS.REFUND_POST`. Creates a new `PosSale` with `kind = REFUND` and `refunded_from_sale_id` pointing at the original; writes compensating `RETURN_IN` stock moves at the snapped line cost; same-business-day only; rejects batch-tracked items (restore-to-original-batch deferred); rejects refund lines whose item wasn't on the original; idempotent on `clientOpId`.
+- [x] Threshold rule: `orbix.pos.refund-threshold` (default 10000). Above-threshold refund totals require `supervisorId` holding `POS.REFUND_APPROVE`, different from cashier.
+- [x] Tender must equal refund total exactly (no change paid on a refund).
+- [x] `V38` seeds `POS.REFUND_POST` + `POS.REFUND_APPROVE`. Event: `PosSaleRefunded.v1` — carries `originalSaleId`, `totalAmount`, `tenderedAmount`, `branchId`, `tillSessionId`. F6.1 subscribes to write `cash_entry` OUT.
+- [ ] Cash refund posts `cash_entry` OUT — deferred to F6.1's event subscriber.
 
-**Tests:** `TC-POS-026` .. `TC-POS-030`; `TC-E2E-005`.
+**Tests:** `TC-POS-026` .. `TC-POS-030`; `TC-E2E-005`. Unit-test coverage in `PosSaleServiceImplTest` (9 new cases): happy-path RETURN_IN snap, idempotency, different-day rejection, batch-tracked rejection, tender ≠ total rejection, above-threshold no-supervisor rejection, supervisor-missing-permission 403, supervisor-approved happy path, already-VOIDED original rejection.
 
 ---
 
 ## F5.6 — FX tender
 
-**Story:** US-POS-021 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-021 · **Size:** M · **Status:** `[x]` backend (Flutter tender screen deferred)
 **Dependencies:** F5.2, F1.2 (currencies).
 
 **Backend:**
-- [ ] `pos_payment.tender_currency / tender_amount / fx_rate_snapshot`.
-- [ ] Validation: till accepts currency; FX rate exists; functional total == sum(tender × rate).
+- [x] `pos_payment.tender_currency / tender_amount / fx_rate_snapshot` (V39). `pos_payment.amount` re-interpreted as the functional-currency-converted value. `till_currency` table (composite PK `(till_id, currency_code)`) records which foreign currencies a till accepts; functional currency is implicit.
+- [x] Service-side validation: foreign tender currency must exist on the till (`till_currency` row); most-recent `fx_rate` quote with `effective_at ≤ saleAt` must exist (else reject); `amount = tenderAmount × fxRateSnapshot`; functional total ≥ sum(amount) for sales, == for refunds. Functional-currency tender (or omitted `tenderCurrency`) bypasses both the till-accepts check and the FX-rate lookup at rate 1.
+- [x] `TillCurrencyService` CRUD: `GET/POST/DELETE /api/v1/tills/{tillId}/currencies[/{code}]` gated by `POS.TILL_CURRENCY_MANAGE` (V39 seeds permission 47). Rejects re-adding the functional currency (implicit-only).
+- [x] PosPaymentDto, PostPosSaleRequestDto.Payment, PostPosRefundRequestDto.Payment all carry `tenderCurrency` (optional — defaults to functional).
 
 **Flutter POS:**
-- [ ] Tender screen accepts multiple currencies.
+- [ ] Tender screen accepts multiple currencies — deferred to the Flutter mini-phase.
 
-**Tests:** `TC-POS-031` .. `TC-POS-035`; `TC-E2E-006`, `TC-E2E-007`.
+**Tests:** `TC-POS-031` .. `TC-POS-035`; `TC-E2E-006`, `TC-E2E-007`. Unit-test coverage: 5 new cases in `PosSaleServiceImplTest` (USD→TZS happy path with snapshot, currency-not-accepted rejection, no-rate rejection, explicit functional-currency tender skips FX, mixed FX + functional sums correctly) + 7 in `TillCurrencyServiceImplTest`.
 
 ---
 
-## F5.7 — Gift card tender (depends on F7.1)
+## F5.7 — Gift card tender at POS
 
-Skip until F7.1 lands.
+**Story:** US-GC-003 + US-GC-004 · **Size:** S · **Status:** `[~]` (backend done; Flutter tender screen deferred)
+**Dependencies:** F5.2, F7.1.
+
+**Backend:**
+- [x] Added `GIFT_CARD` to `PosPaymentMethod` enum (no schema change — `pos_payment.method` is `VARCHAR(20)`).
+- [x] `PosSaleServiceImpl.post` calls `GiftCardService.redeem` for each GIFT_CARD tender row, using `pos_payment.id` as the idempotency ref-doc so the same card scanned twice on one sale produces two independent `REDEEM` txns and a client retry returns the prior txn without double-debiting. Tender requires the card code in `pos_payment.reference` or rejects 422.
+- [x] `PosSaleServiceImpl.refund` calls `GiftCardService.refundCredit` for each GIFT_CARD refund row (ref-doc = `("PosRefundPayment", refund_payment.id)`).
+- [x] `PosSaleServiceImpl.voidSale` credits back the original sale's GIFT_CARD rows (ref-doc = `("PosVoidPayment", original_payment.id)`).
+- [x] No `cash_entry` is posted for a GIFT_CARD payment — gift cards are a liability transfer, not a cash movement (cash module README §11).
+- [x] Unit tests — 4 new in `PosSaleServiceImplTest` (single GIFT_CARD tender → redeem called + no cash entry, mixed CASH + GIFT_CARD → both lands correctly, GIFT_CARD without reference → reject, void of GIFT_CARD-tendered sale → refundCredit called with `PosVoidPayment`).
+
+**Flutter POS:**
+- [ ] Gift-card redeem tender option in the tender screen — deferred to the Flutter mini-phase.
+
+**Tests:** Backend unit tests cover the core wiring; e2e + Flutter halves pending.
 
 ---
 
 ## F5.8 — Weighed items + barcode parser
 
-**Story:** US-CAT-016, US-POS-003 (extended) · **Size:** M · **Status:** `[ ]`
+**Story:** US-CAT-016, US-POS-003 (extended) · **Size:** M · **Status:** `[~]` (backend done, Flutter deferred)
 **Dependencies:** F1.6, F5.2.
 
+**Backend:**
+- [x] `EmbeddedWeightDecoder` (server-side) parses EAN-13 starting with `2` (7-char prefix `'2' + 6-digit PLU` + 5-digit weight + EAN check digit; weight/1000 in the item's WeighingUnit).
+- [x] `BarcodeResolverService` resolves a raw scan to `ResolvedBarcodeDto` — exact-match first against `item_barcode.barcode`, then 7-char prefix fallback restricted to `barcode_type = EMBEDDED_WEIGHT`. Rejects zero-weight scans, archived items, and cross-company items.
+- [x] `GET /api/v1/pos/barcode-lookup?code=...` gated by `POS.SALE_POST` or `POS.MANAGE_TILL` (held by the till app already).
+- [x] `ItemBarcodeServiceImpl.addBarcode` shape-checks each symbology — EAN13=13 digits, EAN8=8, UPC=12, EMBEDDED_WEIGHT=7 leading-`2` digits and requires the item to be `is_weighed`.
+- [x] Unit tests — `EmbeddedWeightDecoder` covered via `BarcodeResolverServiceImplTest` (8 cases: exact / prefix / zero-weight / unknown PLU / unknown plain / archived / cross-company / blank); `ItemBarcodeServiceImplTest` extended with EAN13-length + EMBEDDED_WEIGHT happy / non-weighed / bad-prefix.
+
 **Flutter POS:**
-- [ ] `EmbeddedWeightDecoder` parses EAN-13 starting with `2`.
+- [ ] On-device `EmbeddedWeightDecoder` so offline scans resolve from the catalog snapshot.
 - [ ] Scale integration via platform channel (USB / serial).
 
-**Tests:** `TC-CAT-013`; `TC-POS-039`; `TC-E2E-008`.
+**Tests:** `TC-CAT-013`; `TC-POS-039`; `TC-E2E-008` (backend halves covered; e2e + Flutter halves pending the Flutter mini-phase).
 
 ---
 
 ## F5.9 — Cash pickup + petty cash
 
-**Story:** US-POS-013, US-POS-014 · **Size:** S · **Status:** `[ ]`
+**Story:** US-POS-013, US-POS-014 · **Size:** S · **Status:** `[~]` (backend done; Flutter cashier flow deferred)
 **Dependencies:** F5.1, F6.1.
 
-**Tests:** `TC-POS-016` .. `TC-POS-018`.
+**Backend:**
+- [x] `cash_pickup` + `petty_cash` tables (DATA-MODEL §7.6 / §7.7) — `V42` schema + `V42_1` sequences (per dialect) + `V43` seeds `POS.CASH_PICKUP` / `POS.PETTY_CASH`.
+- [x] `CashPickup` + `PettyCash` immutable entities + repos (with `sumForSession` helpers); `PettyCashCategory` enum (TRANSPORT/OFFICE/MAINTENANCE/OTHER); request + response DTOs.
+- [x] `CashPickupServiceImpl` validates OPEN till session + OPEN business day + non-self authoriser holding `POS.CASH_PICKUP`; writes paired cash-ledger entries (OUT-TILL + IN-CASH_BOX, same `refType=CashPickup`/`refId`, different direction → both pass the idempotency UNIQUE); emits `CashPickupRecorded.v1`. Endpoint: `POST /api/v1/cash-pickups` gated by `POS.CASH_PICKUP`.
+- [x] `PettyCashServiceImpl` validates OPEN till session + OPEN business day + non-self authoriser holding `POS.PETTY_CASH`; writes a single OUT-TILL cash entry with `gl_category = PETTY` (no paired IN — petty cash leaves the system); emits `PettyCashPaid.v1`. Endpoint: `POST /api/v1/petty-cash` gated by `POS.PETTY_CASH`.
+- [x] `TillSessionServiceImpl.computeExpectedCash` extended: opening float + Σ POSTED-SALE cash payments − Σ POSTED-REFUND cash payments − Σ pickups − Σ petty cash; VOIDED sales contribute 0 (cashier handed the cash back already). Close-till variance is now end-to-end meaningful.
+- [x] Unit tests — `CashPickupServiceImplTest` (5 cases), `PettyCashServiceImplTest` (3 cases), `TillSessionServiceImplTest` extended with `close_expectedCashFoldsInSalesRefundsPickupsAndPettyCash` + `close_voidedSaleContributesZeroToExpectedCash`.
+
+**Flutter POS:**
+- [ ] Cash-pickup screen (supervisor PIN-authorised) — deferred to Flutter mini-phase.
+- [ ] Petty-cash screen with category + paid-to + receipt photo upload — deferred to Flutter mini-phase.
+
+**Tests:** `TC-POS-016` .. `TC-POS-018` — backend halves covered; e2e + Flutter halves pending.
 
 ---
 
 ## F5.10 — X / Z reports
 
-**Story:** US-POS-015, US-POS-016 · **Size:** M · **Status:** `[ ]`
+**Story:** US-POS-015, US-POS-016 · **Size:** M · **Status:** `[~]` (data contract done; PDF + object-storage deferred)
 **Dependencies:** F5.2, F5.9.
 
-PDF generation, object-store upload on Z.
+**Backend:**
+- [x] `TillReportDto` — same shape for X and Z (distinguished by `reportType`). Carries gross/discount/tax/net totals, per-tender-method breakdown for sales + refunds, voids count, pickups, petty cash by category, opening float, expected/declared/variance, plus per-line refs (sale id + number + total + saleAt) for the receipt.
+- [x] `TillReportServiceImpl` — `xReport(tillSessionId)` requires OPEN; `zReport(tillSessionId)` requires CLOSED / RECONCILED. Both recompute from immutable source tables (`pos_sale` + `pos_payment` + `cash_pickup` + `petty_cash`) so no new schema is needed and the recompute is deterministic. Voided sales count toward `voidsCount` but contribute 0 to tender / cash / totals.
+- [x] `GET /api/v1/reports/x-report?tillSessionId=…` gated by `POS.SALE_POST` or `POS.MANAGE_TILL` (cashier or manager per US-POS-015); `GET /api/v1/reports/z-report?tillSessionId=…` gated by `POS.MANAGE_TILL` or `POS.SESSION_CLOSE`.
+- [x] Unit tests — `TillReportServiceImplTest` (7 cases): empty OPEN session, X rejects closed, Z rejects open, mixed-tender math (sales + refunds + voids + pickups + petty + per-category), Z returns declared/variance, missing session, cross-company.
+- [ ] **Deferred to a follow-on infra slice:** PDF rendering of the Z-report + object-storage upload (sets `till_session.z_report_object_key`) — needs a PDF library decision (OpenPDF / Apache PDFBox / iText), an object-store client (S3 / GCS / Azure / local-filesystem fallback for dev), and the credentials wiring. The data layer above already exposes everything the renderer will need.
 
-**Tests:** `TC-POS-019`, `TC-POS-020`; `TC-NFR-PERF-005`.
+**Flutter / Web:**
+- [ ] Cashier X-report viewer + close-receipt print — deferred to the Flutter mini-phase.
+- [ ] Manager Z-report viewer + download — deferred to a follow-on web slice.
+
+**Tests:** `TC-POS-019` (X-report), `TC-POS-020` (close + Z), `TC-NFR-PERF-005` (Z generation < 30s/branch — relevant once the PDF renderer lands). Backend data layer covered; PDF + e2e pending.
 
 ---
 
@@ -812,39 +1001,68 @@ PDF generation, object-store upload on Z.
 
 ## F6.1 — Cash entries + cash book (single currency)
 
-**Story:** scattered across procurement, sales, pos · **Size:** L · **Status:** `[ ]`
+**Story:** scattered across procurement, sales, pos · **Size:** L · **Status:** `[~]` (backend done, Flutter / web / direct-write endpoints deferred)
 **Dependencies:** F2.1.
 
 **Backend:**
-- [ ] `CashEntry`, `CashBook` entities; append-only ledger.
-- [ ] Event consumers: `TillSessionOpened.v1`, `CashPickupRecorded.v1`, `PettyCashPaid.v1`, `TillSessionClosed.v1`, `SalesReceiptCaptured.v1`, `SupplierPaymentRecorded.v1`, `BusinessDayClosed.v1`.
-- [ ] Idempotent on `(source_doc_type, source_doc_id, direction)`.
+- [x] `CashEntry` append-only entity (DATA-MODEL §10.2) + `CashBook` projection entity (§10.3) + repos; `CashAccount` / `CashDirection` / `GlCategory` enums; `CashRefType` string constants.
+- [x] `V40` schema + `V40_1` per-dialect sequence + `V41` permission seed (`CASH.READ` / `CASH.ADJUST` / `CASH.BANKING`).
+- [x] `CashLedgerService.post(...)` is the posting port — caller-side typed entry; idempotency UNIQUE on `(ref_type, ref_id, direction)` so a replayed producer call returns the existing row without re-inserting; `CashBook` projection updated write-through in the same transaction; emits `CashEntryPosted.v1` + `CashBookBalanceUpdated.v1`.
+- [x] **Direct-call producer wiring** (synchronous, same-tx — replacing the planned event-consumer pattern, which would need outbox-poll infra we don't yet have):
+  - `PosSaleServiceImpl.post` → IN-TILL per CASH `pos_payment` row (`PosSalePayment` / `CASH`).
+  - `PosSaleServiceImpl.refund` → OUT-TILL per CASH refund payment row (`PosRefundPayment` / `CASH_REFUND`).
+  - `PosSaleServiceImpl.voidSale` → OUT-TILL reversing the original CASH rows (`PosVoidPayment` / `CASH_REFUND`).
+  - `TillSessionServiceImpl.open` → IN-TILL opening float (`TillFloat` / `TILL_FLOAT`).
+  - `TillSessionServiceImpl.close` → variance entry on non-zero variance (surplus = IN, shortage = OUT; `TillVariance` / `VARIANCE`).
+  - `SalesReceiptServiceImpl.post` → IN on the method-mapped account (CASH→CASH_BOX, MOBILE_MONEY→MOBILE_MONEY, BANK_TRANSFER/CHEQUE→BANK; CARD + STORE_CREDIT settle off-ledger) (`SalesReceipt` / `RECEIPT`).
+  - `SupplierPaymentServiceImpl.post` → OUT on the method-mapped account (`SupplierPayment` / `SUPPLIER_SETTLEMENT`).
+- [x] Read endpoints: `GET /api/v1/cash-entries?branchId&account&businessDate` + `GET /api/v1/cash-book?branchId&businessDate` (gated by `CASH.READ`).
+- [x] Unit tests — `CashLedgerServiceImplTest` (6: save+events, idempotency no-op, OUT decrements book, zero-amount rejected, second-IN appends to existing book, findByRef-empty); existing pos/sales/procurement tests updated to mock the new `CashLedgerService` (+ `CompanyRepository` for TillSession).
+- [ ] **Deferred to a follow-on slice:** direct write endpoints `POST /api/v1/cash-adjustments` (gated `CASH.ADJUST`) + `POST /api/v1/bank-deposits` (gated `CASH.BANKING`) — they need their own audit-doc tables (`cash_adjustment`, `bank_deposit`) before a stable `ref_id` is available.
+- [ ] **Deferred to F5.9 / F6.3:** cash pickup + petty cash consumers (need the F5.9 events first); banking + supervisor adjustment (F6.3).
+- [ ] **Deferred to F6.2:** multi-currency cash book (composite-PK extension on `cash_book`).
 
 **Web:**
-- [ ] `/cash/ledger`, `/cash/cash-book`.
+- [ ] `/cash/ledger`, `/cash/cash-book` — deferred.
 
-**Tests:** `TC-CASH-001` .. `TC-CASH-016`.
+**Tests:** `TC-CASH-001` .. `TC-CASH-016`. Backend covered by `CashLedgerServiceImplTest`; integration / e2e tests pending.
 
 ---
 
 ## F6.2 — Multi-currency cash book
 
-**Story:** US-DAY-006 · **Size:** M · **Status:** `[ ]`
+**Story:** US-DAY-006 · **Size:** M · **Status:** `[~]` (backend done; per-currency close variance deferred)
 **Dependencies:** F6.1, F5.6.
 
 **Backend:**
-- [ ] Composite PK extension; per-currency variance.
+- [x] `V44` extends `cash_book` PK to include `currency_code` so the projection splits per tender currency; `cash_entry` gains `tender_amount` + `fx_rate_snapshot` (existing rows backfill to tender = amount, rate = 1). Existing `cash_entry.currency_code` re-interpreted as the **tender** currency.
+- [x] `CashEntry` / `CashBook` / `CashBookId` entities updated; `CashBook` getters delegate to the composite PK for `branchId` / `account` / `currencyCode` / `businessDate`; row amounts stay in the row's own tender currency.
+- [x] `CashLedgerService.post(...)` signature now takes `(tenderAmount, fxRateSnapshot, tenderCurrency, ...)` and derives the functional `amount = tenderAmount × fxRateSnapshot` (HALF_UP at scale 4). Idempotency on `(refType, refId, direction)` unchanged.
+- [x] Producer wiring updated — POS sale/refund/void cash entries flow `pos_payment.tenderAmount / fxRateSnapshot / tenderCurrency` through (US-DAY-006 main use case: USD tender lands in a per-USD bucket); TillSession open/close, SalesReceipt, SupplierPayment, CashPickup, PettyCash pass `fx_rate_snapshot = 1` (these source docs aren't FX-aware yet).
+- [x] Unit tests — `CashLedgerServiceImplTest` extended (8 cases, +2 new: USD-5-at-3800 derives functional 19,000 + saves tender + rate / currency on the entry; cash_book USD bucket records the tender amount (5), not functional). Other producer tests updated for the new signature.
+- [ ] **Deferred to a follow-on slice:** per-currency close variance — needs `declaredCashByCurrency` on the close request, then `computeExpectedCash` partitioned per currency, and one variance entry per non-zero per-currency delta. The cash_book per-currency split needed to make this trivial is already in place.
 
-**Tests:** `TC-CASH-017` .. `TC-CASH-019`; `TC-E2E-007`.
+**Tests:** `TC-CASH-017` (composite PK extension) + `TC-CASH-018` (foreign-currency entry stores tender + functional) + `TC-CASH-019` (functional entries have fx_rate_snapshot = 1) covered by unit tests; `TC-E2E-007` (per-currency variance e2e) pending the close-request extension.
 
 ---
 
 ## F6.3 — End-of-day banking + supervisor adjustment
 
-**Story:** US-DAY-002 (banking side) · **Size:** S · **Status:** `[ ]`
+**Story:** US-DAY-002 (banking side) · **Size:** S · **Status:** `[~]` (backend done; web deferred)
 **Dependencies:** F6.1, F2.1.
 
-**Tests:** `TC-CASH-012` .. `TC-CASH-014`.
+**Backend:**
+- [x] `V45` adds `cash_adjustment` + `bank_deposit` audit-doc tables (+ `V45_1` per-dialect sequences). Both tables carry `company_id` / `branch_id` / `business_date` / `currency_code` / `posted_by` / `at`; reason is non-null on adjustments, reference is non-null on deposits.
+- [x] `CashAdjustmentService` (`POST /api/v1/cash-adjustments`, gated `CASH.ADJUST`) — writes a single `cash_entry` with `gl_category = ADJUSTMENT`, `ref_type = CashAdjustment`, the audit-doc id as `ref_id`, and the mandatory reason as both the audit-doc `reason` and the entry's `notes`. Requires `DayGuard.requireOpenDay`.
+- [x] `BankDepositService` (`POST /api/v1/bank-deposits`, gated `CASH.BANKING`) — writes paired entries OUT-CASH_BOX (`gl=CASH`) + IN-BANK (`gl=BANK`) sharing the deposit row's id as `ref_id` and `ref_type = BankDeposit`; idempotency UNIQUE accepts both because direction differs. Requires `DayGuard.requireOpenDay`.
+- [x] `CashAdjustmentPosted.v1` + `BankDepositPosted.v1` outbox events.
+- [x] `CashRefType` gains `CashAdjustment` + `BankDeposit` string constants.
+- [x] Unit tests — `CashAdjustmentServiceImplTest` (single-entry write + closed-day reject) + `BankDepositServiceImplTest` (paired writes + closed-day reject).
+
+**Web:**
+- [ ] Manager UI for adjustments + deposits — deferred.
+
+**Tests:** `TC-CASH-012` (paired bank-deposit entries) + `TC-CASH-013` (adjustment with reason) covered; `TC-CASH-014` (403 without `CASH.ADJUST`) is controller-level — covered implicitly by `@PreAuthorize` + the seeded permission.
 
 ---
 
@@ -852,22 +1070,29 @@ PDF generation, object-store upload on Z.
 
 ## F7.1 — Gift cards
 
-**Story:** US-GC-001 .. US-GC-008 · **Size:** L · **Status:** `[ ]`
+**Story:** US-GC-001 .. US-GC-008 · **Size:** L · **Status:** `[~]` (backend done; web + Flutter deferred)
 **Dependencies:** F5.2, F6.1.
 
 **Backend:**
-- [ ] `GiftCard`, `GiftCardTxn` entities.
-- [ ] `GiftCardService` + Impl: issue, redeem, refund, freeze, unfreeze, expire.
-- [ ] Scheduled expiry job.
+- [x] `V46` — `gift_card` (bearer code UNIQUE, lifecycle status ACTIVE/FULLY_REDEEMED/EXPIRED/FROZEN/REFUNDED) + append-only `gift_card_txn` (LOAD/REDEEM/REFUND/EXPIRE, idempotency UNIQUE on `(gift_card_id, ref_doc_type, ref_doc_id, kind)`). `V46_1` per-dialect sequences. `V47` seeds `GIFTCARD.ISSUE` / `GIFTCARD.REDEEM` / `GIFTCARD.LOOKUP` / `GIFTCARD.FREEZE`.
+- [x] `GiftCard` + `GiftCardTxn` entities with `GiftCardStatus` / `GiftCardTxnKind` enums. `GiftCard.toString` excludes the bearer code; audit notes mask to last-4.
+- [x] `GiftCardService` impl with `issue` (writes card + LOAD txn + cash-side entry via `CashLedgerService` in one transaction; `ref_type = GiftCardIssue`, `gl_category = GIFT_CARD_ISSUE_PROCEEDS`; CARD-method skips cash side), `redeem` (debits balance; rejects FROZEN / EXPIRED / over-balance / expired-at-time; idempotent on the txn ref-doc triple so POS retries can't double-debit), `refundCredit` (adds back to balance + re-activates FULLY_REDEEMED cards), `freeze` / `unfreeze`, `lookup` + `listTransactions` (read-only).
+- [x] Bearer code generation — 12-digit random numeric with collision-check + fallback to the UNIQUE constraint; supplying a pre-printed code from physical-card inventory is also supported.
+- [x] `GiftCardController` exposes `POST /api/v1/gift-cards` + `GET /api/v1/gift-cards/{code}` + `GET /api/v1/gift-cards/{code}/transactions` + `POST /api/v1/gift-cards/{code}/{redeem|refund|freeze|unfreeze}`. Permissions split — issuance / lookup / redemption / freeze each have their own grant so the POS device holds `GIFTCARD.REDEEM` without being able to freeze.
+- [x] Scheduled `GiftCardExpiryJob` daily at 00:10 UTC (`orbix.giftcard.expiry-cron`) — finds ACTIVE cards past `expires_at`, posts an EXPIRE txn for the remaining balance (breakage), flips status to EXPIRED, emits `GiftCardExpired.v1`.
+- [x] Outbox events — `GiftCardIssued.v1`, `GiftCardRedeemed.v1`, `GiftCardRefunded.v1`, `GiftCardFrozen.v1`, `GiftCardUnfrozen.v1`, `GiftCardExpired.v1`.
+- [x] New `CashRefType` constant: `GiftCardIssue`.
+- [x] Unit tests — `GiftCardServiceImplTest` (14 cases: issue + cash entry, CASH vs CARD tender, auto-generated code, duplicate code reject, partial redeem, full redeem flip, over-balance reject, frozen reject, redeem idempotency, refund re-activates FULLY_REDEEMED, freeze/unfreeze, expiry job writes EXPIRE txn, cross-company lookup).
+- [ ] **Deferred:** F5.7 POS-side wiring (`pos_payment.method = GIFT_CARD` calls `GiftCardService.redeem` during `PosSaleServiceImpl.post`); customer-return refund of gift-card-tendered sales (US-GC-004 — needs F4.4 + F7.1 wiring); cross-currency gift cards (out of scope for MVP).
 
 **Web:**
-- [ ] `/gift-cards` admin issuance + balance lookup.
+- [ ] `/gift-cards` admin issuance + balance lookup — deferred.
 
 **Flutter POS:**
-- [ ] Issue-card flow.
-- [ ] Redeem-card tender option (in F5.7).
+- [ ] Issue-card flow — deferred to Flutter mini-phase.
+- [ ] Redeem-card tender option — lands with F5.7 wiring.
 
-**Tests:** `TC-GC-001` .. `TC-GC-031`; `TC-E2E-015`, `TC-E2E-016`.
+**Tests:** `TC-GC-001` .. `TC-GC-031`; `TC-E2E-015`, `TC-E2E-016`. Backend unit tests cover the core lifecycle; integration + e2e tests pending.
 
 ---
 
@@ -927,28 +1152,28 @@ Split into:
 # Phase 8 — Reporting + hardening
 
 ## F8.1 — Stock reporting (card, fast/slow, negative)
-**Stories:** US-RPT-004, US-RPT-005, US-RPT-006 · **Size:** M · **Status:** `[ ]`
+**Stories:** US-RPT-004, US-RPT-005, US-RPT-006 · **Size:** M · **Status:** `[x]` (backend)
 
 ## F8.2 — Sales reporting (daily, Z-history, margin)
-**Stories:** US-RPT-001, US-RPT-002, US-RPT-003 · **Size:** M · **Status:** `[ ]`
+**Stories:** US-RPT-001, US-RPT-002, US-RPT-003 · **Size:** M · **Status:** `[x]` (backend)
 
 ## F8.3 — Section P&L
-**Story:** US-RPT-011 · **Size:** M · **Status:** `[ ]`
+**Story:** US-RPT-011 · **Size:** M · **Status:** `[x]` (backend)
 
 ## F8.4 — Production yield + wastage
-**Story:** US-RPT-012 · **Size:** S · **Status:** `[ ]`
+**Story:** US-RPT-012 · **Size:** S · **Status:** `[x]` (backend)
 
 ## F8.5 — Gift card outstanding liability
-**Story:** US-RPT-013 · **Size:** S · **Status:** `[ ]`
+**Story:** US-RPT-013 · **Size:** S · **Status:** `[x]` (backend)
 
 ## F8.6 — Layby ageing
-**Story:** US-RPT-014 · **Size:** S · **Status:** `[ ]`
+**Story:** US-RPT-014 · **Size:** S · **Status:** `[x]` (backend)
 
 ## F8.7 — Customer / supplier statements
-**Story:** US-RPT-007 · **Size:** M · **Status:** `[ ]`
+**Story:** US-RPT-007 · **Size:** M · **Status:** `[x]` (backend)
 
 ## F8.8 — VAT return export
-**Story:** US-NFR-COMP-001 · **Size:** M · **Status:** `[ ]`
+**Story:** US-NFR-COMP-001 · **Size:** M · **Status:** `[x]` (backend)
 
 ## F8.9 — Biometric enrolment + login (defer)
 **Story:** US-IAM-011, US-IAM-012 · **Size:** M · **Status:** `[ ]`

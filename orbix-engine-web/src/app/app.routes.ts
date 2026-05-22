@@ -15,6 +15,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login.component').then(m => m.LoginComponent)
   },
   {
+    path: 'change-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/auth/change-password.component').then(m => m.ChangePasswordComponent)
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/shell.component').then(m => m.ShellComponent),
@@ -27,6 +32,14 @@ export const routes: Routes = [
       {
         path: 'catalog',
         loadChildren: () => import('./features/catalog/catalog.routes').then(m => m.routes)
+      },
+      {
+        path: 'party',
+        loadChildren: () => import('./features/party/party.routes').then(m => m.routes)
+      },
+      {
+        path: 'day',
+        loadChildren: () => import('./features/day/day.routes').then(m => m.routes)
       },
       {
         path: 'sales',
