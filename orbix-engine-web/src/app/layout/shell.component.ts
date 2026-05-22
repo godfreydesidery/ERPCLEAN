@@ -8,6 +8,7 @@ interface NavLink {
   readonly label: string;
   readonly route: string;
   readonly icon: string;
+  readonly tooltip: string;
 }
 
 interface NavGroup {
@@ -134,6 +135,7 @@ interface NavGroup {
                 <a class="nav-item"
                    [routerLink]="item.route"
                    routerLinkActive="active"
+                   [title]="item.tooltip"
                    (click)="closeSidebar()">
                   <i class="bi {{ item.icon }} nav-item-icon"></i>
                   <span>{{ item.label }}</span>
@@ -540,37 +542,70 @@ export class ShellComponent implements OnInit {
     {
       label: 'Overview',
       items: [
-        { label: 'Dashboard', route: '/dashboard', icon: 'bi-speedometer2' }
+        {
+          label: 'Dashboard', route: '/dashboard', icon: 'bi-speedometer2',
+          tooltip: "Today's KPIs (sales, cash, stock alerts) and recent activity for the branch you're working in. Your starting point each morning."
+        }
       ]
     },
     {
       label: 'Operations',
       items: [
-        { label: 'Business day', route: '/day', icon: 'bi-calendar-check' },
-        { label: 'Catalog', route: '/catalog', icon: 'bi-box-seam' },
-        { label: 'Parties', route: '/party', icon: 'bi-people' },
-        { label: 'Stock', route: '/stock', icon: 'bi-clipboard-data' },
-        { label: 'Production', route: '/production', icon: 'bi-gear' }
+        {
+          label: 'Business day', route: '/day', icon: 'bi-calendar-check',
+          tooltip: 'Open the trading day for a branch before any postings are allowed, and close it at end of day to lock in stock, cash, and sales balances. The on-call manager owns this.'
+        },
+        {
+          label: 'Catalog', route: '/catalog', icon: 'bi-box-seam',
+          tooltip: 'Define what you sell or move through stock — items, the group tree, units of measure, VAT rules, price lists, and barcodes. Set up once, referenced everywhere else.'
+        },
+        {
+          label: 'Parties', route: '/party', icon: 'bi-people',
+          tooltip: 'Everyone the business deals with: customers, suppliers, employees, sales agents. One person can wear several hats — all roles attach to the same party record.'
+        },
+        {
+          label: 'Stock', route: '/stock', icon: 'bi-clipboard-data',
+          tooltip: 'On-hand quantities per item per branch, stock counts to reconcile against reality, transfers between branches, batch tracking for expiry, and one-off adjustments.'
+        },
+        {
+          label: 'Production', route: '/production', icon: 'bi-gear',
+          tooltip: 'Recipes (BOMs), production batches that consume inputs and yield outputs, unit conversions, and wastage. Used by bakeries, kitchens, and any operation that turns inputs into a different sellable item.'
+        }
       ]
     },
     {
       label: 'Commerce',
       items: [
-        { label: 'Sales', route: '/sales', icon: 'bi-cart-check' },
-        { label: 'Procurement', route: '/procurement', icon: 'bi-truck' }
+        {
+          label: 'Sales', route: '/sales', icon: 'bi-cart-check',
+          tooltip: 'Quote → invoice → receipt → allocation, plus customer returns and packing lists. Back-office sales — POS sales live in the till app, not here.'
+        },
+        {
+          label: 'Procurement', route: '/procurement', icon: 'bi-truck',
+          tooltip: 'LPOs out to suppliers, GRNs when goods arrive, supplier invoices matched against GRNs, and payments out. Builds the AP side of the ledger.'
+        }
       ]
     },
     {
       label: 'Finance',
       items: [
-        { label: 'Debt', route: '/debt', icon: 'bi-credit-card' },
-        { label: 'Reports', route: '/reports', icon: 'bi-bar-chart-line' }
+        {
+          label: 'Debt', route: '/debt', icon: 'bi-credit-card',
+          tooltip: 'Ageing of what customers owe you (receivables) and what you owe suppliers (payables), bucketed by current / 30d / 60d / 90d+. Drives collections and payment-run decisions.'
+        },
+        {
+          label: 'Reports', route: '/reports', icon: 'bi-bar-chart-line',
+          tooltip: 'Pre-built reports across stock, sales, production, gift cards, VAT, and customer statements. Run on demand or scheduled to email on a cadence.'
+        }
       ]
     },
     {
       label: 'Settings',
       items: [
-        { label: 'Admin', route: '/admin', icon: 'bi-sliders' }
+        {
+          label: 'Admin', route: '/admin', icon: 'bi-sliders',
+          tooltip: 'System configuration — users, roles & permissions, branches & sections, currencies, FX rates, POS tills, and delivery routes. Mostly one-time setup with occasional changes.'
+        }
       ]
     }
   ] as const;
@@ -582,7 +617,7 @@ export class ShellComponent implements OnInit {
     });
   }
 
-  onBranchPick(branchId: number): void {
+  onBranchPick(branchId: string): void {
     if (!Number.isFinite(branchId) || branchId === this.selectedBranchId()) {
       this.branchMenuOpen.set(false);
       return;

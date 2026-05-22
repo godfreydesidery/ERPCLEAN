@@ -17,7 +17,7 @@ interface CreateForm {
   displayName: string;
   email: string;
   phone: string;
-  defaultBranchId: number | null;
+  defaultBranchId: string | null;
   password: string;
   generatePassword: boolean;
 }
@@ -445,7 +445,7 @@ export class UserAdminComponent implements OnInit {
   }
 
   /** Resolve a default-branch id to its name; falls back to "—" when null. */
-  branchLabel(branchId: number | null): string {
+  branchLabel(branchId: string | null): string {
     if (branchId === null) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;

@@ -25,31 +25,31 @@ export class BranchAdminService {
     return unwrap(this.http.post<ApiResponse<Branch>>(`${this.base}/branches`, request));
   }
 
-  updateBranch(id: number, request: UpdateBranchRequest): Observable<Branch> {
-    return unwrap(this.http.patch<ApiResponse<Branch>>(`${this.base}/branches/${id}`, request));
+  updateBranch(uid: string, request: UpdateBranchRequest): Observable<Branch> {
+    return unwrap(this.http.patch<ApiResponse<Branch>>(`${this.base}/branches/uid/${uid}`, request));
   }
 
-  deactivateBranch(id: number): Observable<void> {
-    return this.http.post(`${this.base}/branches/${id}/deactivate`, {}).pipe(map(() => void 0));
+  deactivateBranch(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/branches/uid/${uid}/deactivate`, {}).pipe(map(() => void 0));
   }
 
-  listSections(branchId: number): Observable<Section[]> {
+  listSections(branchUid: string): Observable<Section[]> {
     return unwrap(this.http.get<ApiResponse<Section[]>>(
-      `${this.base}/branches/${branchId}/sections`
+      `${this.base}/branches/uid/${branchUid}/sections`
     ));
   }
 
-  createSection(branchId: number, request: CreateSectionRequest): Observable<Section> {
+  createSection(branchUid: string, request: CreateSectionRequest): Observable<Section> {
     return unwrap(this.http.post<ApiResponse<Section>>(
-      `${this.base}/branches/${branchId}/sections`, request
+      `${this.base}/branches/uid/${branchUid}/sections`, request
     ));
   }
 
-  updateSection(id: number, request: UpdateSectionRequest): Observable<Section> {
-    return unwrap(this.http.patch<ApiResponse<Section>>(`${this.base}/sections/${id}`, request));
+  updateSection(uid: string, request: UpdateSectionRequest): Observable<Section> {
+    return unwrap(this.http.patch<ApiResponse<Section>>(`${this.base}/sections/uid/${uid}`, request));
   }
 
-  deactivateSection(id: number): Observable<void> {
-    return this.http.post(`${this.base}/sections/${id}/deactivate`, {}).pipe(map(() => void 0));
+  deactivateSection(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/sections/uid/${uid}/deactivate`, {}).pipe(map(() => void 0));
   }
 }

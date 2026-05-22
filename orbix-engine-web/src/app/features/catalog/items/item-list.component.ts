@@ -101,7 +101,7 @@ interface StatusFilterOption {
               </tr>
             </thead>
             <tbody>
-              @for (item of filteredItems(); track item.id) {
+              @for (item of filteredItems(); track item.uid) {
                 <tr>
                   <td><span class="badge text-bg-light border text-secondary font-monospace">{{ item.code }}</span></td>
                   <td class="fw-semibold text-dark">{{ item.name }}</td>
@@ -115,7 +115,7 @@ interface StatusFilterOption {
                   <td class="text-end text-secondary">{{ item.lastCost | number:'1.2-2' }}</td>
                   <td class="text-end actions-col">
                     <div class="btn-group btn-group-sm" role="group">
-                      <a class="btn btn-outline-secondary" [routerLink]="[item.id, 'edit']" title="Edit">
+                      <a class="btn btn-outline-secondary" [routerLink]="[item.uid, 'edit']" title="Edit">
                         <i class="bi bi-pencil"></i>
                       </a>
                       @if (item.status === 'ARCHIVED') {
@@ -141,7 +141,7 @@ interface StatusFilterOption {
 
         <!-- Mobile card list -->
         <ul class="list-unstyled mb-0 d-md-none">
-          @for (item of filteredItems(); track item.id) {
+          @for (item of filteredItems(); track item.uid) {
             <li class="item-card">
               <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                 <div class="flex-grow-1">
@@ -157,7 +157,7 @@ interface StatusFilterOption {
                 <span>Avg {{ item.avgCost | number:'1.2-2' }}</span>
               </div>
               <div class="btn-group btn-group-sm w-100" role="group">
-                <a class="btn btn-outline-secondary" [routerLink]="[item.id, 'edit']">
+                <a class="btn btn-outline-secondary" [routerLink]="[item.uid, 'edit']">
                   <i class="bi bi-pencil me-1"></i>Edit
                 </a>
                 @if (item.status === 'ARCHIVED') {
@@ -381,7 +381,7 @@ export class ItemListComponent implements OnInit {
 
   archive(item: Item): void {
     this.busy.set(true);
-    this.catalog.archiveItem(item.id).subscribe({
+    this.catalog.archiveItem(item.uid).subscribe({
       next: () => this.goTo(this.page().page),
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -389,7 +389,7 @@ export class ItemListComponent implements OnInit {
 
   activate(item: Item): void {
     this.busy.set(true);
-    this.catalog.activateItem(item.id).subscribe({
+    this.catalog.activateItem(item.uid).subscribe({
       next: () => this.goTo(this.page().page),
       error: err => { this.busy.set(false); this.showError(err); }
     });

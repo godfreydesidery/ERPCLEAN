@@ -4,6 +4,7 @@
 
 CREATE TABLE party (
     id               BIGINT       NOT NULL PRIMARY KEY,
+    uid              CHAR(26)     NOT NULL,
     company_id       BIGINT       NOT NULL,
     code             VARCHAR(40)  NOT NULL,
     name             VARCHAR(200) NOT NULL,
@@ -23,6 +24,7 @@ CREATE TABLE party (
     created_by       BIGINT       NOT NULL,
     updated_by       BIGINT       NOT NULL,
     version          INT          NOT NULL DEFAULT 0,
+    CONSTRAINT uk_party_uid          UNIQUE (uid),
     CONSTRAINT uk_party_company_code UNIQUE (company_id, code),
     CONSTRAINT fk_party_company FOREIGN KEY (company_id) REFERENCES company (id)
 );

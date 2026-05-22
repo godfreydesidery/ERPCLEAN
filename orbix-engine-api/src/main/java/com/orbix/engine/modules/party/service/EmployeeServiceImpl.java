@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EmployeeServiceImpl implements EmployeeService {
 
+    private static final String NOT_AN_EMPLOYEE = "Not an employee: ";
+
     private final EmployeeRepository employees;
     private final PartyRepository parties;
     private final PartyService partyService;
@@ -44,10 +46,10 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     @Transactional(readOnly = true)
-    public EmployeeResponseDto getEmployee(Long partyId) {
-        Party party = partyService.requireInCompany(partyId);
-        Employee employee = employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not an employee: " + partyId));
+    public EmployeeResponseDto getEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Employee employee = employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
         return EmployeeResponseDto.from(employee, party);
     }
 
@@ -60,7 +62,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employees.existsByCompanyIdAndEmployeeCode(companyId, employeeCode)) {
             throw new IllegalArgumentException("Employee code already exists: " + employeeCode);
         }
-        Party party = partyService.resolveOrCreate(request.code(), request.party(), context.userId());
+        Party party = resolveParty(request);
         if (employees.existsById(party.getId())) {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has an employee role");
@@ -71,13 +73,25 @@ public class EmployeeServiceImpl implements EmployeeService {
         return EmployeeResponseDto.from(employees.save(employee), party);
     }
 
+    private Party resolveParty(CreateEmployeeRequestDto request) {
+        if (request.partyId() != null) {
+            return partyService.requireInCompany(request.partyId());
+        }
+        if (request.party() == null) {
+            throw new IllegalArgumentException(
+                "Supply either partyId, or party details, to create an employee");
+        }
+        String generatedCode = partyService.reservePartyCode("EMP");
+        return partyService.resolveOrCreate(generatedCode, request.party(), context.userId());
+    }
+
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Employee")
-    public EmployeeResponseDto updateEmployee(Long partyId, UpdateEmployeeRequestDto request) {
-        Party party = partyService.requireInCompany(partyId);
-        Employee employee = employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not an employee: " + partyId));
+    public EmployeeResponseDto updateEmployeeByPartyUid(String partyUid, UpdateEmployeeRequestDto request) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        Employee employee = employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
         employee.update(request.appUserId(), request.jobTitle(), request.branchId(),
             request.hireDate(), request.terminationDate());
@@ -87,9 +101,20 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Employee")
-    public void deactivateEmployee(Long partyId) {
-        employees.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not an employee: " + partyId));
-        partyService.deactivate(partyId);
+    public void deactivateEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
+        partyService.deactivate(party.getId());
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "Employee")
+    public void activateEmployeeByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        employees.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
+        partyService.activate(party.getId());
     }
 }

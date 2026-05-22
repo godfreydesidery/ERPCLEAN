@@ -6,11 +6,11 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../api/api-response';
 
 export interface UserSummary {
-  id: number;
+  id: string;
   username: string;
   displayName: string;
-  defaultCompanyId: number | null;
-  defaultBranchId: number | null;
+  defaultCompanyId: string | null;
+  defaultBranchId: string | null;
   mustChangePassword: boolean;
 }
 

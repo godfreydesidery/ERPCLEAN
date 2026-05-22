@@ -23,6 +23,7 @@
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
         <meilisearch.version>0.14.4</meilisearch.version>
+        <ulid.version>5.2.3</ulid.version>
         <testcontainers.version>1.20.3</testcontainers.version>
         <!--
           Spring Boot 3.3.5 pins mysql-connector-j to 8.3.0 (Jan 2024), which
@@ -123,6 +124,13 @@
             <groupId>com.meilisearch.sdk</groupId>
             <artifactId>meilisearch-java</artifactId>
             <version>${meilisearch.version}</version>
+        </dependency>
+
+        <!-- ULID — externally-exposed entity UIDs. See modules/common/domain/entity/UidEntity. -->
+        <dependency>
+            <groupId>com.github.f4b6a3</groupId>
+            <artifactId>ulid-creator</artifactId>
+            <version>${ulid.version}</version>
         </dependency>
 
         <!-- Lombok (DTOs only) -->

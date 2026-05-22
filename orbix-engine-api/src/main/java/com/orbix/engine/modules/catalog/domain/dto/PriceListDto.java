@@ -7,6 +7,7 @@ import java.time.LocalDate;
 
 public record PriceListDto(
     Long id,
+    String uid,
     Long companyId,
     String code,
     String name,
@@ -20,6 +21,7 @@ public record PriceListDto(
     public static PriceListDto from(PriceList list) {
         return new PriceListDto(
             list.getId(),
+            list.getUid(),
             list.getCompanyId(),
             list.getCode(),
             list.getName(),

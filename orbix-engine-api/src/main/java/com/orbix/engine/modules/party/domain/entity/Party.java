@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.party.domain.entity;
 
 import com.orbix.engine.modules.common.domain.Pii;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.party.domain.enums.PartyCategory;
 import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import jakarta.persistence.*;
@@ -14,18 +15,23 @@ import java.time.Instant;
 /**
  * The unified person / organisation record. One row per real-world entity;
  * customer / supplier / employee / sales-agent roles attach via shared-PK
- * role tables. Adding a role to a party with a matching TIN reuses this row
- * rather than duplicating it. DATA-MODEL.md §2.1.
+ * role tables (so the role tables don't need their own uid — Party's uid
+ * is the canonical external identifier for them too). Adding a role to a
+ * party with a matching TIN reuses this row rather than duplicating it.
+ * DATA-MODEL.md §2.1.
  */
 @Entity
 @Table(
     name = "party",
-    uniqueConstraints = @UniqueConstraint(name = "uk_party_company_code", columnNames = {"company_id", "code"})
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_party_uid",          columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_party_company_code", columnNames = {"company_id", "code"})
+    }
 )
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Party {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Party extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "party_seq")
@@ -122,6 +128,11 @@ public class Party {
 
     public void deactivate(Long actorId) {
         this.status = PartyStatus.INACTIVE;
+        touch(actorId);
+    }
+
+    public void activate(Long actorId) {
+        this.status = PartyStatus.ACTIVE;
         touch(actorId);
     }
 

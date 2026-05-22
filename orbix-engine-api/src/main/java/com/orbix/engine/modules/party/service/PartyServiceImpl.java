@@ -5,11 +5,15 @@ import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
 import com.orbix.engine.modules.party.domain.dto.PartyResponseDto;
 import com.orbix.engine.modules.party.domain.entity.Party;
+import com.orbix.engine.modules.party.domain.entity.PartyCodeSequence;
+import com.orbix.engine.modules.party.repository.PartyCodeSequenceRepository;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -20,8 +24,33 @@ import java.util.Optional;
 public class PartyServiceImpl implements PartyService {
 
     private final PartyRepository parties;
+    private final PartyCodeSequenceRepository codeSequences;
     private final EventPublisher events;
     private final RequestContext context;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyResponseDto> listParties() {
+        return parties.findByCompanyId(context.companyId()).stream()
+            .sorted(Comparator.comparing(Party::getCode))
+            .map(PartyResponseDto::from)
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public String reservePartyCode(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            throw new IllegalArgumentException("Prefix is required");
+        }
+        String normalized = prefix.trim().toUpperCase();
+        Long companyId = context.companyId();
+        PartyCodeSequence seq = codeSequences.findByCompanyIdAndPrefix(companyId, normalized)
+            .orElseGet(() -> codeSequences.save(new PartyCodeSequence(companyId, normalized)));
+        seq.setCurrentValue(seq.getCurrentValue() + 1);
+        codeSequences.save(seq);
+        return String.format("%s%04d", normalized, seq.getCurrentValue());
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -72,11 +101,31 @@ public class PartyServiceImpl implements PartyService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Party requireInCompanyByUid(String partyUid) {
+        Party party = parties.findByUid(partyUid)
+            .orElseThrow(() -> new NoSuchElementException("Party not found: " + partyUid));
+        if (!Objects.equals(party.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Party not found: " + partyUid);
+        }
+        return party;
+    }
+
+    @Override
     @Transactional
     public void deactivate(Long partyId) {
         Party party = requireInCompany(partyId);
         party.deactivate(context.userId());
-        events.publish("PartyDeactivated.v1", "Party", String.valueOf(partyId),
-            Map.of("partyId", partyId));
+        events.publish("PartyDeactivated.v1", "Party", party.getUid(),
+            Map.of("partyUid", party.getUid()));
+    }
+
+    @Override
+    @Transactional
+    public void activate(Long partyId) {
+        Party party = requireInCompany(partyId);
+        party.activate(context.userId());
+        events.publish("PartyReactivated.v1", "Party", party.getUid(),
+            Map.of("partyUid", party.getUid()));
     }
 }

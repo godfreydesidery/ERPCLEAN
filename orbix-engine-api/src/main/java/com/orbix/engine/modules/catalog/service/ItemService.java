@@ -11,6 +11,10 @@ import org.springframework.data.domain.Pageable;
  * Application service for the {@code Item} aggregate. Orchestrates the
  * domain + repository + cross-cutting concerns (audit, events). No HTTP,
  * no JPA specifics in the contract.
+ *
+ * <p>External entry points address items by their {@code uid} (a ULID).
+ * The numeric id is internal — used only for joins and never crosses an
+ * application-layer boundary.
  */
 public interface ItemService {
 
@@ -19,13 +23,13 @@ public interface ItemService {
     /** Company-scoped paged list; {@code status} optional filter. */
     PageDto<ItemResponseDto> listItems(ItemStatus status, Pageable pageable);
 
-    ItemResponseDto getItem(Long itemId);
+    ItemResponseDto getItemByUid(String uid);
 
-    ItemResponseDto updateItem(Long itemId, UpdateItemRequestDto request);
+    ItemResponseDto updateItemByUid(String uid, UpdateItemRequestDto request);
 
     /** Soft-delete: status -> ARCHIVED. */
-    void archiveItem(Long itemId);
+    void archiveItemByUid(String uid);
 
     /** Un-archive: status -> ACTIVE. */
-    void activateItem(Long itemId);
+    void activateItemByUid(String uid);
 }

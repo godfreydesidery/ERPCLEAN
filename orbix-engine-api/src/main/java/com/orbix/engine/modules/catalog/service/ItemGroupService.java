@@ -19,11 +19,11 @@ public interface ItemGroupService {
 
     ItemGroupDto createGroup(CreateItemGroupRequestDto request);
 
-    ItemGroupDto renameGroup(Long groupId, UpdateItemGroupRequestDto request);
+    ItemGroupDto renameGroupByUid(String uid, UpdateItemGroupRequestDto request);
 
     /** Re-parents a group; the moved subtree's levels follow. Rejects cycles. */
-    ItemGroupDto moveGroup(Long groupId, MoveItemGroupRequestDto request);
+    ItemGroupDto moveGroupByUid(String uid, MoveItemGroupRequestDto request);
 
     /** Soft-delete: status -> ARCHIVED. */
-    void archiveGroup(Long groupId);
+    void archiveGroupByUid(String uid);
 }

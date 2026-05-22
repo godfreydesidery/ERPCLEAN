@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface ItemGroupRepository extends JpaRepository<ItemGroup, Long> {
 
+    Optional<ItemGroup> findByUid(String uid);
+
     List<ItemGroup> findByCompanyId(Long companyId);
 
     Optional<ItemGroup> findByCompanyIdAndCode(Long companyId, String code);

@@ -7,6 +7,8 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { Currency, CurrencyService } from '../../core/currency/currency.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { ProcurementService } from './procurement.service';
 import {
   Grn,
@@ -15,14 +17,14 @@ import {
 } from './procurement.models';
 
 interface AllocRow {
-  grnId: number | null;
+  grnId: string | null;
   amount: number | null;
 }
 
 @Component({
   selector: 'orbix-supplier-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -85,7 +87,9 @@ interface AllocRow {
                 </div>
                 <div class="col-md-2">
                   <label class="form-label small fw-semibold text-secondary">Currency</label>
-                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
+                  <orbix-search-select name="cur" [options]="currencyOptions()"
+                                       [(ngModel)]="newCurrency" placeholder="Select…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label small fw-semibold text-secondary">Subtotal</label>
@@ -402,6 +406,14 @@ export class InvoicesComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly invoices = signal<SupplierInvoice[]>([]);
   protected readonly selected = signal<SupplierInvoice | null>(null);
@@ -417,7 +429,7 @@ export class InvoicesComponent implements OnInit {
 
   protected newNumber = '';
   protected newSupplierInvoiceNo = '';
-  protected newSupplierId: number | null = null;
+  protected newSupplierId: string | null = null;
   protected newInvoiceDate = new Date().toISOString().slice(0, 10);
   protected newDueDate: string | null = null;
   protected newCurrency = 'TZS';
@@ -427,7 +439,13 @@ export class InvoicesComponent implements OnInit {
 
   protected readonly tolerance = 0.005;
 
-  ngOnInit(): void { this.refresh(); }
+  ngOnInit(): void {
+    this.refresh();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
+  }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
@@ -493,7 +511,7 @@ export class InvoicesComponent implements OnInit {
     }
     const allocs: SupplierInvoiceAllocation[] = this.allocations
       .filter(r => r.grnId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ grnId: r.grnId as number, amount: r.amount as number }));
+      .map(r => ({ grnId: r.grnId as string, amount: r.amount as number }));
     if (allocs.length === 0) {
       this.error.set('Add at least one allocation with grn + amount.');
       return;

@@ -11,11 +11,14 @@ public interface EmployeeService {
 
     List<EmployeeResponseDto> listEmployees();
 
-    EmployeeResponseDto getEmployee(Long partyId);
+    EmployeeResponseDto getEmployeeByPartyUid(String partyUid);
 
     EmployeeResponseDto createEmployee(CreateEmployeeRequestDto request);
 
-    EmployeeResponseDto updateEmployee(Long partyId, UpdateEmployeeRequestDto request);
+    EmployeeResponseDto updateEmployeeByPartyUid(String partyUid, UpdateEmployeeRequestDto request);
 
-    void deactivateEmployee(Long partyId);
+    void deactivateEmployeeByPartyUid(String partyUid);
+
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateEmployeeByPartyUid(String partyUid);
 }

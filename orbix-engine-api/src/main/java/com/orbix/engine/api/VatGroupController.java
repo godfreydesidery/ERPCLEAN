@@ -4,10 +4,12 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateVatGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateVatGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.VatGroupDto;
 import com.orbix.engine.modules.catalog.service.VatGroupService;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/vat-groups")
 @RequiredArgsConstructor
+@Validated
 public class VatGroupController {
 
     private final VatGroupService service;
@@ -26,9 +29,9 @@ public class VatGroupController {
         return service.listVatGroups();
     }
 
-    @GetMapping("/{id}")
-    public VatGroupDto getVatGroup(@PathVariable Long id) {
-        return service.getVatGroup(id);
+    @GetMapping("/uid/{uid}")
+    public VatGroupDto getVatGroup(@PathVariable @ValidUlid String uid) {
+        return service.getVatGroupByUid(uid);
     }
 
     @PostMapping
@@ -36,20 +39,20 @@ public class VatGroupController {
     public ResponseEntity<VatGroupDto> createVatGroup(
             @Valid @RequestBody CreateVatGroupRequestDto request) {
         VatGroupDto group = service.createVatGroup(request);
-        return ResponseEntity.created(URI.create("/api/v1/vat-groups/" + group.id())).body(group);
+        return ResponseEntity.created(URI.create("/api/v1/vat-groups/uid/" + group.uid())).body(group);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('ITEM.UPDATE')")
-    public VatGroupDto updateVatGroup(@PathVariable Long id,
+    public VatGroupDto updateVatGroup(@PathVariable @ValidUlid String uid,
                                       @Valid @RequestBody UpdateVatGroupRequestDto request) {
-        return service.updateVatGroup(id, request);
+        return service.updateVatGroupByUid(uid, request);
     }
 
-    @PostMapping("/{id}/archive")
+    @PostMapping("/uid/{uid}/archive")
     @PreAuthorize("hasAuthority('ITEM.ARCHIVE')")
-    public ResponseEntity<Void> archiveVatGroup(@PathVariable Long id) {
-        service.archiveVatGroup(id);
+    public ResponseEntity<Void> archiveVatGroup(@PathVariable @ValidUlid String uid) {
+        service.archiveVatGroupByUid(uid);
         return ResponseEntity.noContent().build();
     }
 }

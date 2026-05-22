@@ -278,7 +278,7 @@ export class CountsComponent implements OnInit {
   protected newDate = new Date().toISOString().slice(0, 10);
   protected newType: StockCountType = 'CYCLE';
   protected newItemIds = '';
-  protected countedDraft: Record<number, number | null> = {};
+  protected countedDraft: Record<string, number | null> = {};
 
   ngOnInit(): void { this.load(); }
 

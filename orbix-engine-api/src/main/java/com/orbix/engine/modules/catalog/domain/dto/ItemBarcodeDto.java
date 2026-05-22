@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 
 public record ItemBarcodeDto(
     Long id,
+    String uid,
     Long itemId,
     String barcode,
     BarcodeType barcodeType,
@@ -16,6 +17,7 @@ public record ItemBarcodeDto(
     public static ItemBarcodeDto from(ItemBarcode barcode) {
         return new ItemBarcodeDto(
             barcode.getId(),
+            barcode.getUid(),
             barcode.getItemId(),
             barcode.getBarcode(),
             barcode.getBarcodeType(),

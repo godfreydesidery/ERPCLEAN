@@ -29,8 +29,8 @@ public class SalesAgent {
     @Column(name = "agent_code", nullable = false, length = 40)
     private String agentCode;
 
-    @Column(name = "route_code", length = 40)
-    private String routeCode;
+    @Column(name = "route_id")
+    private Long routeId;
 
     @Column(name = "commission_rate", precision = 10, scale = 4)
     private BigDecimal commissionRate;
@@ -44,9 +44,9 @@ public class SalesAgent {
         this.branchId = branchId;
     }
 
-    public void update(Long appUserId, String routeCode, BigDecimal commissionRate, Long branchId) {
+    public void update(Long appUserId, Long routeId, BigDecimal commissionRate, Long branchId) {
         this.appUserId = appUserId;
-        this.routeCode = routeCode;
+        this.routeId = routeId;
         this.commissionRate = commissionRate;
         this.branchId = branchId;
     }

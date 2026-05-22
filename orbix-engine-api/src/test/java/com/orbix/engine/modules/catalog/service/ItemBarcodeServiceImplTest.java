@@ -11,12 +11,14 @@ import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.NoSuchElementException;
@@ -54,6 +56,7 @@ class ItemBarcodeServiceImplTest {
         Item item = new Item(companyId, "SKU" + id, "Item " + id, ItemType.SELLABLE,
             1L, 1L, 1L, ACTOR_ID);
         item.setId(id);
+        ReflectionTestUtils.setField(item, "uid", UidGenerator.next());
         return item;
     }
 
@@ -65,18 +68,21 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_savesAndPublishesEvent() {
-        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+        Item item = item(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
         when(barcodes.existsByBarcode("5901234123457")).thenReturn(false);
         when(barcodes.save(any(ItemBarcode.class))).thenAnswer(inv -> {
             ItemBarcode b = inv.getArgument(0);
             b.setId(10L);
+            ReflectionTestUtils.setField(b, "uid", UidGenerator.next());
             return b;
         });
 
-        ItemBarcodeDto result = service.addBarcode(1L,
+        ItemBarcodeDto result = service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("5901234123457", BarcodeType.EAN13, 2L, new BigDecimal("12")));
 
         assertThat(result.id()).isEqualTo(10L);
+        assertThat(result.uid()).isNotBlank();
         assertThat(result.barcode()).isEqualTo("5901234123457");
         assertThat(result.barcodeType()).isEqualTo(BarcodeType.EAN13);
         verify(events).publish(eq("BarcodeAdded.v1"), any(), any(), any());
@@ -84,10 +90,11 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_rejectsDuplicateBarcode() {
-        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+        Item item = item(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
         when(barcodes.existsByBarcode("5901234123457")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.addBarcode(1L,
+        assertThatThrownBy(() -> service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("5901234123457", BarcodeType.EAN13, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already in use");
@@ -96,9 +103,10 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_rejectsBadEan13Length() {
-        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+        Item item = item(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
 
-        assertThatThrownBy(() -> service.addBarcode(1L,
+        assertThatThrownBy(() -> service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("12345", BarcodeType.EAN13, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("EAN13 barcode must be 13 digits");
@@ -107,15 +115,17 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_embeddedWeight_savesPrefixForWeighedItem() {
-        when(items.findById(1L)).thenReturn(Optional.of(weighedItem(1L, COMPANY_ID)));
+        Item item = weighedItem(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
         when(barcodes.existsByBarcode("2012345")).thenReturn(false);
         when(barcodes.save(any(ItemBarcode.class))).thenAnswer(inv -> {
             ItemBarcode b = inv.getArgument(0);
             b.setId(20L);
+            ReflectionTestUtils.setField(b, "uid", UidGenerator.next());
             return b;
         });
 
-        ItemBarcodeDto result = service.addBarcode(1L,
+        ItemBarcodeDto result = service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("2012345", BarcodeType.EMBEDDED_WEIGHT, null, null));
 
         assertThat(result.barcode()).isEqualTo("2012345");
@@ -124,9 +134,10 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_embeddedWeight_rejectsNonWeighedItem() {
-        when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
+        Item item = item(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
 
-        assertThatThrownBy(() -> service.addBarcode(1L,
+        assertThatThrownBy(() -> service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("2012345", BarcodeType.EMBEDDED_WEIGHT, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("requires a weighed item");
@@ -135,9 +146,10 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_embeddedWeight_rejectsBadPrefix() {
-        when(items.findById(1L)).thenReturn(Optional.of(weighedItem(1L, COMPANY_ID)));
+        Item item = weighedItem(1L, COMPANY_ID);
+        when(items.findByUid(item.getUid())).thenReturn(Optional.of(item));
 
-        assertThatThrownBy(() -> service.addBarcode(1L,
+        assertThatThrownBy(() -> service.addBarcodeByItemUid(item.getUid(),
             new CreateItemBarcodeRequestDto("3012345", BarcodeType.EMBEDDED_WEIGHT, null, null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("7 digits with leading '2'");
@@ -146,9 +158,10 @@ class ItemBarcodeServiceImplTest {
 
     @Test
     void addBarcode_itemFromAnotherCompany_throwsNotFound() {
-        when(items.findById(1L)).thenReturn(Optional.of(item(1L, 999L)));
+        Item foreign = item(1L, 999L);
+        when(items.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.addBarcode(1L,
+        assertThatThrownBy(() -> service.addBarcodeByItemUid(foreign.getUid(),
             new CreateItemBarcodeRequestDto("X", BarcodeType.EAN13, null, null)))
             .isInstanceOf(NoSuchElementException.class);
     }
@@ -157,19 +170,21 @@ class ItemBarcodeServiceImplTest {
     void deleteBarcode_removesWhenItemInCompany() {
         ItemBarcode barcode = new ItemBarcode(1L, "X", BarcodeType.EAN13, null, BigDecimal.ONE);
         barcode.setId(10L);
-        when(barcodes.findById(10L)).thenReturn(Optional.of(barcode));
+        ReflectionTestUtils.setField(barcode, "uid", UidGenerator.next());
+        when(barcodes.findByUid(barcode.getUid())).thenReturn(Optional.of(barcode));
         when(items.findById(1L)).thenReturn(Optional.of(item(1L, COMPANY_ID)));
 
-        service.deleteBarcode(10L);
+        service.deleteBarcodeByUid(barcode.getUid());
 
         verify(barcodes).delete(barcode);
     }
 
     @Test
     void deleteBarcode_notFound_throwsNoSuchElement() {
-        when(barcodes.findById(404L)).thenReturn(Optional.empty());
+        String missingUid = UidGenerator.next();
+        when(barcodes.findByUid(missingUid)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.deleteBarcode(404L))
+        assertThatThrownBy(() -> service.deleteBarcodeByUid(missingUid))
             .isInstanceOf(NoSuchElementException.class);
     }
 }

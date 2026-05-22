@@ -10,7 +10,7 @@ public record SalesAgentResponseDto(
     PartyResponseDto party,
     Long appUserId,
     String agentCode,
-    String routeCode,
+    Long routeId,
     BigDecimal commissionRate,
     Long branchId
 ) {
@@ -20,7 +20,7 @@ public record SalesAgentResponseDto(
             PartyResponseDto.from(party),
             agent.getAppUserId(),
             agent.getAgentCode(),
-            agent.getRouteCode(),
+            agent.getRouteId(),
             agent.getCommissionRate(),
             agent.getBranchId()
         );

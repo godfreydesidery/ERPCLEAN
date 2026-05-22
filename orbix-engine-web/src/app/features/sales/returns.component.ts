@@ -16,7 +16,7 @@ import {
 } from './sales.models';
 
 interface LineRow {
-  itemId: number | null;
+  itemId: string | null;
   qty: number | null;
   unitPrice: number | null;
 }
@@ -348,8 +348,8 @@ export class ReturnsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newCustomerId: number | null = null;
-  protected newOriginalInvoiceId: number | null = null;
+  protected newCustomerId: string | null = null;
+  protected newOriginalInvoiceId: string | null = null;
   protected newReturnDate = new Date().toISOString().slice(0, 10);
   protected newReason: ReturnReason = 'DAMAGED';
   protected newRestock = true;
@@ -381,7 +381,7 @@ export class ReturnsComponent implements OnInit {
     const lines: CreateCustomerReturnLine[] = this.newLines
       .filter(r => r.itemId !== null && (r.qty ?? 0) > 0 && (r.unitPrice ?? 0) >= 0)
       .map(r => ({
-        itemId: r.itemId as number,
+        itemId: r.itemId as string,
         uomId: null,
         returnedQty: r.qty as number,
         unitPrice: r.unitPrice as number,

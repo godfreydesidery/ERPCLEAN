@@ -26,7 +26,7 @@ export class RoleAdminService {
     return unwrap(this.http.get<ApiResponse<RoleSummary[]>>(`${this.base}/roles`));
   }
 
-  getRole(id: number): Observable<RoleDetail> {
+  getRole(id: string): Observable<RoleDetail> {
     return unwrap(this.http.get<ApiResponse<RoleDetail>>(`${this.base}/roles/${id}`));
   }
 
@@ -34,31 +34,31 @@ export class RoleAdminService {
     return unwrap(this.http.post<ApiResponse<RoleDetail>>(`${this.base}/roles`, request));
   }
 
-  updateRole(id: number, request: UpdateRoleRequest): Observable<RoleDetail> {
+  updateRole(id: string, request: UpdateRoleRequest): Observable<RoleDetail> {
     return unwrap(this.http.patch<ApiResponse<RoleDetail>>(`${this.base}/roles/${id}`, request));
   }
 
-  setPermissions(id: number, permissionIds: number[]): Observable<RoleDetail> {
+  setPermissions(id: string, permissionIds: string[]): Observable<RoleDetail> {
     return unwrap(this.http.put<ApiResponse<RoleDetail>>(
       `${this.base}/roles/${id}/permissions`, { permissionIds }
     ));
   }
 
-  deleteRole(id: number): Observable<void> {
+  deleteRole(id: string): Observable<void> {
     return this.http.delete(`${this.base}/roles/${id}`).pipe(map(() => void 0));
   }
 
-  listGrants(roleId: number): Observable<RoleGrant[]> {
+  listGrants(roleId: string): Observable<RoleGrant[]> {
     return unwrap(this.http.get<ApiResponse<RoleGrant[]>>(`${this.base}/roles/${roleId}/grants`));
   }
 
-  grantRole(roleId: number, request: GrantRoleRequest): Observable<RoleGrant> {
+  grantRole(roleId: string, request: GrantRoleRequest): Observable<RoleGrant> {
     return unwrap(this.http.post<ApiResponse<RoleGrant>>(
       `${this.base}/roles/${roleId}/grants`, request
     ));
   }
 
-  revokeGrant(grantId: number): Observable<void> {
+  revokeGrant(grantId: string): Observable<void> {
     return this.http.delete(`${this.base}/grants/${grantId}`).pipe(map(() => void 0));
   }
 }

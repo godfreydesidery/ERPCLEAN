@@ -50,8 +50,8 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
                   </tr>
                 </thead>
                 <tbody>
-                  @for (uom of uoms(); track uom.id) {
-                    <tr [class.table-active]="editingId() === uom.id">
+                  @for (uom of uoms(); track uom.uid) {
+                    <tr [class.table-active]="editingUid() === uom.uid">
                       <td><span class="badge text-bg-light border text-secondary font-monospace">{{ uom.code }}</span></td>
                       <td class="fw-semibold text-dark">{{ uom.name }}</td>
                       <td><span class="dim-pill dim-pill--{{ uom.dimension.toLowerCase() }}">{{ uom.dimension }}</span></td>
@@ -81,10 +81,10 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
         <div class="card border-0 shadow-sm">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">
-              {{ editingId() ? 'Edit unit' : 'New unit' }}
+              {{ editingUid() ? 'Edit unit' : 'New unit' }}
             </h2>
-            @if (editingId()) {
-              <span class="badge text-bg-light text-secondary">Editing #{{ editingId() }}</span>
+            @if (editingUid()) {
+              <span class="badge text-bg-light text-secondary">Editing #{{ editingUid() }}</span>
             }
           </div>
           <div class="card-body p-3">
@@ -92,7 +92,7 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
               <div>
                 <label class="form-label small fw-semibold text-secondary">Code</label>
                 <input class="form-control" name="code" [(ngModel)]="form.code" required
-                       [disabled]="!!editingId()" placeholder="e.g. KG">
+                       [disabled]="!!editingUid()" placeholder="e.g. KG">
               </div>
               <div>
                 <label class="form-label small fw-semibold text-secondary">Name</label>
@@ -118,11 +118,11 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
                   @if (busy()) {
                     <span class="spinner-border spinner-border-sm"></span>
                   } @else {
-                    <i class="bi" [class.bi-save]="editingId()" [class.bi-plus-lg]="!editingId()"></i>
+                    <i class="bi" [class.bi-save]="editingUid()" [class.bi-plus-lg]="!editingUid()"></i>
                   }
-                  {{ editingId() ? 'Save changes' : 'Create unit' }}
+                  {{ editingUid() ? 'Save changes' : 'Create unit' }}
                 </button>
-                @if (editingId()) {
+                @if (editingUid()) {
                   <button type="button" class="btn btn-outline-secondary" (click)="cancel()">Cancel</button>
                 }
               </div>
@@ -183,7 +183,7 @@ export class UomComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
 
   protected readonly uoms = signal<Uom[]>([]);
-  protected readonly editingId = signal<number | null>(null);
+  protected readonly editingUid = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -195,24 +195,24 @@ export class UomComponent implements OnInit {
   }
 
   edit(uom: Uom): void {
-    this.editingId.set(uom.id);
+    this.editingUid.set(uom.uid);
     this.form = { code: uom.code, name: uom.name, dimension: uom.dimension, base: uom.base };
   }
 
   cancel(): void {
-    this.editingId.set(null);
+    this.editingUid.set(null);
     this.form = blank();
   }
 
   submit(): void {
-    const id = this.editingId();
+    const uid = this.editingUid();
     const request = {
       name: this.form.name.trim(),
       dimension: this.form.dimension,
       base: this.form.base
     };
-    const source = id
-      ? this.catalog.updateUom(id, request)
+    const source = uid
+      ? this.catalog.updateUom(uid, request)
       : this.catalog.createUom({ code: this.form.code.trim(), ...request });
     this.run(source, () => {
       this.cancel();

@@ -11,11 +11,14 @@ public interface SupplierService {
 
     List<SupplierResponseDto> listSuppliers();
 
-    SupplierResponseDto getSupplier(Long partyId);
+    SupplierResponseDto getSupplierByPartyUid(String partyUid);
 
     SupplierResponseDto createSupplier(CreateSupplierRequestDto request);
 
-    SupplierResponseDto updateSupplier(Long partyId, UpdateSupplierRequestDto request);
+    SupplierResponseDto updateSupplierByPartyUid(String partyUid, UpdateSupplierRequestDto request);
 
-    void deactivateSupplier(Long partyId);
+    void deactivateSupplierByPartyUid(String partyUid);
+
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateSupplierByPartyUid(String partyUid);
 }

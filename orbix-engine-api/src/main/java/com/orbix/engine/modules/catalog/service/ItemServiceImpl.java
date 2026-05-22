@@ -61,8 +61,8 @@ public class ItemServiceImpl implements ItemService {
         events.publish(
             "ItemCreated.v1",
             "Item",
-            String.valueOf(saved.getId()),
-            Map.of("itemId", saved.getId(), "code", saved.getCode(), "companyId", companyId)
+            saved.getUid(),
+            Map.of(ITEM_UID_KEY, saved.getUid(), "code", saved.getCode(), "companyId", companyId)
         );
         return ItemResponseDto.from(saved);
     }
@@ -79,22 +79,22 @@ public class ItemServiceImpl implements ItemService {
 
     @Override
     @Transactional(readOnly = true)
-    public ItemResponseDto getItem(Long itemId) {
-        return ItemResponseDto.from(requireItem(itemId));
+    public ItemResponseDto getItemByUid(String uid) {
+        return ItemResponseDto.from(requireItemByUid(uid));
     }
 
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Item")
-    public ItemResponseDto updateItem(Long itemId, UpdateItemRequestDto request) {
-        Item item = requireItem(itemId);
+    public ItemResponseDto updateItemByUid(String uid, UpdateItemRequestDto request) {
+        Item item = requireItemByUid(uid);
         Long actorId = context.userId();
 
         item.update(request.name(), request.shortName(), request.type(), request.itemGroupId(),
             request.uomId(), request.vatGroupId(), request.tracked(), request.minSellPrice(),
             actorId);
-        events.publish("ItemUpdated.v1", "Item", String.valueOf(item.getId()),
-            Map.of("itemId", item.getId()));
+        events.publish("ItemUpdated.v1", "Item", item.getUid(),
+            Map.of(ITEM_UID_KEY, item.getUid()));
 
         applyWeighing(item, request, actorId);
         applyBatchTracking(item, request.batchTracked(), actorId);
@@ -118,8 +118,8 @@ public class ItemServiceImpl implements ItemService {
         boolean changed = item.isWeighed() != weighed || item.getWeighingUnit() != unit;
         item.applyWeighing(weighed, unit, actorId);
         if (changed) {
-            events.publish("ItemWeighingChanged.v1", "Item", String.valueOf(item.getId()),
-                Map.of("itemId", item.getId(), "weighed", weighed));
+            events.publish("ItemWeighingChanged.v1", "Item", item.getUid(),
+                Map.of(ITEM_UID_KEY, item.getUid(), "weighed", weighed));
         }
     }
 
@@ -130,11 +130,11 @@ public class ItemServiceImpl implements ItemService {
         }
         if (was && !batchTracked && hasActiveBatches(item.getId())) {
             throw new IllegalArgumentException(
-                "Cannot disable batch tracking while item " + item.getId() + " has active stock batches");
+                "Cannot disable batch tracking while item " + item.getUid() + " has active stock batches");
         }
         item.applyBatchTracking(batchTracked, actorId);
         String type = batchTracked ? "ItemBatchTrackingEnabled.v1" : "ItemBatchTrackingDisabled.v1";
-        events.publish(type, "Item", String.valueOf(item.getId()), Map.of("itemId", item.getId()));
+        events.publish(type, "Item", item.getUid(), Map.of(ITEM_UID_KEY, item.getUid()));
     }
 
     private boolean hasActiveBatches(Long itemId) {
@@ -150,39 +150,41 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional
     @Auditable(action = "ARCHIVE", entityType = "Item")
-    public void archiveItem(Long itemId) {
-        Item item = requireItem(itemId);
+    public void archiveItemByUid(String uid) {
+        Item item = requireItemByUid(uid);
         if (item.getStatus() == ItemStatus.ARCHIVED) {
-            throw new IllegalArgumentException("Item is already archived: " + itemId);
+            throw new IllegalArgumentException("Item is already archived: " + uid);
         }
-        if (item.isBatchTracked() && hasActiveBatches(itemId)) {
+        if (item.isBatchTracked() && hasActiveBatches(item.getId())) {
             throw new IllegalArgumentException(
-                "Cannot archive item " + itemId + " while it has active stock batches");
+                "Cannot archive item " + uid + " while it has active stock batches");
         }
         item.archive(context.userId());
-        events.publish("ItemArchived.v1", "Item", String.valueOf(item.getId()),
-            Map.of("itemId", item.getId()));
+        events.publish("ItemArchived.v1", "Item", item.getUid(),
+            Map.of(ITEM_UID_KEY, item.getUid()));
     }
 
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = "Item")
-    public void activateItem(Long itemId) {
-        Item item = requireItem(itemId);
+    public void activateItemByUid(String uid) {
+        Item item = requireItemByUid(uid);
         if (item.getStatus() == ItemStatus.ACTIVE) {
-            throw new IllegalArgumentException("Item is already active: " + itemId);
+            throw new IllegalArgumentException("Item is already active: " + uid);
         }
         item.activate(context.userId());
-        events.publish("ItemActivated.v1", "Item", String.valueOf(item.getId()),
-            Map.of("itemId", item.getId()));
+        events.publish("ItemActivated.v1", "Item", item.getUid(),
+            Map.of(ITEM_UID_KEY, item.getUid()));
     }
 
-    private Item requireItem(Long itemId) {
-        Item item = repo.findById(itemId)
-            .orElseThrow(() -> new NoSuchElementException("Item not found: " + itemId));
+    private Item requireItemByUid(String uid) {
+        Item item = repo.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Item not found: " + uid));
         if (!Objects.equals(item.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Item not found: " + itemId);
+            throw new NoSuchElementException("Item not found: " + uid);
         }
         return item;
     }
+
+    private static final String ITEM_UID_KEY = "itemUid";
 }

@@ -20,13 +20,13 @@ export class ProcurementService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listLpos(branchId: number | null): Observable<LpoOrder[]> {
+  listLpos(branchId: string | null): Observable<LpoOrder[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<LpoOrder[]>>(`${this.base}/lpos`, { params }));
   }
 
-  getLpo(id: number): Observable<LpoOrder> {
+  getLpo(id: string): Observable<LpoOrder> {
     return unwrap(this.http.get<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}`));
   }
 
@@ -34,31 +34,31 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos`, request));
   }
 
-  updateLpo(id: number, request: UpdateLpoOrderRequest): Observable<LpoOrder> {
+  updateLpo(id: string, request: UpdateLpoOrderRequest): Observable<LpoOrder> {
     return unwrap(this.http.patch<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}`, request));
   }
 
-  submitLpo(id: number): Observable<LpoOrder> {
+  submitLpo(id: string): Observable<LpoOrder> {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/submit`, {}));
   }
 
-  approveLpo(id: number): Observable<LpoOrder> {
+  approveLpo(id: string): Observable<LpoOrder> {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/approve`, {}));
   }
 
-  cancelLpo(id: number): Observable<LpoOrder> {
+  cancelLpo(id: string): Observable<LpoOrder> {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/cancel`, {}));
   }
 
   // ---- GRN (F3.2) ----------------------------------------------------------
 
-  listGrns(branchId: number | null): Observable<Grn[]> {
+  listGrns(branchId: string | null): Observable<Grn[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<Grn[]>>(`${this.base}/grns`, { params }));
   }
 
-  getGrn(id: number): Observable<Grn> {
+  getGrn(id: string): Observable<Grn> {
     return unwrap(this.http.get<ApiResponse<Grn>>(`${this.base}/grns/${id}`));
   }
 
@@ -66,17 +66,17 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns`, request));
   }
 
-  postGrn(id: number): Observable<Grn> {
+  postGrn(id: string): Observable<Grn> {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/post`, {}));
   }
 
-  cancelGrn(id: number): Observable<Grn> {
+  cancelGrn(id: string): Observable<Grn> {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/cancel`, {}));
   }
 
   // ---- supplier invoices (F3.3) -------------------------------------------
 
-  listSupplierInvoices(branchId: number | null): Observable<SupplierInvoice[]> {
+  listSupplierInvoices(branchId: string | null): Observable<SupplierInvoice[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<SupplierInvoice[]>>(
@@ -84,7 +84,7 @@ export class ProcurementService {
     ));
   }
 
-  getSupplierInvoice(id: number): Observable<SupplierInvoice> {
+  getSupplierInvoice(id: string): Observable<SupplierInvoice> {
     return unwrap(this.http.get<ApiResponse<SupplierInvoice>>(
       `${this.base}/supplier-invoices/${id}`
     ));
@@ -96,13 +96,13 @@ export class ProcurementService {
     ));
   }
 
-  postSupplierInvoice(id: number): Observable<SupplierInvoice> {
+  postSupplierInvoice(id: string): Observable<SupplierInvoice> {
     return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
       `${this.base}/supplier-invoices/${id}/post`, {}
     ));
   }
 
-  cancelSupplierInvoice(id: number): Observable<SupplierInvoice> {
+  cancelSupplierInvoice(id: string): Observable<SupplierInvoice> {
     return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
       `${this.base}/supplier-invoices/${id}/cancel`, {}
     ));
@@ -110,7 +110,7 @@ export class ProcurementService {
 
   // ---- supplier payments (F3.4) -------------------------------------------
 
-  listSupplierPayments(branchId: number | null): Observable<SupplierPayment[]> {
+  listSupplierPayments(branchId: string | null): Observable<SupplierPayment[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<SupplierPayment[]>>(
@@ -118,7 +118,7 @@ export class ProcurementService {
     ));
   }
 
-  getSupplierPayment(id: number): Observable<SupplierPayment> {
+  getSupplierPayment(id: string): Observable<SupplierPayment> {
     return unwrap(this.http.get<ApiResponse<SupplierPayment>>(
       `${this.base}/supplier-payments/${id}`
     ));
@@ -130,13 +130,13 @@ export class ProcurementService {
     ));
   }
 
-  postSupplierPayment(id: number): Observable<SupplierPayment> {
+  postSupplierPayment(id: string): Observable<SupplierPayment> {
     return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
       `${this.base}/supplier-payments/${id}/post`, {}
     ));
   }
 
-  cancelSupplierPayment(id: number): Observable<SupplierPayment> {
+  cancelSupplierPayment(id: string): Observable<SupplierPayment> {
     return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
       `${this.base}/supplier-payments/${id}/cancel`, {}
     ));

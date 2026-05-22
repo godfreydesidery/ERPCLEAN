@@ -14,7 +14,7 @@ export const routes: Routes = [
     loadComponent: () => import('./items/item-edit.component').then(m => m.ItemEditComponent)
   },
   {
-    path: 'items/:id/edit',
+    path: 'items/:uid/edit',
     loadComponent: () => import('./items/item-edit.component').then(m => m.ItemEditComponent)
   },
   {

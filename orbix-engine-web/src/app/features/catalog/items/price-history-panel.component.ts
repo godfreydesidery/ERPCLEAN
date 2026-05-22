@@ -33,11 +33,11 @@ import { PriceChangeLog } from '../catalog.models';
 export class PriceHistoryPanelComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
 
-  readonly itemId = input.required<number>();
+  readonly itemUid = input.required<string>();
   readonly changes = signal<PriceChangeLog[]>([]);
 
   ngOnInit(): void {
-    this.catalog.priceHistory(this.itemId()).subscribe({
+    this.catalog.priceHistory(this.itemUid()).subscribe({
       next: changes => this.changes.set(changes),
       error: () => this.changes.set([])
     });

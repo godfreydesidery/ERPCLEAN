@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface BranchRepository extends JpaRepository<Branch, Long> {
 
+    Optional<Branch> findByUid(String uid);
+
     List<Branch> findByCompanyId(Long companyId);
 
     Optional<Branch> findByCompanyIdAndCode(Long companyId, String code);

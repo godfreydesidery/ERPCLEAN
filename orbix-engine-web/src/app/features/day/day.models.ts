@@ -3,12 +3,12 @@
 export type BusinessDayStatus = 'OPEN' | 'CLOSING' | 'CLOSED';
 
 export interface BusinessDay {
-  branchId: number;
+  branchId: string;
   businessDate: string;
   status: BusinessDayStatus;
   openedAt: string;
-  openedBy: number;
+  openedBy: string;
   closedAt: string | null;
-  closedBy: number | null;
+  closedBy: string | null;
   eodReportObjectKey: string | null;
 }

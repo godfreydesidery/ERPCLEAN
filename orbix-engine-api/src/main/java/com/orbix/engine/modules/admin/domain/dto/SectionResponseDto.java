@@ -7,6 +7,7 @@ import com.orbix.engine.modules.admin.domain.enums.SectionType;
 /** Section as returned by the admin section-management endpoints. */
 public record SectionResponseDto(
     Long id,
+    String uid,
     Long branchId,
     String code,
     String name,
@@ -17,6 +18,7 @@ public record SectionResponseDto(
     public static SectionResponseDto from(Section section) {
         return new SectionResponseDto(
             section.getId(),
+            section.getUid(),
             section.getBranchId(),
             section.getCode(),
             section.getName(),

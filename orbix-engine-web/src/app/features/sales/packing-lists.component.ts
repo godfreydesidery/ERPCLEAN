@@ -326,12 +326,12 @@ export class PackingListsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newInvoiceId: number | null = null;
+  protected newInvoiceId: string | null = null;
   protected newDispatchDate = new Date().toISOString().slice(0, 10);
   protected newDriverName = '';
   protected newVehicleNo = '';
-  protected lineSelected: Record<number, boolean> = {};
-  protected lineQty: Record<number, number> = {};
+  protected lineSelected: Record<string, boolean> = {};
+  protected lineQty: Record<string, number> = {};
 
   ngOnInit(): void { this.refresh(); }
 

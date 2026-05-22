@@ -23,6 +23,7 @@ public final class Permissions {
     public static final String ADMIN_MANAGE_SECTIONS   = "ADMIN.MANAGE_SECTIONS";
     public static final String ADMIN_MANAGE_CURRENCIES = "ADMIN.MANAGE_CURRENCIES";
     public static final String ADMIN_MANAGE_FX         = "ADMIN.MANAGE_FX";
+    public static final String ADMIN_MANAGE_ROUTES     = "ADMIN.MANAGE_ROUTES";
 
     // ---- catalog -----------------------------------------------------------
     public static final String ITEM_CREATE  = "ITEM.CREATE";

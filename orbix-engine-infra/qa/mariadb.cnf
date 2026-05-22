@@ -1,0 +1,9 @@
+[mariadbd]
+bind-address                   = 127.0.0.1
+character-set-server           = utf8mb4
+collation-server               = utf8mb4_unicode_ci
+# Avoid the legacy implicit DEFAULT CURRENT_TIMESTAMP on bare TIMESTAMP columns.
+explicit_defaults_for_timestamp = ON
+# QA scale — small buffer pool, single connection pool, no remote access.
+innodb_buffer_pool_size        = 256M
+max_connections                = 64

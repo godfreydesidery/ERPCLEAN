@@ -1,8 +1,9 @@
 /** Mirrors the backend admin branch/section DTOs (see BranchController, SectionController). */
 
 export interface Branch {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   type: string;
@@ -14,12 +15,13 @@ export interface Branch {
 }
 
 export interface Section {
-  id: number;
-  branchId: number;
+  id: string;
+  uid: string;
+  branchId: string;
   code: string;
   name: string;
   type: string;
-  managerUserId: number | null;
+  managerUserId: string | null;
   status: string;
 }
 
@@ -44,13 +46,13 @@ export interface CreateSectionRequest {
   code: string;
   name: string;
   type: string;
-  managerUserId: number | null;
+  managerUserId: string | null;
 }
 
 export interface UpdateSectionRequest {
   name: string;
   type: string;
-  managerUserId: number | null;
+  managerUserId: string | null;
 }
 
 export const SECTION_TYPES = [

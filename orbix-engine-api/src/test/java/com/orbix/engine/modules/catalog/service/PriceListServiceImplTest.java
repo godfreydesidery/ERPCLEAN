@@ -17,6 +17,7 @@ import com.orbix.engine.modules.catalog.repository.PriceListItemRepository;
 import com.orbix.engine.modules.catalog.repository.PriceListRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -65,6 +67,7 @@ class PriceListServiceImplTest {
         PriceList list = new PriceList(COMPANY_ID, code, "Name " + code, "UGX",
             LocalDate.of(2026, 1, 1), null, isDefault, false, ACTOR_ID);
         list.setId(id);
+        ReflectionTestUtils.setField(list, "uid", UidGenerator.next());
         return list;
     }
 
@@ -72,6 +75,7 @@ class PriceListServiceImplTest {
         Item item = new Item(companyId, "SKU" + id, "Item " + id, ItemType.SELLABLE,
             1L, 1L, 1L, ACTOR_ID);
         item.setId(id);
+        ReflectionTestUtils.setField(item, "uid", UidGenerator.next());
         return item;
     }
 
@@ -81,6 +85,7 @@ class PriceListServiceImplTest {
         when(priceLists.save(any(PriceList.class))).thenAnswer(inv -> {
             PriceList l = inv.getArgument(0);
             l.setId(1L);
+            ReflectionTestUtils.setField(l, "uid", UidGenerator.next());
             return l;
         });
 
@@ -89,6 +94,7 @@ class PriceListServiceImplTest {
 
         assertThat(result.code()).isEqualTo("RETAIL");
         assertThat(result.taxInclusive()).isTrue();
+        assertThat(result.uid()).isNotBlank();
     }
 
     @Test
@@ -109,6 +115,7 @@ class PriceListServiceImplTest {
         when(priceLists.save(any(PriceList.class))).thenAnswer(inv -> {
             PriceList l = inv.getArgument(0);
             l.setId(1L);
+            ReflectionTestUtils.setField(l, "uid", UidGenerator.next());
             return l;
         });
         when(priceLists.findByCompanyIdAndIsDefaultTrue(COMPANY_ID))
@@ -123,9 +130,9 @@ class PriceListServiceImplTest {
     @Test
     void updatePriceList_changesAttributes() {
         PriceList existing = priceList(1L, "RETAIL", false);
-        when(priceLists.findById(1L)).thenReturn(Optional.of(existing));
+        when(priceLists.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        PriceListDto result = service.updatePriceList(1L, new UpdatePriceListRequestDto(
+        PriceListDto result = service.updatePriceListByUid(existing.getUid(), new UpdatePriceListRequestDto(
             "Retail 2026", "USD", LocalDate.of(2026, 7, 1), null, false, true));
 
         assertThat(result.name()).isEqualTo("Retail 2026");
@@ -137,16 +144,17 @@ class PriceListServiceImplTest {
     void archivePriceList_rejectsAlreadyArchived() {
         PriceList existing = priceList(1L, "RETAIL", false);
         existing.setStatus(ItemStatus.ARCHIVED);
-        when(priceLists.findById(1L)).thenReturn(Optional.of(existing));
+        when(priceLists.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.archivePriceList(1L))
+        assertThatThrownBy(() -> service.archivePriceListByUid(existing.getUid()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already archived");
     }
 
     @Test
     void setPrice_firstSet_createsRowAndLogsWithNullOldPrice() {
-        when(priceLists.findById(1L)).thenReturn(Optional.of(priceList(1L, "RETAIL", false)));
+        PriceList list = priceList(1L, "RETAIL", false);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
         when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
         when(priceListItems.findByPriceListIdAndItemIdAndUomIdAndValidToIsNull(1L, 8801L, 2L))
             .thenReturn(Optional.empty());
@@ -156,7 +164,7 @@ class PriceListServiceImplTest {
             return r;
         });
 
-        PriceListItemDto result = service.setPrice(1L, new SetPriceRequestDto(
+        PriceListItemDto result = service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
             8801L, 2L, new BigDecimal("1000"), LocalDate.of(2026, 1, 1), "initial"));
 
         assertThat(result.price()).isEqualByComparingTo("1000");
@@ -169,9 +177,10 @@ class PriceListServiceImplTest {
 
     @Test
     void setPrice_replacingPrior_closesPriorRowAndLogsOldPrice() {
+        PriceList list = priceList(1L, "RETAIL", false);
         PriceListItem prior = new PriceListItem(1L, 8801L, 2L, new BigDecimal("1000"), LocalDate.of(2026, 1, 1));
         prior.setId(50L);
-        when(priceLists.findById(1L)).thenReturn(Optional.of(priceList(1L, "RETAIL", false)));
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
         when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
         when(priceListItems.findByPriceListIdAndItemIdAndUomIdAndValidToIsNull(1L, 8801L, 2L))
             .thenReturn(Optional.of(prior));
@@ -181,7 +190,7 @@ class PriceListServiceImplTest {
             return r;
         });
 
-        service.setPrice(1L, new SetPriceRequestDto(
+        service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
             8801L, 2L, new BigDecimal("1200"), LocalDate.of(2026, 6, 1), "increase"));
 
         assertThat(prior.getValidTo()).isEqualTo(LocalDate.of(2026, 5, 31));
@@ -193,14 +202,15 @@ class PriceListServiceImplTest {
 
     @Test
     void setPrice_effectiveFromNotAfterPriorStart_isRejected() {
+        PriceList list = priceList(1L, "RETAIL", false);
         PriceListItem prior = new PriceListItem(1L, 8801L, 2L, new BigDecimal("1000"), LocalDate.of(2026, 6, 1));
         prior.setId(50L);
-        when(priceLists.findById(1L)).thenReturn(Optional.of(priceList(1L, "RETAIL", false)));
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
         when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
         when(priceListItems.findByPriceListIdAndItemIdAndUomIdAndValidToIsNull(1L, 8801L, 2L))
             .thenReturn(Optional.of(prior));
 
-        assertThatThrownBy(() -> service.setPrice(1L, new SetPriceRequestDto(
+        assertThatThrownBy(() -> service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
             8801L, 2L, new BigDecimal("1200"), LocalDate.of(2026, 1, 1), null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("take effect after");
@@ -209,10 +219,11 @@ class PriceListServiceImplTest {
 
     @Test
     void setPrice_itemFromAnotherCompany_throwsNotFound() {
-        when(priceLists.findById(1L)).thenReturn(Optional.of(priceList(1L, "RETAIL", false)));
+        PriceList list = priceList(1L, "RETAIL", false);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
         when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, 999L)));
 
-        assertThatThrownBy(() -> service.setPrice(1L, new SetPriceRequestDto(
+        assertThatThrownBy(() -> service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
             8801L, 2L, new BigDecimal("1000"), LocalDate.of(2026, 1, 1), null)))
             .isInstanceOf(NoSuchElementException.class);
     }
@@ -222,8 +233,10 @@ class PriceListServiceImplTest {
         PriceList foreign = new PriceList(999L, "X", "Foreign", "UGX",
             LocalDate.of(2026, 1, 1), null, false, false, ACTOR_ID);
         foreign.setId(7L);
-        when(priceLists.findById(7L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(priceLists.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.getPriceList(7L)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.getPriceListByUid(foreign.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }
