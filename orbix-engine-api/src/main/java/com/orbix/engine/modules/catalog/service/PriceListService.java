@@ -18,20 +18,20 @@ public interface PriceListService {
 
     List<PriceListDto> listPriceLists();
 
-    PriceListDto getPriceList(Long priceListId);
+    PriceListDto getPriceListByUid(String uid);
 
     PriceListDto createPriceList(CreatePriceListRequestDto request);
 
-    PriceListDto updatePriceList(Long priceListId, UpdatePriceListRequestDto request);
+    PriceListDto updatePriceListByUid(String uid, UpdatePriceListRequestDto request);
 
-    void archivePriceList(Long priceListId);
+    void archivePriceListByUid(String uid);
 
     /** The currently-effective price rows on a list. */
-    List<PriceListItemDto> listPrices(Long priceListId);
+    List<PriceListItemDto> listPricesByPriceListUid(String priceListUid);
 
     /** Close-and-open a price for one item + UoM on the list. */
-    PriceListItemDto setPrice(Long priceListId, SetPriceRequestDto request);
+    PriceListItemDto setPriceByPriceListUid(String priceListUid, SetPriceRequestDto request);
 
     /** Full price-change history for an item, newest first. */
-    List<PriceChangeLogDto> priceHistoryForItem(Long itemId);
+    List<PriceChangeLogDto> priceHistoryByItemUid(String itemUid);
 }

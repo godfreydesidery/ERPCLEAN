@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalesAgentServiceImpl implements SalesAgentService {
 
+    private static final String NOT_AN_AGENT = "Not a sales agent: ";
+
     private final SalesAgentRepository salesAgents;
     private final PartyRepository parties;
     private final PartyService partyService;
@@ -44,10 +46,10 @@ public class SalesAgentServiceImpl implements SalesAgentService {
 
     @Override
     @Transactional(readOnly = true)
-    public SalesAgentResponseDto getSalesAgent(Long partyId) {
-        Party party = partyService.requireInCompany(partyId);
-        SalesAgent agent = salesAgents.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a sales agent: " + partyId));
+    public SalesAgentResponseDto getSalesAgentByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        SalesAgent agent = salesAgents.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
         return SalesAgentResponseDto.from(agent, party);
     }
 
@@ -60,26 +62,38 @@ public class SalesAgentServiceImpl implements SalesAgentService {
         if (salesAgents.existsByCompanyIdAndAgentCode(companyId, agentCode)) {
             throw new IllegalArgumentException("Agent code already exists: " + agentCode);
         }
-        Party party = partyService.resolveOrCreate(request.code(), request.party(), context.userId());
+        Party party = resolveParty(request);
         if (salesAgents.existsById(party.getId())) {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has a sales-agent role");
         }
         SalesAgent agent = new SalesAgent(party.getId(), agentCode, request.branchId());
-        agent.update(request.appUserId(), request.routeCode(), request.commissionRate(),
+        agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
         return SalesAgentResponseDto.from(salesAgents.save(agent), party);
+    }
+
+    private Party resolveParty(CreateSalesAgentRequestDto request) {
+        if (request.partyId() != null) {
+            return partyService.requireInCompany(request.partyId());
+        }
+        if (request.party() == null) {
+            throw new IllegalArgumentException(
+                "Supply either partyId, or party details, to create a sales agent");
+        }
+        String generatedCode = partyService.reservePartyCode("AGT");
+        return partyService.resolveOrCreate(generatedCode, request.party(), context.userId());
     }
 
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "SalesAgent")
-    public SalesAgentResponseDto updateSalesAgent(Long partyId, UpdateSalesAgentRequestDto request) {
-        Party party = partyService.requireInCompany(partyId);
-        SalesAgent agent = salesAgents.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a sales agent: " + partyId));
+    public SalesAgentResponseDto updateSalesAgentByPartyUid(String partyUid, UpdateSalesAgentRequestDto request) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        SalesAgent agent = salesAgents.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
-        agent.update(request.appUserId(), request.routeCode(), request.commissionRate(),
+        agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
         return SalesAgentResponseDto.from(agent, party);
     }
@@ -87,9 +101,20 @@ public class SalesAgentServiceImpl implements SalesAgentService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "SalesAgent")
-    public void deactivateSalesAgent(Long partyId) {
-        salesAgents.findById(partyId)
-            .orElseThrow(() -> new NoSuchElementException("Not a sales agent: " + partyId));
-        partyService.deactivate(partyId);
+    public void deactivateSalesAgentByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        salesAgents.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
+        partyService.deactivate(party.getId());
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "SalesAgent")
+    public void activateSalesAgentByPartyUid(String partyUid) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        salesAgents.findById(party.getId())
+            .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
+        partyService.activate(party.getId());
     }
 }

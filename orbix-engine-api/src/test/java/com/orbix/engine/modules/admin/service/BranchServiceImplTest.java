@@ -11,6 +11,7 @@ import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.party.service.CustomerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -55,6 +57,7 @@ class BranchServiceImplTest {
         Branch branch = new Branch(companyId, code, "Name " + code, "RETAIL",
             "Africa/Kampala", false, ACTOR_ID);
         branch.setId(id);
+        ReflectionTestUtils.setField(branch, "uid", UidGenerator.next());
         return branch;
     }
 
@@ -64,6 +67,7 @@ class BranchServiceImplTest {
         when(branches.save(any(Branch.class))).thenAnswer(inv -> {
             Branch b = inv.getArgument(0);
             b.setId(50L);
+            ReflectionTestUtils.setField(b, "uid", UidGenerator.next());
             return b;
         });
 
@@ -72,6 +76,7 @@ class BranchServiceImplTest {
 
         assertThat(result.code()).isEqualTo("DT");
         assertThat(result.companyId()).isEqualTo(COMPANY_ID);
+        assertThat(result.uid()).isNotBlank();
 
         ArgumentCaptor<Section> section = ArgumentCaptor.forClass(Section.class);
         verify(sections).save(section.capture());
@@ -94,9 +99,9 @@ class BranchServiceImplTest {
     @Test
     void updateBranch_updatesDetails() {
         Branch existing = branch(50L, COMPANY_ID, "DT");
-        when(branches.findById(50L)).thenReturn(Optional.of(existing));
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        BranchResponseDto result = service.updateBranch(50L, new UpdateBranchRequestDto(
+        BranchResponseDto result = service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
             "Downtown Mall", "WAREHOUSE", "2 New St", "0711", "Africa/Nairobi"));
 
         assertThat(result.name()).isEqualTo("Downtown Mall");
@@ -106,18 +111,19 @@ class BranchServiceImplTest {
 
     @Test
     void getBranch_fromAnotherCompany_throwsNotFound() {
-        when(branches.findById(50L)).thenReturn(Optional.of(branch(50L, 999L, "DT")));
+        Branch foreign = branch(50L, 999L, "DT");
+        when(branches.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.getBranch(50L))
+        assertThatThrownBy(() -> service.getBranchByUid(foreign.getUid()))
             .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
     @Test
     void deactivateBranch_setsInactive() {
         Branch existing = branch(50L, COMPANY_ID, "DT");
-        when(branches.findById(50L)).thenReturn(Optional.of(existing));
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        service.deactivateBranch(50L);
+        service.deactivateBranchByUid(existing.getUid());
 
         assertThat(existing.getStatus()).isEqualTo(AdminStatus.INACTIVE);
         verify(events).publish(eq("BranchDeactivated.v1"), any(), any(), any());
@@ -127,9 +133,9 @@ class BranchServiceImplTest {
     void deactivateBranch_rejectsAlreadyInactiveBranch() {
         Branch existing = branch(50L, COMPANY_ID, "DT");
         existing.setStatus(AdminStatus.INACTIVE);
-        when(branches.findById(50L)).thenReturn(Optional.of(existing));
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.deactivateBranch(50L))
+        assertThatThrownBy(() -> service.deactivateBranchByUid(existing.getUid()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already inactive");
     }

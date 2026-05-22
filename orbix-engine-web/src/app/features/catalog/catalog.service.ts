@@ -42,24 +42,24 @@ export class CatalogService {
     return unwrap(this.http.get<ApiResponse<Page<Item>>>(`${this.base}/items`, { params }));
   }
 
-  getItem(id: number): Observable<Item> {
-    return unwrap(this.http.get<ApiResponse<Item>>(`${this.base}/items/${id}`));
+  getItem(uid: string): Observable<Item> {
+    return unwrap(this.http.get<ApiResponse<Item>>(`${this.base}/items/uid/${uid}`));
   }
 
   createItem(request: CreateItemRequest): Observable<Item> {
     return unwrap(this.http.post<ApiResponse<Item>>(`${this.base}/items`, request));
   }
 
-  updateItem(id: number, request: UpdateItemRequest): Observable<Item> {
-    return unwrap(this.http.patch<ApiResponse<Item>>(`${this.base}/items/${id}`, request));
+  updateItem(uid: string, request: UpdateItemRequest): Observable<Item> {
+    return unwrap(this.http.patch<ApiResponse<Item>>(`${this.base}/items/uid/${uid}`, request));
   }
 
-  archiveItem(id: number): Observable<void> {
-    return this.http.post(`${this.base}/items/${id}/archive`, {}).pipe(map(() => void 0));
+  archiveItem(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/items/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
-  activateItem(id: number): Observable<void> {
-    return this.http.post(`${this.base}/items/${id}/activate`, {}).pipe(map(() => void 0));
+  activateItem(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/items/uid/${uid}/activate`, {}).pipe(map(() => void 0));
   }
 
   // ---- item groups ----------------------------------------------------------
@@ -72,18 +72,18 @@ export class CatalogService {
     return unwrap(this.http.post<ApiResponse<ItemGroup>>(`${this.base}/item-groups`, request));
   }
 
-  renameGroup(id: number, name: string): Observable<ItemGroup> {
-    return unwrap(this.http.patch<ApiResponse<ItemGroup>>(`${this.base}/item-groups/${id}`, { name }));
+  renameGroup(uid: string, name: string): Observable<ItemGroup> {
+    return unwrap(this.http.patch<ApiResponse<ItemGroup>>(`${this.base}/item-groups/uid/${uid}`, { name }));
   }
 
-  moveGroup(id: number, newParentId: number | null): Observable<ItemGroup> {
+  moveGroup(uid: string, newParentId: string | null): Observable<ItemGroup> {
     return unwrap(this.http.post<ApiResponse<ItemGroup>>(
-      `${this.base}/item-groups/${id}/move`, { newParentId }
+      `${this.base}/item-groups/uid/${uid}/move`, { newParentId }
     ));
   }
 
-  archiveGroup(id: number): Observable<void> {
-    return this.http.post(`${this.base}/item-groups/${id}/archive`, {}).pipe(map(() => void 0));
+  archiveGroup(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/item-groups/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
   // ---- units of measure -----------------------------------------------------
@@ -96,8 +96,8 @@ export class CatalogService {
     return unwrap(this.http.post<ApiResponse<Uom>>(`${this.base}/uoms`, request));
   }
 
-  updateUom(id: number, request: UpdateUomRequest): Observable<Uom> {
-    return unwrap(this.http.patch<ApiResponse<Uom>>(`${this.base}/uoms/${id}`, request));
+  updateUom(uid: string, request: UpdateUomRequest): Observable<Uom> {
+    return unwrap(this.http.patch<ApiResponse<Uom>>(`${this.base}/uoms/uid/${uid}`, request));
   }
 
   // ---- VAT groups -----------------------------------------------------------
@@ -110,28 +110,28 @@ export class CatalogService {
     return unwrap(this.http.post<ApiResponse<VatGroup>>(`${this.base}/vat-groups`, request));
   }
 
-  updateVatGroup(id: number, request: UpdateVatGroupRequest): Observable<VatGroup> {
-    return unwrap(this.http.patch<ApiResponse<VatGroup>>(`${this.base}/vat-groups/${id}`, request));
+  updateVatGroup(uid: string, request: UpdateVatGroupRequest): Observable<VatGroup> {
+    return unwrap(this.http.patch<ApiResponse<VatGroup>>(`${this.base}/vat-groups/uid/${uid}`, request));
   }
 
-  archiveVatGroup(id: number): Observable<void> {
-    return this.http.post(`${this.base}/vat-groups/${id}/archive`, {}).pipe(map(() => void 0));
+  archiveVatGroup(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/vat-groups/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
   // ---- item barcodes --------------------------------------------------------
 
-  listBarcodes(itemId: number): Observable<ItemBarcode[]> {
-    return unwrap(this.http.get<ApiResponse<ItemBarcode[]>>(`${this.base}/items/${itemId}/barcodes`));
+  listBarcodes(itemUid: string): Observable<ItemBarcode[]> {
+    return unwrap(this.http.get<ApiResponse<ItemBarcode[]>>(`${this.base}/items/uid/${itemUid}/barcodes`));
   }
 
-  addBarcode(itemId: number, request: CreateItemBarcodeRequest): Observable<ItemBarcode> {
+  addBarcode(itemUid: string, request: CreateItemBarcodeRequest): Observable<ItemBarcode> {
     return unwrap(this.http.post<ApiResponse<ItemBarcode>>(
-      `${this.base}/items/${itemId}/barcodes`, request
+      `${this.base}/items/uid/${itemUid}/barcodes`, request
     ));
   }
 
-  deleteBarcode(id: number): Observable<void> {
-    return this.http.delete(`${this.base}/barcodes/${id}`).pipe(map(() => void 0));
+  deleteBarcode(uid: string): Observable<void> {
+    return this.http.delete(`${this.base}/barcodes/uid/${uid}`).pipe(map(() => void 0));
   }
 
   // ---- price lists ----------------------------------------------------------
@@ -144,29 +144,29 @@ export class CatalogService {
     return unwrap(this.http.post<ApiResponse<PriceList>>(`${this.base}/price-lists`, request));
   }
 
-  updatePriceList(id: number, request: UpdatePriceListRequest): Observable<PriceList> {
-    return unwrap(this.http.patch<ApiResponse<PriceList>>(`${this.base}/price-lists/${id}`, request));
+  updatePriceList(uid: string, request: UpdatePriceListRequest): Observable<PriceList> {
+    return unwrap(this.http.patch<ApiResponse<PriceList>>(`${this.base}/price-lists/uid/${uid}`, request));
   }
 
-  archivePriceList(id: number): Observable<void> {
-    return this.http.post(`${this.base}/price-lists/${id}/archive`, {}).pipe(map(() => void 0));
+  archivePriceList(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/price-lists/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
-  listPrices(priceListId: number): Observable<PriceListItem[]> {
+  listPrices(priceListUid: string): Observable<PriceListItem[]> {
     return unwrap(this.http.get<ApiResponse<PriceListItem[]>>(
-      `${this.base}/price-lists/${priceListId}/items`
+      `${this.base}/price-lists/uid/${priceListUid}/items`
     ));
   }
 
-  setPrice(priceListId: number, request: SetPriceRequest): Observable<PriceListItem> {
+  setPrice(priceListUid: string, request: SetPriceRequest): Observable<PriceListItem> {
     return unwrap(this.http.put<ApiResponse<PriceListItem>>(
-      `${this.base}/price-lists/${priceListId}/items`, request
+      `${this.base}/price-lists/uid/${priceListUid}/items`, request
     ));
   }
 
-  priceHistory(itemId: number): Observable<PriceChangeLog[]> {
+  priceHistory(itemUid: string): Observable<PriceChangeLog[]> {
     return unwrap(this.http.get<ApiResponse<PriceChangeLog[]>>(
-      `${this.base}/items/${itemId}/price-changes`
+      `${this.base}/items/uid/${itemUid}/price-changes`
     ));
   }
 }

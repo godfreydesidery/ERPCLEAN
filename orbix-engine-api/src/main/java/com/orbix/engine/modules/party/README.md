@@ -68,7 +68,7 @@ Attribute lists, types, and nullability are defined in DATA-MODEL.md §2.x; this
 - `SupplierCreated.v1` — `{ partyId, companyId, paymentTermsDays, defaultCurrencyCode, leadTimeDays, occurredAt }`.
 - `EmployeeCreated.v1` — `{ partyId, companyId, employeeCode, branchId, appUserId, hireDate, occurredAt }`.
 - `EmployeeTerminated.v1` — `{ partyId, employeeCode, terminationDate, appUserId, occurredAt }`.
-- `SalesAgentCreated.v1` — `{ partyId, companyId, agentCode, routeCode, branchId, commissionRate, occurredAt }`.
+- `SalesAgentCreated.v1` — `{ partyId, companyId, agentCode, routeId, branchId, commissionRate, occurredAt }`.
 - `BiometricEnrolled.v1` — `{ enrolmentId, appUserId, method, enrolledBy, occurredAt }`. Payload never carries the template.
 - `BiometricRevoked.v1` — `{ enrolmentId, appUserId, revokedAt }`.
 

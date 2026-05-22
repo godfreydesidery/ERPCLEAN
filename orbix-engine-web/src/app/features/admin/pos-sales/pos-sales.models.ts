@@ -6,22 +6,22 @@ export type PosSaleKind = 'SALE' | 'REFUND' | 'NO_SALE';
 export type PosPaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'VOUCHER' | 'STORE_CREDIT';
 
 export interface PosSaleLine {
-  id: number;
+  id: string;
   lineNo: number;
-  itemId: number;
-  uomId: number;
+  itemId: string;
+  uomId: string;
   qty: number;
   unitPrice: number;
   discountPct: number;
   discountAmount: number;
-  vatGroupId: number;
+  vatGroupId: string;
   taxAmount: number;
   lineTotal: number;
   costAmount: number;
 }
 
 export interface PosPayment {
-  id: number;
+  id: string;
   method: PosPaymentMethod;
   amount: number;
   reference: string | null;
@@ -30,19 +30,19 @@ export interface PosPayment {
 }
 
 export interface PosSale {
-  id: number;
+  id: string;
   number: string;
   clientOpId: string;
-  tillSessionId: number;
-  tillId: number;
-  branchId: number;
-  companyId: number;
-  sectionId: number;
-  customerId: number;
-  cashierId: number;
-  supervisorId: number | null;
+  tillSessionId: string;
+  tillId: string;
+  branchId: string;
+  companyId: string;
+  sectionId: string;
+  customerId: string;
+  cashierId: string;
+  supervisorId: string | null;
   kind: PosSaleKind;
-  refundedFromSaleId: number | null;
+  refundedFromSaleId: string | null;
   saleAt: string;
   serverAt: string;
   businessDate: string;
@@ -54,7 +54,7 @@ export interface PosSale {
   changeAmount: number;
   status: PosSaleStatus;
   voidedAt: string | null;
-  voidedBy: number | null;
+  voidedBy: string | null;
   voidReason: string | null;
   notes: string | null;
   lines: PosSaleLine[];

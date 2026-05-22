@@ -11,14 +11,17 @@ public interface CustomerService {
 
     List<CustomerResponseDto> listCustomers();
 
-    CustomerResponseDto getCustomer(Long partyId);
+    CustomerResponseDto getCustomerByPartyUid(String partyUid);
 
     CustomerResponseDto createCustomer(CreateCustomerRequestDto request);
 
-    CustomerResponseDto updateCustomer(Long partyId, UpdateCustomerRequestDto request);
+    CustomerResponseDto updateCustomerByPartyUid(String partyUid, UpdateCustomerRequestDto request);
 
     /** Deactivates the underlying party (affects every role on it). */
-    void deactivateCustomer(Long partyId);
+    void deactivateCustomerByPartyUid(String partyUid);
+
+    /** Reactivates the underlying party (affects every role on it). */
+    void activateCustomerByPartyUid(String partyUid);
 
     /** Provisions the synthetic per-branch walk-in customer; idempotent-friendly caller. */
     void createWalkInCustomer(Long branchId);

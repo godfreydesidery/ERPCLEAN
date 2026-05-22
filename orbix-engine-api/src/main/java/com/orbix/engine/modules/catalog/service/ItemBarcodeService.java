@@ -8,9 +8,9 @@ import java.util.List;
 /** Barcode management for an item (F1.4). Barcodes are globally unique. */
 public interface ItemBarcodeService {
 
-    List<ItemBarcodeDto> listForItem(Long itemId);
+    List<ItemBarcodeDto> listForItemByUid(String itemUid);
 
-    ItemBarcodeDto addBarcode(Long itemId, CreateItemBarcodeRequestDto request);
+    ItemBarcodeDto addBarcodeByItemUid(String itemUid, CreateItemBarcodeRequestDto request);
 
-    void deleteBarcode(Long barcodeId);
+    void deleteBarcodeByUid(String uid);
 }

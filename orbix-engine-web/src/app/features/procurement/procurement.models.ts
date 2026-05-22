@@ -4,24 +4,24 @@ export type LpoOrderStatus =
   'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
 
 export interface LpoOrderLine {
-  id: number;
+  id: string;
   lineNo: number;
-  itemId: number;
-  uomId: number;
+  itemId: string;
+  uomId: string;
   orderedQty: number;
   receivedQty: number;
   unitPrice: number;
-  vatGroupId: number;
+  vatGroupId: string;
   discountPct: number;
   lineTotal: number;
 }
 
 export interface LpoOrder {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  supplierId: number;
+  companyId: string;
+  branchId: string;
+  supplierId: string;
   orderDate: string;
   expectedDeliveryDate: string | null;
   currencyCode: string;
@@ -29,25 +29,25 @@ export interface LpoOrder {
   taxAmount: number;
   totalAmount: number;
   status: LpoOrderStatus;
-  approvedBy: number | null;
+  approvedBy: string | null;
   approvedAt: string | null;
   notes: string | null;
   lines: LpoOrderLine[];
 }
 
 export interface CreateLpoLine {
-  itemId: number;
-  uomId: number | null;
+  itemId: string;
+  uomId: string | null;
   orderedQty: number;
   unitPrice: number;
-  vatGroupId: number | null;
+  vatGroupId: string | null;
   discountPct: number | null;
 }
 
 export interface CreateLpoOrderRequest {
   number: string;
-  branchId: number;
-  supplierId: number;
+  branchId: string;
+  supplierId: string;
   orderDate: string;
   expectedDeliveryDate: string | null;
   currencyCode: string;
@@ -56,7 +56,7 @@ export interface CreateLpoOrderRequest {
 }
 
 export interface UpdateLpoOrderRequest {
-  supplierId: number;
+  supplierId: string;
   orderDate: string;
   expectedDeliveryDate: string | null;
   currencyCode: string;
@@ -69,25 +69,25 @@ export interface UpdateLpoOrderRequest {
 export type GrnStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
 
 export interface GrnLine {
-  id: number;
-  lpoOrderLineId: number | null;
-  itemId: number;
-  uomId: number;
+  id: string;
+  lpoOrderLineId: string | null;
+  itemId: string;
+  uomId: string;
   receivedQty: number;
   unitCost: number;
-  vatGroupId: number;
+  vatGroupId: string;
   lineTotal: number;
   batchNo: string | null;
   expiryDate: string | null;
 }
 
 export interface Grn {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  supplierId: number;
-  lpoOrderId: number | null;
+  companyId: string;
+  branchId: string;
+  supplierId: string;
+  lpoOrderId: string | null;
   receivedDate: string;
   supplierDeliveryNote: string | null;
   subtotalAmount: number;
@@ -95,27 +95,27 @@ export interface Grn {
   totalAmount: number;
   status: GrnStatus;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   notes: string | null;
   lines: GrnLine[];
 }
 
 export interface CreateGrnLine {
-  lpoOrderLineId: number | null;
-  itemId: number;
-  uomId: number | null;
+  lpoOrderLineId: string | null;
+  itemId: string;
+  uomId: string | null;
   receivedQty: number;
   unitCost: number;
-  vatGroupId: number | null;
+  vatGroupId: string | null;
   batchNo: string | null;
   expiryDate: string | null;
 }
 
 export interface CreateGrnRequest {
   number: string;
-  branchId: number;
-  supplierId: number;
-  lpoOrderId: number | null;
+  branchId: string;
+  supplierId: string;
+  lpoOrderId: string | null;
   receivedDate: string;
   supplierDeliveryNote: string | null;
   notes: string | null;
@@ -128,17 +128,17 @@ export type SupplierInvoiceStatus =
   'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 
 export interface SupplierInvoiceAllocation {
-  grnId: number;
+  grnId: string;
   amount: number;
 }
 
 export interface SupplierInvoice {
-  id: number;
+  id: string;
   number: string;
   supplierInvoiceNo: string;
-  companyId: number;
-  branchId: number;
-  supplierId: number;
+  companyId: string;
+  branchId: string;
+  supplierId: string;
   invoiceDate: string;
   dueDate: string;
   currencyCode: string;
@@ -148,7 +148,7 @@ export interface SupplierInvoice {
   paidAmount: number;
   status: SupplierInvoiceStatus;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   notes: string | null;
   allocations: SupplierInvoiceAllocation[];
 }
@@ -156,8 +156,8 @@ export interface SupplierInvoice {
 export interface CreateSupplierInvoiceRequest {
   number: string;
   supplierInvoiceNo: string;
-  branchId: number;
-  supplierId: number;
+  branchId: string;
+  supplierId: string;
   invoiceDate: string;
   dueDate: string | null;
   currencyCode: string;
@@ -176,17 +176,17 @@ export const PAYMENT_METHODS: PaymentMethod[] =
 export type SupplierPaymentStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
 
 export interface SupplierPaymentAllocation {
-  id: number;
-  supplierInvoiceId: number;
+  id: string;
+  supplierInvoiceId: string;
   amount: number;
 }
 
 export interface SupplierPayment {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  supplierId: number;
+  companyId: string;
+  branchId: string;
+  supplierId: string;
   paymentDate: string;
   method: PaymentMethod;
   reference: string | null;
@@ -195,20 +195,20 @@ export interface SupplierPayment {
   allocatedAmount: number;
   status: SupplierPaymentStatus;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   notes: string | null;
   allocations: SupplierPaymentAllocation[];
 }
 
 export interface CreateSupplierPaymentAllocation {
-  supplierInvoiceId: number;
+  supplierInvoiceId: string;
   amount: number;
 }
 
 export interface CreateSupplierPaymentRequest {
   number: string;
-  branchId: number;
-  supplierId: number;
+  branchId: string;
+  supplierId: string;
   paymentDate: string;
   method: PaymentMethod;
   reference: string | null;

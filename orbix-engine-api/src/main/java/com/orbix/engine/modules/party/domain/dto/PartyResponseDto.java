@@ -7,6 +7,7 @@ import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 /** The party-level view embedded in every role response. */
 public record PartyResponseDto(
     Long id,
+    String uid,
     Long companyId,
     String code,
     String name,
@@ -25,6 +26,7 @@ public record PartyResponseDto(
     public static PartyResponseDto from(Party party) {
         return new PartyResponseDto(
             party.getId(),
+            party.getUid(),
             party.getCompanyId(),
             party.getCode(),
             party.getName(),

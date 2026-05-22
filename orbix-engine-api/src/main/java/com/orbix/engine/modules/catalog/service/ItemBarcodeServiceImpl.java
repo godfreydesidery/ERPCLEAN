@@ -30,9 +30,9 @@ public class ItemBarcodeServiceImpl implements ItemBarcodeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ItemBarcodeDto> listForItem(Long itemId) {
-        requireItem(itemId);
-        return barcodes.findByItemId(itemId).stream()
+    public List<ItemBarcodeDto> listForItemByUid(String itemUid) {
+        Item item = requireItemByUid(itemUid);
+        return barcodes.findByItemId(item.getId()).stream()
             .sorted(Comparator.comparing(ItemBarcode::getBarcode))
             .map(ItemBarcodeDto::from)
             .toList();
@@ -41,31 +41,40 @@ public class ItemBarcodeServiceImpl implements ItemBarcodeService {
     @Override
     @Transactional
     @Auditable(action = "ADD_BARCODE", entityType = "Item")
-    public ItemBarcodeDto addBarcode(Long itemId, CreateItemBarcodeRequestDto request) {
-        Item item = requireItem(itemId);
+    public ItemBarcodeDto addBarcodeByItemUid(String itemUid, CreateItemBarcodeRequestDto request) {
+        Item item = requireItemByUid(itemUid);
         String code = request.barcode().trim();
         validateBarcodeFormat(code, request.barcodeType(), item);
         if (barcodes.existsByBarcode(code)) {
             throw new IllegalArgumentException("Barcode already in use: " + code);
         }
         ItemBarcode saved = barcodes.save(new ItemBarcode(
-            itemId, code, request.barcodeType(), request.packUomId(), request.packQty()));
-        events.publish("BarcodeAdded.v1", "Item", String.valueOf(itemId),
-            Map.of("itemId", itemId, "barcodeId", saved.getId(), "barcode", code));
+            item.getId(), code, request.barcodeType(), request.packUomId(), request.packQty()));
+        events.publish("BarcodeAdded.v1", "Item", item.getUid(),
+            Map.of("itemUid", item.getUid(), "barcodeUid", saved.getUid(), "barcode", code));
         return ItemBarcodeDto.from(saved);
     }
 
     @Override
     @Transactional
     @Auditable(action = "REMOVE_BARCODE", entityType = "Item")
-    public void deleteBarcode(Long barcodeId) {
-        ItemBarcode barcode = barcodes.findById(barcodeId)
-            .orElseThrow(() -> new NoSuchElementException("Barcode not found: " + barcodeId));
-        requireItem(barcode.getItemId());
+    public void deleteBarcodeByUid(String uid) {
+        ItemBarcode barcode = barcodes.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Barcode not found: " + uid));
+        requireItemById(barcode.getItemId());
         barcodes.delete(barcode);
     }
 
-    private Item requireItem(Long itemId) {
+    private Item requireItemByUid(String uid) {
+        Item item = items.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Item not found: " + uid));
+        if (!item.getCompanyId().equals(context.companyId())) {
+            throw new NoSuchElementException("Item not found: " + uid);
+        }
+        return item;
+    }
+
+    private Item requireItemById(Long itemId) {
         Item item = items.findById(itemId)
             .orElseThrow(() -> new NoSuchElementException("Item not found: " + itemId));
         if (!item.getCompanyId().equals(context.companyId())) {

@@ -22,7 +22,7 @@ export class SalesService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listInvoices(branchId: number | null): Observable<SalesInvoice[]> {
+  listInvoices(branchId: string | null): Observable<SalesInvoice[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<SalesInvoice[]>>(
@@ -30,7 +30,7 @@ export class SalesService {
     ));
   }
 
-  getInvoice(id: number): Observable<SalesInvoice> {
+  getInvoice(id: string): Observable<SalesInvoice> {
     return unwrap(this.http.get<ApiResponse<SalesInvoice>>(`${this.base}/sales-invoices/${id}`));
   }
 
@@ -38,19 +38,19 @@ export class SalesService {
     return unwrap(this.http.post<ApiResponse<SalesInvoice>>(`${this.base}/sales-invoices`, request));
   }
 
-  postInvoice(id: number): Observable<SalesInvoice> {
+  postInvoice(id: string): Observable<SalesInvoice> {
     return unwrap(this.http.post<ApiResponse<SalesInvoice>>(
       `${this.base}/sales-invoices/${id}/post`, {}
     ));
   }
 
-  voidInvoice(id: number, request: VoidSalesInvoiceRequest): Observable<SalesInvoice> {
+  voidInvoice(id: string, request: VoidSalesInvoiceRequest): Observable<SalesInvoice> {
     return unwrap(this.http.post<ApiResponse<SalesInvoice>>(
       `${this.base}/sales-invoices/${id}/void`, request
     ));
   }
 
-  cancelInvoice(id: number): Observable<SalesInvoice> {
+  cancelInvoice(id: string): Observable<SalesInvoice> {
     return unwrap(this.http.post<ApiResponse<SalesInvoice>>(
       `${this.base}/sales-invoices/${id}/cancel`, {}
     ));
@@ -58,7 +58,7 @@ export class SalesService {
 
   // ---- sales receipts (F4.3) ----------------------------------------------
 
-  listReceipts(branchId: number | null): Observable<SalesReceipt[]> {
+  listReceipts(branchId: string | null): Observable<SalesReceipt[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<SalesReceipt[]>>(
@@ -66,7 +66,7 @@ export class SalesService {
     ));
   }
 
-  getReceipt(id: number): Observable<SalesReceipt> {
+  getReceipt(id: string): Observable<SalesReceipt> {
     return unwrap(this.http.get<ApiResponse<SalesReceipt>>(`${this.base}/sales-receipts/${id}`));
   }
 
@@ -74,13 +74,13 @@ export class SalesService {
     return unwrap(this.http.post<ApiResponse<SalesReceipt>>(`${this.base}/sales-receipts`, request));
   }
 
-  postReceipt(id: number): Observable<SalesReceipt> {
+  postReceipt(id: string): Observable<SalesReceipt> {
     return unwrap(this.http.post<ApiResponse<SalesReceipt>>(
       `${this.base}/sales-receipts/${id}/post`, {}
     ));
   }
 
-  cancelReceipt(id: number): Observable<SalesReceipt> {
+  cancelReceipt(id: string): Observable<SalesReceipt> {
     return unwrap(this.http.post<ApiResponse<SalesReceipt>>(
       `${this.base}/sales-receipts/${id}/cancel`, {}
     ));
@@ -88,7 +88,7 @@ export class SalesService {
 
   // ---- customer returns + credit notes (F4.4) -----------------------------
 
-  listReturns(branchId: number | null): Observable<CustomerReturn[]> {
+  listReturns(branchId: string | null): Observable<CustomerReturn[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<CustomerReturn[]>>(
@@ -96,7 +96,7 @@ export class SalesService {
     ));
   }
 
-  getReturn(id: number): Observable<CustomerReturn> {
+  getReturn(id: string): Observable<CustomerReturn> {
     return unwrap(this.http.get<ApiResponse<CustomerReturn>>(
       `${this.base}/customer-returns/${id}`
     ));
@@ -108,25 +108,25 @@ export class SalesService {
     ));
   }
 
-  postReturn(id: number): Observable<CustomerReturn> {
+  postReturn(id: string): Observable<CustomerReturn> {
     return unwrap(this.http.post<ApiResponse<CustomerReturn>>(
       `${this.base}/customer-returns/${id}/post`, {}
     ));
   }
 
-  cancelReturn(id: number): Observable<CustomerReturn> {
+  cancelReturn(id: string): Observable<CustomerReturn> {
     return unwrap(this.http.post<ApiResponse<CustomerReturn>>(
       `${this.base}/customer-returns/${id}/cancel`, {}
     ));
   }
 
-  issueCreditNote(returnId: number, request: IssueCreditNoteRequest): Observable<CustomerCreditNote> {
+  issueCreditNote(returnId: string, request: IssueCreditNoteRequest): Observable<CustomerCreditNote> {
     return unwrap(this.http.post<ApiResponse<CustomerCreditNote>>(
       `${this.base}/customer-returns/${returnId}/issue-credit-note`, request
     ));
   }
 
-  listCreditNotes(branchId: number | null): Observable<CustomerCreditNote[]> {
+  listCreditNotes(branchId: string | null): Observable<CustomerCreditNote[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<CustomerCreditNote[]>>(
@@ -136,7 +136,7 @@ export class SalesService {
 
   // ---- packing lists (F4.5) -----------------------------------------------
 
-  listPackingLists(branchId: number | null): Observable<PackingList[]> {
+  listPackingLists(branchId: string | null): Observable<PackingList[]> {
     let params = new HttpParams();
     if (branchId != null) params = params.set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<PackingList[]>>(
@@ -144,7 +144,7 @@ export class SalesService {
     ));
   }
 
-  getPackingList(id: number): Observable<PackingList> {
+  getPackingList(id: string): Observable<PackingList> {
     return unwrap(this.http.get<ApiResponse<PackingList>>(`${this.base}/packing-lists/${id}`));
   }
 
@@ -152,19 +152,19 @@ export class SalesService {
     return unwrap(this.http.post<ApiResponse<PackingList>>(`${this.base}/packing-lists`, request));
   }
 
-  dispatchPackingList(id: number): Observable<PackingList> {
+  dispatchPackingList(id: string): Observable<PackingList> {
     return unwrap(this.http.post<ApiResponse<PackingList>>(
       `${this.base}/packing-lists/${id}/dispatch`, {}
     ));
   }
 
-  deliverPackingList(id: number): Observable<PackingList> {
+  deliverPackingList(id: string): Observable<PackingList> {
     return unwrap(this.http.post<ApiResponse<PackingList>>(
       `${this.base}/packing-lists/${id}/deliver`, {}
     ));
   }
 
-  cancelPackingList(id: number): Observable<PackingList> {
+  cancelPackingList(id: string): Observable<PackingList> {
     return unwrap(this.http.post<ApiResponse<PackingList>>(
       `${this.base}/packing-lists/${id}/cancel`, {}
     ));

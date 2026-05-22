@@ -341,7 +341,7 @@ export class BranchAdminComponent implements OnInit {
   protected readonly sections = signal<Section[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly editingSectionId = signal<number | null>(null);
+  protected readonly editingSectionId = signal<string | null>(null);
   protected readonly showNewBranch = signal(false);
 
   protected newBranch = blankBranchForm();
@@ -447,7 +447,7 @@ export class BranchAdminComponent implements OnInit {
     });
   }
 
-  private loadSections(branchId: number): void {
+  private loadSections(branchId: string): void {
     this.api.listSections(branchId).subscribe({
       next: sections => this.sections.set(sections),
       error: err => this.showError(err)

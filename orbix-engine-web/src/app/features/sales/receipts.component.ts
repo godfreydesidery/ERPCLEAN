@@ -7,6 +7,8 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { Currency, CurrencyService } from '../../core/currency/currency.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { SalesService } from './sales.service';
 import {
   CreateReceiptAllocation,
@@ -16,12 +18,12 @@ import {
   SalesReceipt
 } from './sales.models';
 
-interface AllocRow { invoiceId: number | null; amount: number | null; outstanding: number; }
+interface AllocRow { invoiceId: string | null; amount: number | null; outstanding: number; }
 
 @Component({
   selector: 'orbix-sales-receipts',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -86,7 +88,9 @@ interface AllocRow { invoiceId: number | null; amount: number | null; outstandin
                 </div>
                 <div class="col-md-2">
                   <label class="form-label small fw-semibold text-secondary">Currency</label>
-                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
+                  <orbix-search-select name="cur" [options]="currencyOptions()"
+                                       [(ngModel)]="newCurrency" placeholder="Select…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Total</label>
@@ -381,6 +385,14 @@ export class ReceiptsComponent implements OnInit {
   private readonly sales = inject(SalesService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly methods = RECEIPT_METHODS;
   protected readonly receipts = signal<SalesReceipt[]>([]);
@@ -396,7 +408,7 @@ export class ReceiptsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newCustomerId: number | null = null;
+  protected newCustomerId: string | null = null;
   protected newReceiptDate = new Date().toISOString().slice(0, 10);
   protected newMethod: ReceiptMethod = 'CASH';
   protected newReference = '';
@@ -408,7 +420,13 @@ export class ReceiptsComponent implements OnInit {
     return this.allocations.reduce((acc, r) => acc + (r.amount ?? 0), 0);
   }
 
-  ngOnInit(): void { this.refresh(); }
+  ngOnInit(): void {
+    this.refresh();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
+  }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
@@ -431,7 +449,7 @@ export class ReceiptsComponent implements OnInit {
     });
   }
 
-  onInvoicePicked(row: AllocRow, invoiceId: number | null): void {
+  onInvoicePicked(row: AllocRow, invoiceId: string | null): void {
     const inv = this.openInvoices().find(i => i.id === invoiceId);
     row.outstanding = inv ? inv.totalAmount - inv.paidAmount : 0;
     if (row.amount === null && inv) row.amount = row.outstanding;
@@ -453,7 +471,7 @@ export class ReceiptsComponent implements OnInit {
     }
     const allocs: CreateReceiptAllocation[] = this.allocations
       .filter(r => r.invoiceId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ salesInvoiceId: r.invoiceId as number, amount: r.amount as number }));
+      .map(r => ({ salesInvoiceId: r.invoiceId as string, amount: r.amount as number }));
     this.run(this.sales.createReceipt({
       number: this.newNumber.trim(),
       branchId,

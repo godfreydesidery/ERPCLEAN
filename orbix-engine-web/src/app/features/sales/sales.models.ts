@@ -7,32 +7,32 @@ export type SalesInvoiceStatus =
   'DRAFT' | 'POSTED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED' | 'CANCELLED';
 
 export interface SalesInvoiceLine {
-  id: number;
+  id: string;
   lineNo: number;
-  itemId: number;
-  uomId: number;
+  itemId: string;
+  uomId: string;
   qty: number;
   unitPrice: number;
   discountPct: number;
   discountAmount: number;
-  vatGroupId: number;
+  vatGroupId: string;
   taxAmount: number;
   lineTotal: number;
   costAmount: number;
 }
 
 export interface SalesInvoice {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  customerId: number;
-  salesAgentId: number | null;
+  companyId: string;
+  branchId: string;
+  customerId: string;
+  salesAgentId: string | null;
   invoiceDate: string;
   dueDate: string | null;
   paymentTerms: PaymentTerms;
   currencyCode: string;
-  priceListId: number;
+  priceListId: string;
   subtotalAmount: number;
   discountAmount: number;
   taxAmount: number;
@@ -40,10 +40,10 @@ export interface SalesInvoice {
   paidAmount: number;
   status: SalesInvoiceStatus;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   postedBusinessDate: string | null;
   voidedAt: string | null;
-  voidedBy: number | null;
+  voidedBy: string | null;
   voidReason: string | null;
   reference: string | null;
   notes: string | null;
@@ -51,25 +51,25 @@ export interface SalesInvoice {
 }
 
 export interface CreateSalesInvoiceLine {
-  itemId: number;
-  uomId: number | null;
+  itemId: string;
+  uomId: string | null;
   qty: number;
   unitPrice: number;
   discountPct: number | null;
-  vatGroupId: number | null;
+  vatGroupId: string | null;
 }
 
 export interface CreateSalesInvoiceRequest {
   number: string;
-  branchId: number;
-  customerId: number;
-  salesAgentId: number | null;
+  branchId: string;
+  customerId: string;
+  salesAgentId: string | null;
   invoiceDate: string;
   dueDate: string | null;
   paymentTerms: PaymentTerms;
   currencyCode: string;
-  priceListId: number;
-  discountApproverId: number | null;
+  priceListId: string;
+  discountApproverId: string | null;
   reference: string | null;
   notes: string | null;
   lines: CreateSalesInvoiceLine[];
@@ -89,19 +89,19 @@ export const RECEIPT_METHODS: ReceiptMethod[] =
 export type SalesReceiptStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
 
 export interface ReceiptAllocation {
-  id: number;
-  salesInvoiceId: number;
+  id: string;
+  salesInvoiceId: string;
   amount: number;
   allocatedAt: string;
-  allocatedBy: number;
+  allocatedBy: string;
 }
 
 export interface SalesReceipt {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  customerId: number;
+  companyId: string;
+  branchId: string;
+  customerId: string;
   receiptDate: string;
   method: ReceiptMethod;
   reference: string | null;
@@ -111,20 +111,20 @@ export interface SalesReceipt {
   unallocatedAmount: number;
   status: SalesReceiptStatus;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   notes: string | null;
   allocations: ReceiptAllocation[];
 }
 
 export interface CreateReceiptAllocation {
-  salesInvoiceId: number;
+  salesInvoiceId: string;
   amount: number;
 }
 
 export interface CreateSalesReceiptRequest {
   number: string;
-  branchId: number;
-  customerId: number;
+  branchId: string;
+  customerId: string;
   receiptDate: string;
   method: ReceiptMethod;
   reference: string | null;
@@ -143,50 +143,50 @@ export type CustomerReturnStatus = 'DRAFT' | 'POSTED' | 'CREDITED' | 'CANCELLED'
 export type CreditNoteStatus = 'POSTED' | 'FULLY_ALLOCATED' | 'CANCELLED';
 
 export interface CustomerReturnLine {
-  id: number;
+  id: string;
   lineNo: number;
-  itemId: number;
-  uomId: number;
+  itemId: string;
+  uomId: string;
   returnedQty: number;
   unitPrice: number;
-  vatGroupId: number;
+  vatGroupId: string;
   taxAmount: number;
   lineTotal: number;
-  originalLineId: number | null;
+  originalLineId: string | null;
 }
 
 export interface CustomerReturn {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  customerId: number;
-  originalInvoiceId: number | null;
+  companyId: string;
+  branchId: string;
+  customerId: string;
+  originalInvoiceId: string | null;
   returnDate: string;
   reason: ReturnReason;
   totalAmount: number;
   status: CustomerReturnStatus;
   restock: boolean;
   postedAt: string | null;
-  postedBy: number | null;
+  postedBy: string | null;
   notes: string | null;
   lines: CustomerReturnLine[];
 }
 
 export interface CreateCustomerReturnLine {
-  itemId: number;
-  uomId: number | null;
+  itemId: string;
+  uomId: string | null;
   returnedQty: number;
   unitPrice: number;
-  vatGroupId: number | null;
-  originalLineId: number | null;
+  vatGroupId: string | null;
+  originalLineId: string | null;
 }
 
 export interface CreateCustomerReturnRequest {
   number: string;
-  branchId: number;
-  customerId: number;
-  originalInvoiceId: number | null;
+  branchId: string;
+  customerId: string;
+  originalInvoiceId: string | null;
   returnDate: string;
   reason: ReturnReason;
   restock: boolean;
@@ -200,12 +200,12 @@ export interface IssueCreditNoteRequest {
 }
 
 export interface CustomerCreditNote {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  customerId: number;
-  customerReturnId: number | null;
+  companyId: string;
+  branchId: string;
+  customerId: string;
+  customerReturnId: string | null;
   cnDate: string;
   currencyCode: string;
   totalAmount: number;
@@ -219,36 +219,36 @@ export interface CustomerCreditNote {
 export type PackingListStatus = 'DRAFT' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
 
 export interface PackingListLine {
-  id: number;
-  salesInvoiceLineId: number;
+  id: string;
+  salesInvoiceLineId: string;
   qty: number;
 }
 
 export interface PackingList {
-  id: number;
+  id: string;
   number: string;
-  companyId: number;
-  branchId: number;
-  salesInvoiceId: number;
+  companyId: string;
+  branchId: string;
+  salesInvoiceId: string;
   dispatchDate: string;
   driverName: string | null;
   vehicleNo: string | null;
   status: PackingListStatus;
   deliveredAt: string | null;
-  deliveredBy: number | null;
+  deliveredBy: string | null;
   notes: string | null;
   lines: PackingListLine[];
 }
 
 export interface CreatePackingListLine {
-  salesInvoiceLineId: number;
+  salesInvoiceLineId: string;
   qty: number;
 }
 
 export interface CreatePackingListRequest {
   number: string;
-  branchId: number;
-  salesInvoiceId: number;
+  branchId: string;
+  salesInvoiceId: string;
   dispatchDate: string;
   driverName: string | null;
   vehicleNo: string | null;

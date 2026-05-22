@@ -14,12 +14,12 @@ public interface BranchService {
 
     List<BranchResponseDto> listBranches();
 
-    BranchResponseDto getBranch(Long branchId);
+    BranchResponseDto getBranchByUid(String uid);
 
     BranchResponseDto createBranch(CreateBranchRequestDto request);
 
-    BranchResponseDto updateBranch(Long branchId, UpdateBranchRequestDto request);
+    BranchResponseDto updateBranchByUid(String uid, UpdateBranchRequestDto request);
 
     /** Marks the branch INACTIVE. Idempotency: rejects an already-inactive branch. */
-    void deactivateBranch(Long branchId);
+    void deactivateBranchByUid(String uid);
 }

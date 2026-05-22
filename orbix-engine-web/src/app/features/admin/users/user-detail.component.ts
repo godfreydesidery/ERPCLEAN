@@ -373,12 +373,12 @@ export class UserDetailComponent implements OnInit {
   protected readonly info = signal<string | null>(null);
   protected readonly tempPasswordBanner = signal<{ username: string; password: string } | null>(null);
 
-  protected grantPick: Record<number, number | null> = {};
-  protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as number | null };
+  protected grantPick: Record<string, string | null> = {};
+  protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as string | null };
 
   ngOnInit(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    if (!Number.isFinite(id)) {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (!id) {
       this.error.set('Invalid user id');
       this.loading.set(false);
       return;
@@ -417,7 +417,7 @@ export class UserDetailComponent implements OnInit {
 
   // --- role-grant helpers -------------------------------------------------
 
-  grantsForRole(user: UserDetail, roleId: number): RoleGrantSummary[] {
+  grantsForRole(user: UserDetail, roleId: string): RoleGrantSummary[] {
     return user.grants.filter(g => g.roleId === roleId);
   }
 
@@ -425,12 +425,12 @@ export class UserDetailComponent implements OnInit {
     return grants.some(g => g.branchId === null);
   }
 
-  hasBranch(grants: RoleGrantSummary[], branchId: number): boolean {
+  hasBranch(grants: RoleGrantSummary[], branchId: string): boolean {
     return grants.some(g => g.branchId === branchId);
   }
 
   /** Resolve a branch id to its display name; falls back to {@code #id} if unknown. */
-  branchLabel(branchId: number): string {
+  branchLabel(branchId: string): string {
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;
   }
@@ -438,7 +438,8 @@ export class UserDetailComponent implements OnInit {
   onGrant(user: UserDetail, role: RoleSummary): void {
     const pick = this.grantPick[role.id];
     if (pick == null) return;
-    const branchId = pick === -1 ? null : pick;
+    // The "company-wide" sentinel is the empty string; otherwise pick is a branch uid string.
+    const branchId = pick === '' ? null : pick;
     this.busy.set(true);
     this.error.set(null);
     this.roleApi.grantRole(role.id, { username: user.username, branchId }).subscribe({
@@ -534,7 +535,7 @@ export class UserDetailComponent implements OnInit {
     });
   }
 
-  private loadUser(id: number): void {
+  private loadUser(id: string): void {
     this.loading.set(true);
     this.api.getUser(id).subscribe({
       next: detail => {

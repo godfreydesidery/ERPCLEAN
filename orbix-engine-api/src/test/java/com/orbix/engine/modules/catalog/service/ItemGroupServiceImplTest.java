@@ -7,12 +7,14 @@ import com.orbix.engine.modules.catalog.domain.dto.UpdateItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.ItemGroup;
 import com.orbix.engine.modules.catalog.repository.ItemGroupRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -43,9 +45,11 @@ class ItemGroupServiceImplTest {
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
     }
 
+    /** Build an ItemGroup fixture with both id and uid populated (bypassing @PrePersist). */
     private static ItemGroup group(Long id, Long parentId, int level, String code) {
         ItemGroup g = new ItemGroup(COMPANY_ID, parentId, level, code, "Name " + code, ACTOR_ID);
         g.setId(id);
+        ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
         return g;
     }
 
@@ -55,6 +59,7 @@ class ItemGroupServiceImplTest {
         when(groups.save(any(ItemGroup.class))).thenAnswer(inv -> {
             ItemGroup g = inv.getArgument(0);
             g.setId(1L);
+            ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
             return g;
         });
 
@@ -63,13 +68,18 @@ class ItemGroupServiceImplTest {
         assertThat(result.level()).isEqualTo(1);
         assertThat(result.code()).isEqualTo("FOOD");
         assertThat(result.parentId()).isNull();
+        assertThat(result.uid()).isNotBlank();
     }
 
     @Test
     void createGroup_underParent_isParentLevelPlusOne() {
         when(groups.existsByCompanyIdAndCode(COMPANY_ID, "DAIRY")).thenReturn(false);
         when(groups.findById(1L)).thenReturn(Optional.of(group(1L, null, 1, "FOOD")));
-        when(groups.save(any(ItemGroup.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(groups.save(any(ItemGroup.class))).thenAnswer(inv -> {
+            ItemGroup g = inv.getArgument(0);
+            ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
+            return g;
+        });
 
         ItemGroupDto result = service.createGroup(new CreateItemGroupRequestDto(1L, "DAIRY", "Dairy"));
 
@@ -90,9 +100,9 @@ class ItemGroupServiceImplTest {
     @Test
     void renameGroup_updatesName() {
         ItemGroup existing = group(1L, null, 1, "FOOD");
-        when(groups.findById(1L)).thenReturn(Optional.of(existing));
+        when(groups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        ItemGroupDto result = service.renameGroup(1L, new UpdateItemGroupRequestDto("Groceries"));
+        ItemGroupDto result = service.renameGroupByUid(existing.getUid(), new UpdateItemGroupRequestDto("Groceries"));
 
         assertThat(result.name()).isEqualTo("Groceries");
         assertThat(existing.getName()).isEqualTo("Groceries");
@@ -105,12 +115,12 @@ class ItemGroupServiceImplTest {
         ItemGroup dairy = group(2L, 1L, 2, "DAIRY");
         ItemGroup milk = group(3L, 2L, 3, "MILK");
         ItemGroup beverages = group(4L, null, 1, "BEV");
-        when(groups.findById(2L)).thenReturn(Optional.of(dairy));
+        when(groups.findByUid(dairy.getUid())).thenReturn(Optional.of(dairy));
         when(groups.findById(4L)).thenReturn(Optional.of(beverages));
         when(groups.findByCompanyId(COMPANY_ID)).thenReturn(List.of(food, dairy, milk, beverages));
 
         // move dairy under beverages: dairy L2->L2 (beverages.L1+1), milk follows
-        service.moveGroup(2L, new MoveItemGroupRequestDto(4L));
+        service.moveGroupByUid(dairy.getUid(), new MoveItemGroupRequestDto(4L));
 
         assertThat(dairy.getParentId()).isEqualTo(4L);
         assertThat(dairy.getLevel()).isEqualTo(2);
@@ -118,7 +128,7 @@ class ItemGroupServiceImplTest {
 
         // move dairy to root: L2->L1 (delta -1), milk L3->L2
         when(groups.findByCompanyId(COMPANY_ID)).thenReturn(List.of(food, dairy, milk, beverages));
-        service.moveGroup(2L, new MoveItemGroupRequestDto(null));
+        service.moveGroupByUid(dairy.getUid(), new MoveItemGroupRequestDto(null));
         assertThat(dairy.getParentId()).isNull();
         assertThat(dairy.getLevel()).isEqualTo(1);
         assertThat(milk.getLevel()).isEqualTo(2);
@@ -128,11 +138,11 @@ class ItemGroupServiceImplTest {
     void moveGroup_rejectsMovingUnderOwnDescendant() {
         ItemGroup food = group(1L, null, 1, "FOOD");
         ItemGroup dairy = group(2L, 1L, 2, "DAIRY");
-        when(groups.findById(1L)).thenReturn(Optional.of(food));
+        when(groups.findByUid(food.getUid())).thenReturn(Optional.of(food));
         when(groups.findById(2L)).thenReturn(Optional.of(dairy));
         when(groups.findByCompanyId(COMPANY_ID)).thenReturn(List.of(food, dairy));
 
-        assertThatThrownBy(() -> service.moveGroup(1L, new MoveItemGroupRequestDto(2L)))
+        assertThatThrownBy(() -> service.moveGroupByUid(food.getUid(), new MoveItemGroupRequestDto(2L)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("itself or its descendant");
     }
@@ -140,18 +150,19 @@ class ItemGroupServiceImplTest {
     @Test
     void archiveGroup_setsArchivedStatus() {
         ItemGroup existing = group(1L, null, 1, "FOOD");
-        when(groups.findById(1L)).thenReturn(Optional.of(existing));
+        when(groups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        service.archiveGroup(1L);
+        service.archiveGroupByUid(existing.getUid());
 
         assertThat(existing.getStatus().name()).isEqualTo("ARCHIVED");
     }
 
     @Test
     void requireGroup_notFound_throwsNoSuchElement() {
-        when(groups.findById(404L)).thenReturn(Optional.empty());
+        String missingUid = UidGenerator.next();
+        when(groups.findByUid(missingUid)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.renameGroup(404L, new UpdateItemGroupRequestDto("x")))
+        assertThatThrownBy(() -> service.renameGroupByUid(missingUid, new UpdateItemGroupRequestDto("x")))
             .isInstanceOf(NoSuchElementException.class);
     }
 }

@@ -17,6 +17,8 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     Optional<Item> findByCompanyAndCode(@Param("companyId") Long companyId,
                                         @Param("code") String code);
 
+    Optional<Item> findByUid(String uid);
+
     Page<Item> findByCompanyId(Long companyId, Pageable pageable);
 
     Page<Item> findByCompanyIdAndStatus(Long companyId, ItemStatus status, Pageable pageable);

@@ -21,7 +21,13 @@ public class CurrencyController {
 
     private final CurrencyService service;
 
+    /**
+     * Open to any authenticated user — the currency catalog is a shared lookup
+     * (e.g. the supplier form's default-currency picker needs it without
+     * granting ADMIN.MANAGE_CURRENCIES). Writes below stay restricted.
+     */
     @GetMapping
+    @PreAuthorize("isAuthenticated()")
     public List<CurrencyDto> listCurrencies() {
         return service.listCurrencies();
     }

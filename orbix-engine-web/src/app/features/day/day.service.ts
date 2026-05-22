@@ -10,34 +10,34 @@ export class DayService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listDays(branchId: number): Observable<BusinessDay[]> {
+  listDays(branchId: string): Observable<BusinessDay[]> {
     const params = new HttpParams().set('branchId', branchId);
     return unwrap(this.http.get<ApiResponse<BusinessDay[]>>(`${this.base}/business-days`, { params }));
   }
 
   /** Current non-closed day, or null if none is open. */
-  currentDay(branchId: number): Observable<BusinessDay | null> {
+  currentDay(branchId: string): Observable<BusinessDay | null> {
     const params = new HttpParams().set('branchId', branchId);
     return this.http.get<ApiResponse<BusinessDay | null>>(
       `${this.base}/business-days/current`, { params }
     ).pipe(/* envelope may carry data:null */ unwrapNullable());
   }
 
-  openDay(branchId: number, businessDate: string): Observable<BusinessDay> {
+  openDay(branchId: string, businessDate: string): Observable<BusinessDay> {
     const params = new HttpParams().set('branchId', branchId);
     return unwrap(this.http.post<ApiResponse<BusinessDay>>(
       `${this.base}/business-days`, { businessDate }, { params }
     ));
   }
 
-  startClosing(branchId: number, businessDate: string): Observable<BusinessDay> {
+  startClosing(branchId: string, businessDate: string): Observable<BusinessDay> {
     const params = new HttpParams().set('branchId', branchId);
     return unwrap(this.http.post<ApiResponse<BusinessDay>>(
       `${this.base}/business-days/${businessDate}/start-closing`, {}, { params }
     ));
   }
 
-  closeDay(branchId: number, businessDate: string,
+  closeDay(branchId: string, businessDate: string,
            eodReportObjectKey: string | null): Observable<BusinessDay> {
     const params = new HttpParams().set('branchId', branchId);
     return unwrap(this.http.post<ApiResponse<BusinessDay>>(

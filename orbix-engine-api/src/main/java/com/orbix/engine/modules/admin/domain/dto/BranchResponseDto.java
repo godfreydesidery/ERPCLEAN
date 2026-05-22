@@ -6,6 +6,7 @@ import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 /** Branch as returned by the admin branch-management endpoints. */
 public record BranchResponseDto(
     Long id,
+    String uid,
     Long companyId,
     String code,
     String name,
@@ -19,6 +20,7 @@ public record BranchResponseDto(
     public static BranchResponseDto from(Branch branch) {
         return new BranchResponseDto(
             branch.getId(),
+            branch.getUid(),
             branch.getCompanyId(),
             branch.getCode(),
             branch.getName(),

@@ -12,15 +12,15 @@ import java.util.List;
  */
 public interface SectionService {
 
-    List<SectionResponseDto> listSections(Long branchId);
+    List<SectionResponseDto> listSectionsByBranchUid(String branchUid);
 
-    SectionResponseDto createSection(Long branchId, CreateSectionRequestDto request);
+    SectionResponseDto createSectionByBranchUid(String branchUid, CreateSectionRequestDto request);
 
-    SectionResponseDto updateSection(Long sectionId, UpdateSectionRequestDto request);
+    SectionResponseDto updateSectionByUid(String uid, UpdateSectionRequestDto request);
 
     /**
      * Marks the section INACTIVE. Rejected if it is the branch's last active
      * RETAIL_FLOOR section, or if the section is already inactive.
      */
-    void deactivateSection(Long sectionId);
+    void deactivateSectionByUid(String uid);
 }

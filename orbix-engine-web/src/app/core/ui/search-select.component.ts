@@ -43,9 +43,10 @@ import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/f
              [style.left.px]="panelPos().left"
              [style.width.px]="panelPos().width">
           <input #search class="form-control form-control-sm ss__search"
-                 [ngModel]="query()"
-                 (ngModelChange)="onQuery($event)"
-                 [ngModelOptions]="{ standalone: true }"
+                 type="text"
+                 autocomplete="off"
+                 [value]="query()"
+                 (input)="onSearchInput($event)"
                  placeholder="Search…"
                  (keydown)="onKey($event)">
           <ul class="ss__list">
@@ -151,7 +152,8 @@ export class SearchSelectComponent implements ControlValueAccessor {
     this.trigger?.nativeElement.focus();
   }
 
-  onQuery(value: string): void {
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
     this.query.set(value);
     this.focusIndex.set(-1);
   }

@@ -4,56 +4,56 @@ export type TillStatus = 'ACTIVE' | 'INACTIVE';
 export type TillSessionStatus = 'OPEN' | 'CLOSED' | 'RECONCILED';
 
 export interface Till {
-  id: number;
-  companyId: number;
-  branchId: number;
+  id: string;
+  companyId: string;
+  branchId: string;
   code: string;
   name: string;
   installId: string | null;
-  defaultPriceListId: number;
+  defaultPriceListId: string;
   status: TillStatus;
 }
 
 export interface CreateTillRequest {
-  branchId: number;
+  branchId: string;
   code: string;
   name: string;
-  defaultPriceListId: number;
+  defaultPriceListId: string;
   installId: string | null;
 }
 
 export interface UpdateTillRequest {
   name: string;
-  defaultPriceListId: number;
+  defaultPriceListId: string;
   installId: string | null;
 }
 
 export interface TillSession {
-  id: number;
-  tillId: number;
-  branchId: number;
-  companyId: number;
+  id: string;
+  tillId: string;
+  branchId: string;
+  companyId: string;
   businessDate: string;
-  openedBy: number;
+  openedBy: string;
   openedAt: string;
   openingFloatAmount: number;
-  closedBy: number | null;
+  closedBy: string | null;
   closedAt: string | null;
   expectedCashAmount: number | null;
   declaredCashAmount: number | null;
   varianceAmount: number | null;
-  supervisorId: number | null;
+  supervisorId: string | null;
   status: TillSessionStatus;
   notes: string | null;
 }
 
 export interface OpenTillSessionRequest {
-  tillId: number;
+  tillId: string;
   openingFloatAmount: number;
 }
 
 export interface CloseTillSessionRequest {
   declaredCashAmount: number;
-  supervisorId: number | null;
+  supervisorId: string | null;
   notes: string | null;
 }

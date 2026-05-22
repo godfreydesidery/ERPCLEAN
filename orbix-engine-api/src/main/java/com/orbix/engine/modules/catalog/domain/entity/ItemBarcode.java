@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.catalog.domain.entity;
 
 import com.orbix.engine.modules.catalog.domain.enums.BarcodeType;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -15,11 +16,17 @@ import java.math.BigDecimal;
  * scanned pack represents (defaults to 1 of the item's own UoM).
  */
 @Entity
-@Table(name = "item_barcode", uniqueConstraints = @UniqueConstraint(name = "uk_item_barcode", columnNames = "barcode"))
+@Table(
+    name = "item_barcode",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_item_barcode_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_item_barcode",     columnNames = {"barcode"})
+    }
+)
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class ItemBarcode {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class ItemBarcode extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "item_barcode_seq")

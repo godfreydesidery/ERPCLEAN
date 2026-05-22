@@ -11,10 +11,10 @@ import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.mod
 
 /** A user with one or more active grants of the selected role, rolled up. */
 interface GrantGroup {
-  userId: number;
+  userId: string;
   username: string;
   displayName: string;
-  scopes: { id: number; label: string }[];
+  scopes: { id: string; label: string }[];
 }
 
 @Component({
@@ -417,7 +417,7 @@ export class RoleAdminComponent implements OnInit {
   protected readonly grantsPage = signal(0);
   protected readonly grantsPageSize = 25;
 
-  private readonly selectedPermissionIds = signal<Set<number>>(new Set());
+  private readonly selectedPermissionIds = signal<Set<string>>(new Set());
 
   protected newCode = '';
   protected newName = '';
@@ -442,7 +442,7 @@ export class RoleAdminComponent implements OnInit {
   /** All grants rolled up by user, with branch names resolved. */
   protected readonly grantGroups = computed<GrantGroup[]>(() => {
     const branchById = new Map(this.branches().map(b => [b.id, b]));
-    const byUser = new Map<number, GrantGroup>();
+    const byUser = new Map<string, GrantGroup>();
     for (const g of this.grants()) {
       const existing = byUser.get(g.userId);
       const label = g.branchId === null
@@ -505,11 +505,11 @@ export class RoleAdminComponent implements OnInit {
 
   toggleNewRole(): void { this.showNewRole.update(v => !v); }
 
-  isChecked(permissionId: number): boolean {
+  isChecked(permissionId: string): boolean {
     return this.selectedPermissionIds().has(permissionId);
   }
 
-  togglePermission(permissionId: number): void {
+  togglePermission(permissionId: string): void {
     const next = new Set(this.selectedPermissionIds());
     if (next.has(permissionId)) {
       next.delete(permissionId);
@@ -519,7 +519,7 @@ export class RoleAdminComponent implements OnInit {
     this.selectedPermissionIds.set(next);
   }
 
-  selectRole(id: number): void {
+  selectRole(id: string): void {
     this.error.set(null);
     // Reset the Granted-to filter/pagination when switching roles.
     this.grantSearchTerm = '';

@@ -4,10 +4,12 @@ import com.orbix.engine.modules.admin.domain.dto.CreateSectionRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.SectionResponseDto;
 import com.orbix.engine.modules.admin.domain.dto.UpdateSectionRequestDto;
 import com.orbix.engine.modules.admin.service.SectionService;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -18,32 +20,33 @@ import java.util.List;
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @PreAuthorize("hasAuthority('ADMIN.MANAGE_SECTIONS')")
+@Validated
 public class SectionController {
 
     private final SectionService service;
 
-    @GetMapping("/branches/{branchId}/sections")
-    public List<SectionResponseDto> listSections(@PathVariable Long branchId) {
-        return service.listSections(branchId);
+    @GetMapping("/branches/uid/{branchUid}/sections")
+    public List<SectionResponseDto> listSections(@PathVariable @ValidUlid String branchUid) {
+        return service.listSectionsByBranchUid(branchUid);
     }
 
-    @PostMapping("/branches/{branchId}/sections")
+    @PostMapping("/branches/uid/{branchUid}/sections")
     public ResponseEntity<SectionResponseDto> createSection(
-            @PathVariable Long branchId,
+            @PathVariable @ValidUlid String branchUid,
             @Valid @RequestBody CreateSectionRequestDto request) {
-        SectionResponseDto section = service.createSection(branchId, request);
-        return ResponseEntity.created(URI.create("/api/v1/sections/" + section.id())).body(section);
+        SectionResponseDto section = service.createSectionByBranchUid(branchUid, request);
+        return ResponseEntity.created(URI.create("/api/v1/sections/uid/" + section.uid())).body(section);
     }
 
-    @PatchMapping("/sections/{id}")
-    public SectionResponseDto updateSection(@PathVariable Long id,
+    @PatchMapping("/sections/uid/{uid}")
+    public SectionResponseDto updateSection(@PathVariable @ValidUlid String uid,
                                             @Valid @RequestBody UpdateSectionRequestDto request) {
-        return service.updateSection(id, request);
+        return service.updateSectionByUid(uid, request);
     }
 
-    @PostMapping("/sections/{id}/deactivate")
-    public ResponseEntity<Void> deactivateSection(@PathVariable Long id) {
-        service.deactivateSection(id);
+    @PostMapping("/sections/uid/{uid}/deactivate")
+    public ResponseEntity<Void> deactivateSection(@PathVariable @ValidUlid String uid) {
+        service.deactivateSectionByUid(uid);
         return ResponseEntity.noContent().build();
     }
 }

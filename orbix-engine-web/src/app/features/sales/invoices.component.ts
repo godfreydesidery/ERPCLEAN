@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { CatalogService } from '../catalog/catalog.service';
 import { Item, PriceList } from '../catalog/catalog.models';
@@ -21,7 +22,7 @@ import {
 } from './sales.models';
 
 interface LineRow {
-  itemId: number | null;
+  itemId: string | null;
   qty: number | null;
   unitPrice: number | null;
   discountPct: number | null;
@@ -104,7 +105,9 @@ interface LineRow {
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Currency</label>
-                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
+                  <orbix-search-select name="cur" [options]="currencyOptions()"
+                                       [(ngModel)]="newCurrency" placeholder="Select…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Price list</label>
@@ -423,6 +426,14 @@ export class InvoicesComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly party = inject(PartyService);
   private readonly catalog = inject(CatalogService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly paymentTerms = PAYMENT_TERMS;
   protected readonly invoices = signal<SalesInvoice[]>([]);
@@ -454,19 +465,23 @@ export class InvoicesComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newCustomerId: number | null = null;
-  protected newSalesAgentId: number | null = null;
+  protected newCustomerId: string | null = null;
+  protected newSalesAgentId: string | null = null;
   protected newInvoiceDate = new Date().toISOString().slice(0, 10);
   protected newDueDate: string | null = null;
   protected newPaymentTerms: PaymentTerms = 'CASH';
   protected newCurrency = 'TZS';
-  protected newPriceListId: number | null = null;
-  protected newDiscountApproverId: number | null = null;
+  protected newPriceListId: string | null = null;
+  protected newDiscountApproverId: string | null = null;
   protected newLines: LineRow[] = [{ itemId: null, qty: null, unitPrice: null, discountPct: null }];
 
   ngOnInit(): void {
     this.refresh();
     this.loadSelectables();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
   }
 
   private loadSelectables(): void {
@@ -521,7 +536,7 @@ export class InvoicesComponent implements OnInit {
     const lines: CreateSalesInvoiceLine[] = this.newLines
       .filter(r => r.itemId !== null && (r.qty ?? 0) > 0 && (r.unitPrice ?? 0) >= 0)
       .map(r => ({
-        itemId: r.itemId as number,
+        itemId: r.itemId as string,
         uomId: null,
         qty: r.qty as number,
         unitPrice: r.unitPrice as number,

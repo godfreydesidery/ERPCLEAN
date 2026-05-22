@@ -148,13 +148,13 @@ export class AdjustComponent {
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
 
-  protected readonly itemId = signal<number | null>(null);
+  protected readonly itemId = signal<string | null>(null);
   protected readonly qty = signal<number | null>(null);
   protected readonly unitCost = signal<number | null>(null);
   protected readonly reason = signal<string>('');
-  protected readonly sectionId = signal<number | null>(null);
-  protected readonly batchId = signal<number | null>(null);
-  protected readonly authorisedByUserId = signal<number | null>(null);
+  protected readonly sectionId = signal<string | null>(null);
+  protected readonly batchId = signal<string | null>(null);
+  protected readonly authorisedByUserId = signal<string | null>(null);
   protected readonly allowOversell = signal<boolean>(false);
 
   // ngModel mirrors

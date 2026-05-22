@@ -1,14 +1,14 @@
 /** Mirrors the backend iam role-admin DTOs (see RoleAdminController). */
 
 export interface Permission {
-  id: number;
+  id: string;
   code: string;
   description: string;
   module: string;
 }
 
 export interface RoleSummary {
-  id: number;
+  id: string;
   code: string;
   name: string;
   description: string | null;
@@ -18,7 +18,7 @@ export interface RoleSummary {
 }
 
 export interface RoleDetail {
-  id: number;
+  id: string;
   code: string;
   name: string;
   description: string | null;
@@ -28,13 +28,13 @@ export interface RoleDetail {
 }
 
 export interface RoleGrant {
-  id: number;
-  userId: number;
-  roleId: number;
+  id: string;
+  userId: string;
+  roleId: string;
   username: string;
   displayName: string;
-  companyId: number;
-  branchId: number | null;
+  companyId: string;
+  branchId: string | null;
   grantedAt: string;
 }
 
@@ -51,5 +51,5 @@ export interface UpdateRoleRequest {
 
 export interface GrantRoleRequest {
   username: string;
-  branchId: number | null;
+  branchId: string | null;
 }

@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.CreateEmployeeRequestDto;
 import com.orbix.engine.modules.party.domain.dto.EmployeeResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateEmployeeRequestDto;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -18,6 +20,7 @@ import java.util.List;
 @RequestMapping("/api/v1/employees")
 @RequiredArgsConstructor
 @PreAuthorize("hasAuthority('PARTY.MANAGE_EMPLOYEES')")
+@Validated
 public class EmployeeController {
 
     private final EmployeeService service;
@@ -27,28 +30,34 @@ public class EmployeeController {
         return service.listEmployees();
     }
 
-    @GetMapping("/{partyId}")
-    public EmployeeResponseDto getEmployee(@PathVariable Long partyId) {
-        return service.getEmployee(partyId);
+    @GetMapping("/uid/{partyUid}")
+    public EmployeeResponseDto getEmployee(@PathVariable @ValidUlid String partyUid) {
+        return service.getEmployeeByPartyUid(partyUid);
     }
 
     @PostMapping
     public ResponseEntity<EmployeeResponseDto> createEmployee(
             @Valid @RequestBody CreateEmployeeRequestDto request) {
         EmployeeResponseDto employee = service.createEmployee(request);
-        return ResponseEntity.created(URI.create("/api/v1/employees/" + employee.partyId()))
+        return ResponseEntity.created(URI.create("/api/v1/employees/uid/" + employee.party().uid()))
             .body(employee);
     }
 
-    @PatchMapping("/{partyId}")
-    public EmployeeResponseDto updateEmployee(@PathVariable Long partyId,
+    @PatchMapping("/uid/{partyUid}")
+    public EmployeeResponseDto updateEmployee(@PathVariable @ValidUlid String partyUid,
                                               @Valid @RequestBody UpdateEmployeeRequestDto request) {
-        return service.updateEmployee(partyId, request);
+        return service.updateEmployeeByPartyUid(partyUid, request);
     }
 
-    @PostMapping("/{partyId}/deactivate")
-    public ResponseEntity<Void> deactivateEmployee(@PathVariable Long partyId) {
-        service.deactivateEmployee(partyId);
+    @PostMapping("/uid/{partyUid}/deactivate")
+    public ResponseEntity<Void> deactivateEmployee(@PathVariable @ValidUlid String partyUid) {
+        service.deactivateEmployeeByPartyUid(partyUid);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/uid/{partyUid}/activate")
+    public ResponseEntity<Void> activateEmployee(@PathVariable @ValidUlid String partyUid) {
+        service.activateEmployeeByPartyUid(partyUid);
         return ResponseEntity.noContent().build();
     }
 }

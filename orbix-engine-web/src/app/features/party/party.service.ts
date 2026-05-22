@@ -12,13 +12,34 @@ import {
   Employee,
   PartyResponse,
   SalesAgent,
-  Supplier
+  Supplier,
+  UpdateCustomerRequest,
+  UpdateEmployeeRequest,
+  UpdateSalesAgentRequest,
+  UpdateSupplierRequest
 } from './party.models';
 
 @Injectable({ providedIn: 'root' })
 export class PartyService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
+
+  /** Every party in the caller's company — backs the "pick existing party" picker. */
+  listParties(): Observable<PartyResponse[]> {
+    return unwrap(this.http.get<ApiResponse<PartyResponse[]>>(`${this.base}/parties`));
+  }
+
+  /**
+   * Reserves the next free party code for {@code prefix} (e.g. `AGT`). Each
+   * call increments the company-scoped counter, so callers should only fetch
+   * when they actually intend to use the code (form open in create-new mode).
+   */
+  reservePartyCode(prefix: string): Observable<string> {
+    const params = new HttpParams().set('prefix', prefix);
+    return unwrap(this.http.post<ApiResponse<{ code: string }>>(
+      `${this.base}/parties/codes/reserve`, null, { params }
+    )).pipe(map(resp => resp.code));
+  }
 
   /** Shared-party hint: an existing party in the company with this TIN, or null. */
   findByTin(tin: string): Observable<PartyResponse | null> {
@@ -37,8 +58,18 @@ export class PartyService {
     return unwrap(this.http.post<ApiResponse<Customer>>(`${this.base}/customers`, request));
   }
 
-  deactivateCustomer(partyId: number): Observable<void> {
-    return this.http.post(`${this.base}/customers/${partyId}/deactivate`, {}).pipe(map(() => void 0));
+  updateCustomer(partyUid: string, request: UpdateCustomerRequest): Observable<Customer> {
+    return unwrap(this.http.patch<ApiResponse<Customer>>(
+      `${this.base}/customers/uid/${partyUid}`, request
+    ));
+  }
+
+  deactivateCustomer(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/customers/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  }
+
+  activateCustomer(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/customers/uid/${partyUid}/activate`, {}).pipe(map(() => void 0));
   }
 
   // ---- suppliers ------------------------------------------------------------
@@ -51,8 +82,18 @@ export class PartyService {
     return unwrap(this.http.post<ApiResponse<Supplier>>(`${this.base}/suppliers`, request));
   }
 
-  deactivateSupplier(partyId: number): Observable<void> {
-    return this.http.post(`${this.base}/suppliers/${partyId}/deactivate`, {}).pipe(map(() => void 0));
+  updateSupplier(partyUid: string, request: UpdateSupplierRequest): Observable<Supplier> {
+    return unwrap(this.http.patch<ApiResponse<Supplier>>(
+      `${this.base}/suppliers/uid/${partyUid}`, request
+    ));
+  }
+
+  deactivateSupplier(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/suppliers/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  }
+
+  activateSupplier(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/suppliers/uid/${partyUid}/activate`, {}).pipe(map(() => void 0));
   }
 
   // ---- employees ------------------------------------------------------------
@@ -65,8 +106,18 @@ export class PartyService {
     return unwrap(this.http.post<ApiResponse<Employee>>(`${this.base}/employees`, request));
   }
 
-  deactivateEmployee(partyId: number): Observable<void> {
-    return this.http.post(`${this.base}/employees/${partyId}/deactivate`, {}).pipe(map(() => void 0));
+  updateEmployee(partyUid: string, request: UpdateEmployeeRequest): Observable<Employee> {
+    return unwrap(this.http.patch<ApiResponse<Employee>>(
+      `${this.base}/employees/uid/${partyUid}`, request
+    ));
+  }
+
+  deactivateEmployee(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/employees/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  }
+
+  activateEmployee(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/employees/uid/${partyUid}/activate`, {}).pipe(map(() => void 0));
   }
 
   // ---- sales agents ---------------------------------------------------------
@@ -79,7 +130,17 @@ export class PartyService {
     return unwrap(this.http.post<ApiResponse<SalesAgent>>(`${this.base}/sales-agents`, request));
   }
 
-  deactivateSalesAgent(partyId: number): Observable<void> {
-    return this.http.post(`${this.base}/sales-agents/${partyId}/deactivate`, {}).pipe(map(() => void 0));
+  updateSalesAgent(partyUid: string, request: UpdateSalesAgentRequest): Observable<SalesAgent> {
+    return unwrap(this.http.patch<ApiResponse<SalesAgent>>(
+      `${this.base}/sales-agents/uid/${partyUid}`, request
+    ));
+  }
+
+  deactivateSalesAgent(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/sales-agents/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  }
+
+  activateSalesAgent(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/sales-agents/uid/${partyUid}/activate`, {}).pipe(map(() => void 0));
   }
 }

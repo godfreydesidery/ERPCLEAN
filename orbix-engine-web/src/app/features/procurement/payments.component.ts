@@ -7,6 +7,8 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { Currency, CurrencyService } from '../../core/currency/currency.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { ProcurementService } from './procurement.service';
 import {
   CreateSupplierPaymentAllocation,
@@ -17,7 +19,7 @@ import {
 } from './procurement.models';
 
 interface AllocRow {
-  invoiceId: number | null;
+  invoiceId: string | null;
   amount: number | null;
   outstanding: number;
 }
@@ -25,7 +27,7 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-payments',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -90,7 +92,9 @@ interface AllocRow {
                 </div>
                 <div class="col-md-2">
                   <label class="form-label small fw-semibold text-secondary">Currency</label>
-                  <input class="form-control text-uppercase font-monospace" maxlength="3" name="cur" [(ngModel)]="newCurrency" required>
+                  <orbix-search-select name="cur" [options]="currencyOptions()"
+                                       [(ngModel)]="newCurrency" placeholder="Select…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Total amount</label>
@@ -383,6 +387,14 @@ export class PaymentsComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly methods = PAYMENT_METHODS;
 
@@ -399,7 +411,7 @@ export class PaymentsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newSupplierId: number | null = null;
+  protected newSupplierId: string | null = null;
   protected newPaymentDate = new Date().toISOString().slice(0, 10);
   protected newMethod: PaymentMethod = 'BANK_TRANSFER';
   protected newReference = '';
@@ -411,7 +423,13 @@ export class PaymentsComponent implements OnInit {
     return this.allocations.reduce((acc, row) => acc + (row.amount ?? 0), 0);
   }
 
-  ngOnInit(): void { this.refresh(); }
+  ngOnInit(): void {
+    this.refresh();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
+  }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
@@ -439,7 +457,7 @@ export class PaymentsComponent implements OnInit {
     });
   }
 
-  onInvoicePicked(row: AllocRow, invoiceId: number | null): void {
+  onInvoicePicked(row: AllocRow, invoiceId: string | null): void {
     const inv = this.openInvoices().find(i => i.id === invoiceId);
     row.outstanding = inv ? inv.totalAmount - inv.paidAmount : 0;
     if (row.amount === null && inv) {
@@ -470,7 +488,7 @@ export class PaymentsComponent implements OnInit {
     }
     const allocs: CreateSupplierPaymentAllocation[] = this.allocations
       .filter(r => r.invoiceId !== null && (r.amount ?? 0) > 0)
-      .map(r => ({ supplierInvoiceId: r.invoiceId as number, amount: r.amount as number }));
+      .map(r => ({ supplierInvoiceId: r.invoiceId as string, amount: r.amount as number }));
     if (allocs.length === 0) {
       this.error.set('Add at least one allocation with invoice + amount.');
       return;

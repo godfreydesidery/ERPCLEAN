@@ -3,6 +3,7 @@ package com.orbix.engine.modules.catalog.domain.entity;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import com.orbix.engine.modules.catalog.domain.enums.WeighingUnit;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -15,16 +16,23 @@ import java.time.Instant;
 /**
  * Single unified item — replaces the legacy {@code Product} / {@code Material} split.
  * See DATA-MODEL.md §3.2.
+ *
+ * <p>Extends {@link UidEntity}: every Item gets a ULID assigned at insert
+ * time, exposed externally as {@code uid} in DTOs and URLs. The numeric
+ * {@code id} stays internal — used for joins, never serialised.
  */
 @Entity
 @Table(
     name = "item",
-    uniqueConstraints = @UniqueConstraint(name = "uk_item_company_code", columnNames = {"company_id", "code"})
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_item_uid",          columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_item_company_code", columnNames = {"company_id", "code"})
+    }
 )
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Item {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Item extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "item_seq")

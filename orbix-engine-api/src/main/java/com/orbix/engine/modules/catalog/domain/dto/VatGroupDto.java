@@ -8,6 +8,7 @@ import java.time.LocalDate;
 
 public record VatGroupDto(
     Long id,
+    String uid,
     Long companyId,
     String code,
     String name,
@@ -19,6 +20,7 @@ public record VatGroupDto(
     public static VatGroupDto from(VatGroup group) {
         return new VatGroupDto(
             group.getId(),
+            group.getUid(),
             group.getCompanyId(),
             group.getCode(),
             group.getName(),

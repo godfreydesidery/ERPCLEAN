@@ -292,7 +292,7 @@ export class TillAdminComponent implements OnInit {
 
   protected newCode = '';
   protected newName = '';
-  protected newPriceListId: number | null = null;
+  protected newPriceListId: string | null = null;
   protected newFloat: number | null = null;
 
   ngOnInit(): void { this.refresh(); }
@@ -365,7 +365,7 @@ export class TillAdminComponent implements OnInit {
       supervisorIdStr = globalThis.prompt('Variance above threshold — supervisor user id?');
       if (!supervisorIdStr) return;
     }
-    const supervisorId = supervisorIdStr ? Number.parseInt(supervisorIdStr, 10) : null;
+    const supervisorId = supervisorIdStr || null;
     this.busy.set(true);
     this.api.closeSession(s.id, {
       declaredCashAmount: amount,

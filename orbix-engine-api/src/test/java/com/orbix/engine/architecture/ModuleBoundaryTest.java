@@ -45,6 +45,7 @@ public class ModuleBoundaryTest {
             "org.springframework..", "org.hibernate..", "org.slf4j..",
             "org.aspectj..",                            // AOP infrastructure (AuditAspect)
             "com.fasterxml..", "lombok..", "io.jsonwebtoken..",
+            "com.github.f4b6a3..",                      // ULID library used by common.util.UidGenerator
             "..domain..", "..service..", "..repository.."
         )
         .because("modules talk to each other only via published DTOs/enums or domain events");

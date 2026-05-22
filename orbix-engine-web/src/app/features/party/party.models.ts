@@ -21,8 +21,9 @@ export interface PartyDetails {
 }
 
 export interface PartyResponse {
-  id: number;
-  companyId: number;
+  id: string;
+  uid: string;
+  companyId: string;
   code: string;
   name: string;
   legalName: string | null;
@@ -39,30 +40,40 @@ export interface PartyResponse {
 }
 
 export interface Customer {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
   creditLimitAmount: number;
   creditTermsDays: number;
-  priceListId: number | null;
-  defaultSalesAgentId: number | null;
-  defaultBranchId: number | null;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
   walkIn: boolean;
   taxExempt: boolean;
 }
 
 export interface CreateCustomerRequest {
-  code: string;
+  partyId: string | null;
+  party: PartyDetails | null;
+  creditLimitAmount: number;
+  creditTermsDays: number;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
+  taxExempt: boolean;
+}
+
+export interface UpdateCustomerRequest {
   party: PartyDetails;
   creditLimitAmount: number;
   creditTermsDays: number;
-  priceListId: number | null;
-  defaultSalesAgentId: number | null;
-  defaultBranchId: number | null;
+  priceListId: string | null;
+  defaultSalesAgentId: string | null;
+  defaultBranchId: string | null;
   taxExempt: boolean;
 }
 
 export interface Supplier {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
   paymentTermsDays: number;
   creditLimitAmount: number;
@@ -73,7 +84,17 @@ export interface Supplier {
 }
 
 export interface CreateSupplierRequest {
-  code: string;
+  partyId: string | null;
+  party: PartyDetails | null;
+  paymentTermsDays: number;
+  creditLimitAmount: number;
+  defaultCurrencyCode: string | null;
+  bankName: string | null;
+  bankAccountNo: string | null;
+  leadTimeDays: number | null;
+}
+
+export interface UpdateSupplierRequest {
   party: PartyDetails;
   paymentTermsDays: number;
   creditLimitAmount: number;
@@ -84,45 +105,68 @@ export interface CreateSupplierRequest {
 }
 
 export interface Employee {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
-  appUserId: number | null;
+  appUserId: string | null;
   employeeCode: string;
   jobTitle: string | null;
-  branchId: number;
+  branchId: string;
   hireDate: string | null;
   terminationDate: string | null;
 }
 
 export interface CreateEmployeeRequest {
-  code: string;
-  party: PartyDetails;
+  partyId: string | null;
+  party: PartyDetails | null;
   employeeCode: string;
-  appUserId: number | null;
+  appUserId: string | null;
   jobTitle: string | null;
-  branchId: number;
+  branchId: string;
+  hireDate: string | null;
+  terminationDate: string | null;
+}
+
+export interface UpdateEmployeeRequest {
+  party: PartyDetails;
+  appUserId: string | null;
+  jobTitle: string | null;
+  branchId: string;
   hireDate: string | null;
   terminationDate: string | null;
 }
 
 export interface SalesAgent {
-  partyId: number;
+  partyId: string;
   party: PartyResponse;
-  appUserId: number | null;
+  appUserId: string | null;
   agentCode: string;
-  routeCode: string | null;
+  routeId: string | null;
   commissionRate: number | null;
-  branchId: number;
+  branchId: string;
 }
 
 export interface CreateSalesAgentRequest {
-  code: string;
-  party: PartyDetails;
+  /** Set to promote an existing party into the sales-agent role. */
+  partyId: string | null;
+  /**
+   * Required when {@link partyId} is null — details of the new party. The
+   * backend allocates the party code from the AGT sequence; clients cannot
+   * supply one.
+   */
+  party: PartyDetails | null;
   agentCode: string;
-  appUserId: number | null;
-  routeCode: string | null;
+  appUserId: string | null;
+  routeId: string | null;
   commissionRate: number | null;
-  branchId: number;
+  branchId: string;
+}
+
+export interface UpdateSalesAgentRequest {
+  party: PartyDetails;
+  appUserId: string | null;
+  routeId: string | null;
+  commissionRate: number | null;
+  branchId: string;
 }
 
 export function blankPartyDetails(): PartyDetails {

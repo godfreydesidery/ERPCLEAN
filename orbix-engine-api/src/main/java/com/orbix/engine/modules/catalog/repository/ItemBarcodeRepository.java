@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface ItemBarcodeRepository extends JpaRepository<ItemBarcode, Long> {
 
+    Optional<ItemBarcode> findByUid(String uid);
+
     List<ItemBarcode> findByItemId(Long itemId);
 
     boolean existsByBarcode(String barcode);

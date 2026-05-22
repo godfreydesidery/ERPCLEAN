@@ -4,10 +4,12 @@ import com.orbix.engine.modules.catalog.domain.dto.CreateUomRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.UomDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateUomRequestDto;
 import com.orbix.engine.modules.catalog.service.UomService;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/uoms")
 @RequiredArgsConstructor
+@Validated
 public class UomController {
 
     private final UomService service;
@@ -26,21 +29,22 @@ public class UomController {
         return service.listUoms();
     }
 
-    @GetMapping("/{id}")
-    public UomDto getUom(@PathVariable Long id) {
-        return service.getUom(id);
+    @GetMapping("/uid/{uid}")
+    public UomDto getUom(@PathVariable @ValidUlid String uid) {
+        return service.getUomByUid(uid);
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('ITEM.CREATE')")
     public ResponseEntity<UomDto> createUom(@Valid @RequestBody CreateUomRequestDto request) {
         UomDto uom = service.createUom(request);
-        return ResponseEntity.created(URI.create("/api/v1/uoms/" + uom.id())).body(uom);
+        return ResponseEntity.created(URI.create("/api/v1/uoms/uid/" + uom.uid())).body(uom);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('ITEM.UPDATE')")
-    public UomDto updateUom(@PathVariable Long id, @Valid @RequestBody UpdateUomRequestDto request) {
-        return service.updateUom(id, request);
+    public UomDto updateUom(@PathVariable @ValidUlid String uid,
+                            @Valid @RequestBody UpdateUomRequestDto request) {
+        return service.updateUomByUid(uid, request);
     }
 }

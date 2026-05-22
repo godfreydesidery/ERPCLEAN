@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface VatGroupRepository extends JpaRepository<VatGroup, Long> {
 
+    Optional<VatGroup> findByUid(String uid);
+
     List<VatGroup> findByCompanyId(Long companyId);
 
     Optional<VatGroup> findByCompanyIdAndCode(Long companyId, String code);

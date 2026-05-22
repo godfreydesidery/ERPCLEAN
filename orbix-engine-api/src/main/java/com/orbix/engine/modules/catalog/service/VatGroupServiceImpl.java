@@ -35,8 +35,8 @@ public class VatGroupServiceImpl implements VatGroupService {
 
     @Override
     @Transactional(readOnly = true)
-    public VatGroupDto getVatGroup(Long vatGroupId) {
-        return VatGroupDto.from(requireVatGroup(vatGroupId));
+    public VatGroupDto getVatGroupByUid(String uid) {
+        return VatGroupDto.from(requireVatGroupByUid(uid));
     }
 
     @Override
@@ -59,8 +59,8 @@ public class VatGroupServiceImpl implements VatGroupService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "VatGroup")
-    public VatGroupDto updateVatGroup(Long vatGroupId, UpdateVatGroupRequestDto request) {
-        VatGroup group = requireVatGroup(vatGroupId);
+    public VatGroupDto updateVatGroupByUid(String uid, UpdateVatGroupRequestDto request) {
+        VatGroup group = requireVatGroupByUid(uid);
         Long actorId = context.userId();
         group.update(request.name(), request.rate(), request.validFrom(), actorId);
         group.setAsDefault(request.isDefault(), actorId);
@@ -73,10 +73,10 @@ public class VatGroupServiceImpl implements VatGroupService {
     @Override
     @Transactional
     @Auditable(action = "ARCHIVE", entityType = "VatGroup")
-    public void archiveVatGroup(Long vatGroupId) {
-        VatGroup group = requireVatGroup(vatGroupId);
+    public void archiveVatGroupByUid(String uid) {
+        VatGroup group = requireVatGroupByUid(uid);
         if (group.getStatus() == ItemStatus.ARCHIVED) {
-            throw new IllegalArgumentException("VAT group is already archived: " + vatGroupId);
+            throw new IllegalArgumentException("VAT group is already archived: " + uid);
         }
         group.archive(context.userId());
     }
@@ -88,11 +88,11 @@ public class VatGroupServiceImpl implements VatGroupService {
             .forEach(g -> g.setAsDefault(false, actorId));
     }
 
-    private VatGroup requireVatGroup(Long vatGroupId) {
-        VatGroup group = vatGroups.findById(vatGroupId)
-            .orElseThrow(() -> new NoSuchElementException("VAT group not found: " + vatGroupId));
+    private VatGroup requireVatGroupByUid(String uid) {
+        VatGroup group = vatGroups.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("VAT group not found: " + uid));
         if (!Objects.equals(group.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("VAT group not found: " + vatGroupId);
+            throw new NoSuchElementException("VAT group not found: " + uid);
         }
         return group;
     }

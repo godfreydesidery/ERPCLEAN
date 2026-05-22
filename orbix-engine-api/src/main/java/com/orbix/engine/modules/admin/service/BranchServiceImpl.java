@@ -43,8 +43,8 @@ public class BranchServiceImpl implements BranchService {
 
     @Override
     @Transactional(readOnly = true)
-    public BranchResponseDto getBranch(Long branchId) {
-        return BranchResponseDto.from(requireBranch(branchId));
+    public BranchResponseDto getBranchByUid(String uid) {
+        return BranchResponseDto.from(requireBranchByUid(uid));
     }
 
     @Override
@@ -72,43 +72,45 @@ public class BranchServiceImpl implements BranchService {
         // ...and a synthetic walk-in customer for POS (F1.7 hook).
         customerService.createWalkInCustomer(branch.getId());
 
-        events.publish("BranchCreated.v1", "Branch", String.valueOf(branch.getId()),
-            Map.of("branchId", branch.getId(), "companyId", companyId, "code", code));
+        events.publish("BranchCreated.v1", "Branch", branch.getUid(),
+            Map.of(BRANCH_UID_KEY, branch.getUid(), "companyId", companyId, "code", code));
         return BranchResponseDto.from(branch);
     }
 
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Branch")
-    public BranchResponseDto updateBranch(Long branchId, UpdateBranchRequestDto request) {
-        Branch branch = requireBranch(branchId);
+    public BranchResponseDto updateBranchByUid(String uid, UpdateBranchRequestDto request) {
+        Branch branch = requireBranchByUid(uid);
         branch.updateDetails(request.name(), request.type(), request.physicalAddress(),
             request.phone(), request.timeZone(), context.userId());
-        events.publish("BranchUpdated.v1", "Branch", String.valueOf(branch.getId()),
-            Map.of("branchId", branch.getId()));
+        events.publish("BranchUpdated.v1", "Branch", branch.getUid(),
+            Map.of(BRANCH_UID_KEY, branch.getUid()));
         return BranchResponseDto.from(branch);
     }
 
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Branch")
-    public void deactivateBranch(Long branchId) {
-        Branch branch = requireBranch(branchId);
+    public void deactivateBranchByUid(String uid) {
+        Branch branch = requireBranchByUid(uid);
         if (branch.getStatus() != AdminStatus.ACTIVE) {
-            throw new IllegalArgumentException("Branch is already inactive: " + branchId);
+            throw new IllegalArgumentException("Branch is already inactive: " + uid);
         }
         // TODO (F5.1): block deactivation while the branch has an open till.
         branch.deactivate(context.userId());
-        events.publish("BranchDeactivated.v1", "Branch", String.valueOf(branch.getId()),
-            Map.of("branchId", branch.getId()));
+        events.publish("BranchDeactivated.v1", "Branch", branch.getUid(),
+            Map.of(BRANCH_UID_KEY, branch.getUid()));
     }
 
-    private Branch requireBranch(Long branchId) {
-        Branch branch = branches.findById(branchId)
-            .orElseThrow(() -> new NoSuchElementException("Branch not found: " + branchId));
+    private Branch requireBranchByUid(String uid) {
+        Branch branch = branches.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Branch not found: " + uid));
         if (!branch.getCompanyId().equals(context.companyId())) {
-            throw new NoSuchElementException("Branch not found: " + branchId);
+            throw new NoSuchElementException("Branch not found: " + uid);
         }
         return branch;
     }
+
+    private static final String BRANCH_UID_KEY = "branchUid";
 }

@@ -1,17 +1,19 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { Currency, CurrencyService } from '../../../core/currency/currency.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { CatalogService } from '../catalog.service';
 import { PriceList, PriceListItem } from '../catalog.models';
 
 @Component({
   selector: 'orbix-price-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -116,9 +118,9 @@ import { PriceList, PriceListItem } from '../catalog.models';
                 <div class="row g-2">
                   <div class="col-md-4">
                     <label class="form-label small fw-semibold text-secondary">Currency</label>
-                    <input class="form-control text-uppercase font-monospace" name="ccy"
-                           [(ngModel)]="listForm.currencyCode"
-                           required pattern="[A-Za-z]{3}" maxlength="3" placeholder="UGX">
+                    <orbix-search-select name="ccy" [options]="currencyOptions()"
+                                         [(ngModel)]="listForm.currencyCode" placeholder="Select…" required>
+                    </orbix-search-select>
                   </div>
                   <div class="col-md-4">
                     <label class="form-label small fw-semibold text-secondary">Valid from</label>
@@ -341,6 +343,14 @@ import { PriceList, PriceListItem } from '../catalog.models';
 })
 export class PriceListComponent implements OnInit {
   private readonly catalog = inject(CatalogService);
+  private readonly currencyService = inject(CurrencyService);
+
+  protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
+    this.currencies()
+      .filter(c => c.status === 'ACTIVE')
+      .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
+  );
 
   protected readonly priceLists = signal<PriceList[]>([]);
   protected readonly selected = signal<PriceList | null>(null);
@@ -355,12 +365,16 @@ export class PriceListComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadLists();
+    this.currencyService.listCurrencies().subscribe({
+      next: list => this.currencies.set(list),
+      error: () => this.currencies.set([])
+    });
   }
 
   select(list: PriceList): void {
     this.selected.set(list);
     this.mode.set('view');
-    this.loadPrices(list.id);
+    this.loadPrices(list.uid);
   }
 
   startNew(): void {
@@ -391,7 +405,7 @@ export class PriceListComponent implements OnInit {
 
   submitList(): void {
     const isEdit = this.mode() === 'edit-list';
-    const id = isEdit ? this.selected()?.id ?? null : null;
+    const uid = isEdit ? this.selected()?.uid ?? null : null;
     const request = {
       name: this.listForm.name.trim(),
       currencyCode: this.listForm.currencyCode.trim().toUpperCase(),
@@ -400,8 +414,8 @@ export class PriceListComponent implements OnInit {
       isDefault: this.listForm.isDefault,
       taxInclusive: this.listForm.taxInclusive
     };
-    const source = id
-      ? this.catalog.updatePriceList(id, request)
+    const source = uid
+      ? this.catalog.updatePriceList(uid, request)
       : this.catalog.createPriceList({ code: this.listForm.code.trim(), ...request });
     this.run(source, list => {
       this.loadLists();
@@ -410,7 +424,7 @@ export class PriceListComponent implements OnInit {
   }
 
   archiveList(list: PriceList): void {
-    this.run(this.catalog.archivePriceList(list.id), () => {
+    this.run(this.catalog.archivePriceList(list.uid), () => {
       this.selected.set(null);
       this.mode.set('view');
       this.loadLists();
@@ -418,15 +432,15 @@ export class PriceListComponent implements OnInit {
   }
 
   submitPrice(list: PriceList): void {
-    this.run(this.catalog.setPrice(list.id, {
-      itemId: Number(this.priceForm.itemId),
-      uomId: Number(this.priceForm.uomId),
+    this.run(this.catalog.setPrice(list.uid, {
+      itemId: String(this.priceForm.itemId),
+      uomId: String(this.priceForm.uomId),
       price: Number(this.priceForm.price),
       effectiveFrom: this.priceForm.effectiveFrom,
       reason: this.priceForm.reason.trim() || null
     }), () => {
       this.priceForm = blankPriceForm();
-      this.loadPrices(list.id);
+      this.loadPrices(list.uid);
     });
   }
 
@@ -437,8 +451,8 @@ export class PriceListComponent implements OnInit {
     });
   }
 
-  private loadPrices(priceListId: number): void {
-    this.catalog.listPrices(priceListId).subscribe({
+  private loadPrices(priceListUid: string): void {
+    this.catalog.listPrices(priceListUid).subscribe({
       next: prices => this.prices.set(prices),
       error: err => this.showError(err)
     });

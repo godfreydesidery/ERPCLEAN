@@ -3,7 +3,6 @@ package com.orbix.engine.modules.party.domain.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
-import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
@@ -11,7 +10,7 @@ import java.math.BigDecimal;
 public record UpdateSalesAgentRequestDto(
     @Valid @NotNull PartyDetailsDto party,
     Long appUserId,
-    @Size(max = 40) String routeCode,
+    Long routeId,
     @PositiveOrZero BigDecimal commissionRate,
     @NotNull Long branchId
 ) {}
