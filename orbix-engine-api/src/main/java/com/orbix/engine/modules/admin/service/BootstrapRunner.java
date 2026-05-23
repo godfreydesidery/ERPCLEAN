@@ -1,6 +1,5 @@
 package com.orbix.engine.modules.admin.service;
 
-import com.orbix.engine.modules.admin.config.BootstrapProperties;
 import com.orbix.engine.modules.admin.domain.dto.FirstRunRequestDto;
 import com.orbix.engine.modules.iam.domain.RootAdmin;
 import lombok.RequiredArgsConstructor;

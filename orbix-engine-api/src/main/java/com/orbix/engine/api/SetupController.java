@@ -1,6 +1,6 @@
 package com.orbix.engine.api;
 
-import com.orbix.engine.modules.admin.config.BootstrapProperties;
+import com.orbix.engine.modules.admin.service.BootstrapProperties;
 import com.orbix.engine.modules.admin.service.FirstRunSetupService;
 import com.orbix.engine.modules.iam.domain.RootAdmin;
 import lombok.RequiredArgsConstructor;

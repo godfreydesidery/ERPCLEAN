@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.iam.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.TokenGuardService;
 import com.orbix.engine.modules.iam.domain.dto.CreateRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.GrantRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.RoleDetailDto;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -30,7 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,6 +48,8 @@ class RoleAdminServiceImplTest {
     @Mock private PermissionRepository permissions;
     @Mock private UserRoleRepository userRoles;
     @Mock private AppUserRepository users;
+    @Mock private TokenGuardService tokenGuard;
+    @Mock private RootAdminGuard rootAdminGuard;
     @Mock private RequestContext context;
 
     @InjectMocks private RoleAdminServiceImpl service;
@@ -56,9 +60,10 @@ class RoleAdminServiceImplTest {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
     }
 
-    private static Role role(Long id, String code, boolean system) {
+    private static Role role(Long id, String uid, String code, boolean system) {
         Role role = new Role(code, "Name " + code, "desc", system, ACTOR_ID);
         role.setId(id);
+        ReflectionTestUtils.setField(role, "uid", uid);
         return role;
     }
 
@@ -105,19 +110,19 @@ class RoleAdminServiceImplTest {
 
     @Test
     void getRole_notFound_throwsNoSuchElement() {
-        when(roles.findById(99L)).thenReturn(Optional.empty());
+        when(roles.findByUid("R99")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getRole(99L))
+        assertThatThrownBy(() -> service.getRoleByUid("R99"))
             .isInstanceOf(NoSuchElementException.class);
     }
 
     @Test
     void updateRole_updatesDetails() {
-        Role existing = role(5L, "BUYER", false);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        Role existing = role(5L, "R5", "BUYER", false);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(roles.save(any(Role.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        RoleDetailDto result = service.updateRole(5L,
+        RoleDetailDto result = service.updateRoleByUid("R5",
             new UpdateRoleRequestDto("Senior buyer", "updated desc"));
 
         assertThat(result.name()).isEqualTo("Senior buyer");
@@ -127,10 +132,10 @@ class RoleAdminServiceImplTest {
 
     @Test
     void updateRole_rejectsSystemRole() {
-        Role system = role(1L, "ADMIN", true);
-        when(roles.findById(1L)).thenReturn(Optional.of(system));
+        Role system = role(1L, "R1", "ADMIN", true);
+        when(roles.findByUid("R1")).thenReturn(Optional.of(system));
 
-        assertThatThrownBy(() -> service.updateRole(1L,
+        assertThatThrownBy(() -> service.updateRoleByUid("R1",
             new UpdateRoleRequestDto("x", "y")))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("System role");
@@ -141,14 +146,14 @@ class RoleAdminServiceImplTest {
 
     @Test
     void setPermissions_replacesRolePermissionSet() {
-        Role existing = role(5L, "BUYER", false);
+        Role existing = role(5L, "R5", "BUYER", false);
         Permission p1 = permission(10L, "ITEM.CREATE", "catalog");
         Permission p2 = permission(11L, "ITEM.UPDATE", "catalog");
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(permissions.findAllById(List.of(10L, 11L))).thenReturn(List.of(p1, p2));
         when(roles.save(any(Role.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        RoleDetailDto result = service.setPermissions(5L,
+        RoleDetailDto result = service.setPermissionsByUid("R5",
             new SetRolePermissionsRequestDto(List.of(10L, 11L)));
 
         assertThat(result.permissions()).extracting(dto -> dto.code())
@@ -158,12 +163,12 @@ class RoleAdminServiceImplTest {
 
     @Test
     void setPermissions_rejectsUnknownPermissionId() {
-        Role existing = role(5L, "BUYER", false);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        Role existing = role(5L, "R5", "BUYER", false);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(permissions.findAllById(List.of(10L, 999L)))
             .thenReturn(List.of(permission(10L, "ITEM.CREATE", "catalog")));
 
-        assertThatThrownBy(() -> service.setPermissions(5L,
+        assertThatThrownBy(() -> service.setPermissionsByUid("R5",
             new SetRolePermissionsRequestDto(List.of(10L, 999L))))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("invalid");
@@ -172,9 +177,9 @@ class RoleAdminServiceImplTest {
 
     @Test
     void setPermissions_rejectsSystemRole() {
-        when(roles.findById(1L)).thenReturn(Optional.of(role(1L, "ADMIN", true)));
+        when(roles.findByUid("R1")).thenReturn(Optional.of(role(1L, "R1", "ADMIN", true)));
 
-        assertThatThrownBy(() -> service.setPermissions(1L,
+        assertThatThrownBy(() -> service.setPermissionsByUid("R1",
             new SetRolePermissionsRequestDto(List.of(10L))))
             .isInstanceOf(IllegalArgumentException.class);
     }
@@ -183,22 +188,22 @@ class RoleAdminServiceImplTest {
 
     @Test
     void deleteRole_deletesWhenNoActiveGrants() {
-        Role existing = role(5L, "BUYER", false);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        Role existing = role(5L, "R5", "BUYER", false);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(userRoles.existsByRoleIdAndRevokedAtIsNull(5L)).thenReturn(false);
 
-        service.deleteRole(5L);
+        service.deleteRoleByUid("R5");
 
         verify(roles).delete(existing);
     }
 
     @Test
     void deleteRole_blockedWhenActiveGrantsExist() {
-        Role existing = role(5L, "BUYER", false);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        Role existing = role(5L, "R5", "BUYER", false);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(userRoles.existsByRoleIdAndRevokedAtIsNull(5L)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.deleteRole(5L))
+        assertThatThrownBy(() -> service.deleteRoleByUid("R5"))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("active grants");
         verify(roles, never()).delete(any());
@@ -206,9 +211,9 @@ class RoleAdminServiceImplTest {
 
     @Test
     void deleteRole_rejectsSystemRole() {
-        when(roles.findById(1L)).thenReturn(Optional.of(role(1L, "ADMIN", true)));
+        when(roles.findByUid("R1")).thenReturn(Optional.of(role(1L, "R1", "ADMIN", true)));
 
-        assertThatThrownBy(() -> service.deleteRole(1L))
+        assertThatThrownBy(() -> service.deleteRoleByUid("R1"))
             .isInstanceOf(IllegalArgumentException.class);
         verify(roles, never()).delete(any());
     }
@@ -217,10 +222,10 @@ class RoleAdminServiceImplTest {
 
     @Test
     void grantRole_createsCompanyScopedGrant() {
-        Role existing = role(5L, "BUYER", false);
+        Role existing = role(5L, "R5", "BUYER", false);
         AppUser user = new AppUser("jdoe", "hash", "Jane Doe", COMPANY_ID, null, ACTOR_ID);
         user.setId(20L);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(users.findByUsername("jdoe")).thenReturn(Optional.of(user));
         when(userRoles.findByUserIdAndCompanyIdAndRevokedAtIsNull(20L, COMPANY_ID))
             .thenReturn(List.of());
@@ -230,7 +235,7 @@ class RoleAdminServiceImplTest {
             return ur;
         });
 
-        RoleGrantDto result = service.grantRole(5L, new GrantRoleRequestDto("jdoe", null));
+        RoleGrantDto result = service.grantRoleByUid("R5", new GrantRoleRequestDto("jdoe", null));
 
         ArgumentCaptor<UserRole> saved = ArgumentCaptor.forClass(UserRole.class);
         verify(userRoles).save(saved.capture());
@@ -243,26 +248,26 @@ class RoleAdminServiceImplTest {
 
     @Test
     void grantRole_userNotFound_throwsNoSuchElement() {
-        when(roles.findById(5L)).thenReturn(Optional.of(role(5L, "BUYER", false)));
+        when(roles.findByUid("R5")).thenReturn(Optional.of(role(5L, "R5", "BUYER", false)));
         when(users.findByUsername("ghost")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.grantRole(5L, new GrantRoleRequestDto("ghost", null)))
+        assertThatThrownBy(() -> service.grantRoleByUid("R5", new GrantRoleRequestDto("ghost", null)))
             .isInstanceOf(NoSuchElementException.class);
         verify(userRoles, never()).save(any());
     }
 
     @Test
     void grantRole_rejectsDuplicateGrantInSameScope() {
-        Role existing = role(5L, "BUYER", false);
+        Role existing = role(5L, "R5", "BUYER", false);
         AppUser user = new AppUser("jdoe", "hash", "Jane Doe", COMPANY_ID, null, ACTOR_ID);
         user.setId(20L);
         UserRole prior = new UserRole(20L, 5L, COMPANY_ID, null, ACTOR_ID);
-        when(roles.findById(5L)).thenReturn(Optional.of(existing));
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
         when(users.findByUsername("jdoe")).thenReturn(Optional.of(user));
         when(userRoles.findByUserIdAndCompanyIdAndRevokedAtIsNull(20L, COMPANY_ID))
             .thenReturn(List.of(prior));
 
-        assertThatThrownBy(() -> service.grantRole(5L, new GrantRoleRequestDto("jdoe", null)))
+        assertThatThrownBy(() -> service.grantRoleByUid("R5", new GrantRoleRequestDto("jdoe", null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already has role");
         verify(userRoles, never()).save(any());
@@ -274,10 +279,10 @@ class RoleAdminServiceImplTest {
     void revokeGrant_marksGrantRevoked() {
         UserRole grant = new UserRole(20L, 5L, COMPANY_ID, null, ACTOR_ID);
         grant.setId(77L);
-        when(userRoles.findById(77L)).thenReturn(Optional.of(grant));
+        when(userRoles.findByUid("G77")).thenReturn(Optional.of(grant));
         when(userRoles.save(any(UserRole.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service.revokeGrant(77L);
+        service.revokeGrantByUid("G77");
 
         assertThat(grant.getRevokedAt()).isNotNull();
         verify(userRoles).save(grant);
@@ -285,9 +290,9 @@ class RoleAdminServiceImplTest {
 
     @Test
     void revokeGrant_notFound_throwsNoSuchElement() {
-        when(userRoles.findById(anyLong())).thenReturn(Optional.empty());
+        when(userRoles.findByUid(anyString())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.revokeGrant(404L))
+        assertThatThrownBy(() -> service.revokeGrantByUid("G404"))
             .isInstanceOf(NoSuchElementException.class);
     }
 }

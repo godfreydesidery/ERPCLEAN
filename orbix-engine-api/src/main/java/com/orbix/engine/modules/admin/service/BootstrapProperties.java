@@ -1,4 +1,4 @@
-package com.orbix.engine.modules.admin.config;
+package com.orbix.engine.modules.admin.service;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -7,12 +7,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * Env-driven first-run bootstrap ({@code ORBIX_BOOTSTRAP_*}). When
  * {@code enabled} and the database has no organisation, the app self-bootstraps
  * org + company + branch + the company-wide {@code rootadmin} on startup
- * (see {@code BootstrapRunner}), replacing the interactive {@code /setup} wizard.
+ * (see {@link BootstrapRunner}), replacing the interactive {@code /setup} wizard.
  *
  * <p>{@code resetToken} is the shared secret for the public
  * {@code POST /api/v1/setup/reset-rootadmin-password} endpoint — blank disables
  * that endpoint. The admin password is never accepted from a request; both the
  * initial bootstrap and the reset re-read it from {@code admin.password} here.
+ * (Lives in {@code ..service} rather than a {@code config} sub-package so it
+ * satisfies the module-boundary rule.)
  */
 @ConfigurationProperties(prefix = "orbix.bootstrap")
 public record BootstrapProperties(

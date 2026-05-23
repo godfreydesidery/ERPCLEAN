@@ -1,6 +1,6 @@
 package com.orbix.engine;
 
-import com.orbix.engine.modules.admin.config.BootstrapProperties;
+import com.orbix.engine.modules.admin.service.BootstrapProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
