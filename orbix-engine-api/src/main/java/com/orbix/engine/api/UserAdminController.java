@@ -8,7 +8,7 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
-import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
+import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 import com.orbix.engine.modules.iam.service.UserAdminService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * Day-2 user administration (F0.4c). Companion to {@link RoleAdminController}.
@@ -35,8 +33,12 @@ public class UserAdminController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public List<UserSummaryDto> listUsers() {
-        return service.listUsers();
+    public UserPageDto listUsers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return service.listUsers(q, status, page, size);
     }
 
     @GetMapping("/uid/{uid}")

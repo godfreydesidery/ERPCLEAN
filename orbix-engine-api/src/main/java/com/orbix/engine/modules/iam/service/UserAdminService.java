@@ -7,9 +7,7 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
-import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
-
-import java.util.List;
+import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 
 /**
  * Day-2 user administration (F0.4c). Companion to {@link RoleAdminService} —
@@ -18,7 +16,8 @@ import java.util.List;
  */
 public interface UserAdminService {
 
-    List<UserSummaryDto> listUsers();
+    /** Server-side paginated user list. {@code q} = search; {@code statusFilter} = all|active|disabled|locked|reset. */
+    UserPageDto listUsers(String q, String statusFilter, int page, int size);
 
     UserDetailDto getUserByUid(String uid);
 

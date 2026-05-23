@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { ApiResponse, unwrap } from '../../../core/api/api-response';
@@ -11,7 +11,7 @@ import {
   ResetPasswordResponse,
   UpdateUserRequest,
   UserDetail,
-  UserSummary
+  UserPage
 } from './user-admin.models';
 
 @Injectable({ providedIn: 'root' })
@@ -19,8 +19,11 @@ export class UserAdminService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listUsers(): Observable<UserSummary[]> {
-    return unwrap(this.http.get<ApiResponse<UserSummary[]>>(`${this.base}/users`));
+  listUsers(q: string, status: string, page: number, size: number): Observable<UserPage> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (q) params = params.set('q', q);
+    if (status && status !== 'all') params = params.set('status', status);
+    return unwrap(this.http.get<ApiResponse<UserPage>>(`${this.base}/users`, { params }));
   }
 
   getUser(uid: string): Observable<UserDetail> {

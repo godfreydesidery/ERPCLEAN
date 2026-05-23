@@ -14,7 +14,11 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.RoleGrantDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
+import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
 import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
@@ -54,20 +58,29 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final TokenGuardService tokenGuard;
     private final RequestContext context;
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Override
     @Transactional(readOnly = true)
-    public List<UserSummaryDto> listUsers() {
+    public UserPageDto listUsers(String q, String statusFilter, int page, int size) {
         Long callerId = context.userId();
         Long companyId = context.companyId();
         // Company-wide admins see every user. Branch-scoped admins see only
         // users with a grant covering their active branch — plus orphans
         // (users with no grants yet, awaiting role assignment).
-        List<AppUser> rows = userRoles.hasAnyCompanyWideGrant(callerId, companyId)
-            ? users.findByDefaultCompanyIdOrderByIdAsc(companyId)
-            : users.findVisibleInBranch(companyId, context.branchId());
-        return rows.stream()
-            .map(UserSummaryDto::from)
-            .toList();
+        boolean companyWide = userRoles.hasAnyCompanyWideGrant(callerId, companyId);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safePage = Math.max(page, 0);
+        String filter = (statusFilter == null || statusFilter.isBlank()) ? "all" : statusFilter.trim().toLowerCase();
+
+        Page<AppUser> result = users.search(
+            companyId, companyWide, context.branchId(),
+            emptyToNull(q), filter, Instant.now(),
+            PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "id")));
+
+        return new UserPageDto(
+            result.getContent().stream().map(UserSummaryDto::from).toList(),
+            result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Override

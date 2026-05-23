@@ -36,7 +36,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
           <a routerLink=".." class="text-decoration-none text-secondary">Admin</a> &rsaquo; Users
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Users</h1>
-        <p class="text-secondary mb-0 small">{{ users().length }} user{{ users().length === 1 ? '' : 's' }} in this company.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} user{{ total() === 1 ? '' : 's' }} in this company.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleNewForm()">
         <i class="bi" [class.bi-plus-lg]="!showNewForm()" [class.bi-x-lg]="showNewForm()"></i>
@@ -149,13 +149,13 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
           <div class="search-box flex-grow-1">
             <i class="bi bi-search"></i>
             <input type="search" class="form-control" placeholder="Search by username, name or email"
-                   [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+                   [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()">
           </div>
           <div class="status-pills d-flex gap-1 flex-wrap">
             @for (opt of SearchSelectOptions; track opt.value) {
               <button type="button" class="status-pill"
                       [class.is-active]="filter() === opt.value"
-                      (click)="filter.set(opt.value)">
+                      (click)="setFilter(opt.value)">
                 {{ opt.label }}
               </button>
             }
@@ -166,16 +166,14 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       <div class="card border-0 shadow-sm overflow-hidden">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
-          <span class="badge text-bg-light text-secondary">
-            {{ filtered().length }}@if (filtered().length !== users().length) { / {{ users().length }} }
-          </span>
+          <span class="badge text-bg-light text-secondary">{{ total() }}</span>
         </div>
-        @if (filtered().length === 0) {
+        @if (users().length === 0) {
           <div class="p-5 text-center">
             <div class="empty-icon mx-auto mb-3"><i class="bi bi-people"></i></div>
             <p class="small text-secondary mb-0">
-              @if (users().length === 0) { No users yet. }
-              @else { No users match these filters. }
+              @if (searchTerm || filter() !== 'all') { No users match these filters. }
+              @else { No users yet. }
             </p>
           </div>
         } @else {
@@ -193,7 +191,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                 </tr>
               </thead>
               <tbody>
-                @for (u of filtered(); track u.id) {
+                @for (u of users(); track u.id) {
                   <tr class="u-table-row"
                       [routerLink]="['/admin/users', u.uid]"
                       tabindex="0">
@@ -237,7 +235,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 
           <!-- Mobile: card list (tables are painful on small screens) -->
           <ul class="list-unstyled mb-0 u-list d-md-none">
-            @for (u of filtered(); track u.id) {
+            @for (u of users(); track u.id) {
               <li>
                 <a class="u-row text-decoration-none"
                    [routerLink]="['/admin/users', u.uid]">
@@ -266,6 +264,15 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
               </li>
             }
           </ul>
+        }
+        @if (totalPages() > 1) {
+          <div class="card-footer d-flex align-items-center justify-content-between small text-secondary">
+            <span>Page {{ page() + 1 }} of {{ totalPages() }} · {{ total() }} total</span>
+            <div class="btn-group">
+              <button class="btn btn-outline-secondary btn-sm" [disabled]="page() === 0" (click)="goTo(page() - 1)">Prev</button>
+              <button class="btn btn-outline-secondary btn-sm" [disabled]="page() + 1 >= totalPages()" (click)="goTo(page() + 1)">Next</button>
+            </div>
+          </div>
         }
       </div>
     }
@@ -396,8 +403,7 @@ export class UserAdminComponent implements OnInit {
 
   protected newForm: CreateForm = blankCreateForm();
 
-  // --- toolbar state ------------------------------------------------------
-  protected readonly searchSignal = signal('');
+  // --- toolbar / server-side pagination state -----------------------------
   protected searchTerm = '';
   protected readonly filter = signal<UserListFilter>('all');
   protected readonly SearchSelectOptions: { label: string; value: UserListFilter }[] = [
@@ -408,23 +414,11 @@ export class UserAdminComponent implements OnInit {
     { label: 'Reset due', value: 'reset' },
   ];
 
-  protected readonly filtered = computed(() => {
-    const q = this.searchSignal().trim().toLowerCase();
-    const f = this.filter();
-    return this.users().filter(u => {
-      switch (f) {
-        case 'active':   if (u.status !== 'ACTIVE') return false; break;
-        case 'disabled': if (u.status === 'ACTIVE') return false; break;
-        case 'locked':   if (!u.locked) return false; break;
-        case 'reset':    if (!u.mustChangePassword) return false; break;
-        default: break;
-      }
-      if (!q) return true;
-      return u.username.toLowerCase().includes(q)
-          || u.displayName.toLowerCase().includes(q)
-          || (u.email?.toLowerCase().includes(q) ?? false);
-    });
-  });
+  protected readonly page = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  private readonly pageSize = 25;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit(): void {
     this.load();
@@ -493,9 +487,32 @@ export class UserAdminComponent implements OnInit {
     });
   }
 
+  onSearchChange(): void {
+    // Debounce so we don't hit the server on every keystroke.
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { this.page.set(0); this.load(); }, 300);
+  }
+
+  setFilter(f: UserListFilter): void {
+    this.filter.set(f);
+    this.page.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.page.set(p);
+    this.load();
+  }
+
   private load(): void {
-    this.api.listUsers().subscribe({
-      next: list => this.users.set(list),
+    this.api.listUsers(this.searchTerm.trim(), this.filter(), this.page(), this.pageSize).subscribe({
+      next: pageData => {
+        this.users.set(pageData.content);
+        this.total.set(pageData.totalElements);
+        this.totalPages.set(pageData.totalPages);
+        this.page.set(pageData.page);
+      },
       error: err => this.showError(err)
     });
   }

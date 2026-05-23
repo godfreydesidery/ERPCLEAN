@@ -2,6 +2,14 @@
 
 export type AppUserStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'SUSPENDED';
 
+export interface UserPage {
+  content: UserSummary[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 export interface UserSummary {
   id: string;
   uid: string;
