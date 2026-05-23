@@ -2,6 +2,7 @@ package com.orbix.engine.modules.iam.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.TokenGuardService;
 import com.orbix.engine.modules.iam.domain.dto.CreateRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.GrantRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.PermissionDto;
@@ -41,6 +42,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     private final PermissionRepository permissions;
     private final UserRoleRepository userRoles;
     private final AppUserRepository users;
+    private final TokenGuardService tokenGuard;
     private final RequestContext context;
 
     @Override
@@ -63,8 +65,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public RoleDetailDto getRole(Long roleId) {
-        return RoleDetailDto.from(requireRole(roleId));
+    public RoleDetailDto getRoleByUid(String uid) {
+        return RoleDetailDto.from(requireRoleByUid(uid));
     }
 
     @Override
@@ -82,8 +84,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "Role")
-    public RoleDetailDto updateRole(Long roleId, UpdateRoleRequestDto request) {
-        Role role = requireMutableRole(roleId);
+    public RoleDetailDto updateRoleByUid(String uid, UpdateRoleRequestDto request) {
+        Role role = requireMutableRoleByUid(uid);
         role.updateDetails(request.name(), request.description(), context.userId());
         return RoleDetailDto.from(roles.save(role));
     }
@@ -91,8 +93,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     @Override
     @Transactional
     @Auditable(action = "SET_PERMISSIONS", entityType = "Role")
-    public RoleDetailDto setPermissions(Long roleId, SetRolePermissionsRequestDto request) {
-        Role role = requireMutableRole(roleId);
+    public RoleDetailDto setPermissionsByUid(String uid, SetRolePermissionsRequestDto request) {
+        Role role = requireMutableRoleByUid(uid);
         List<Long> ids = request.permissionIds();
         Set<Permission> resolved = new HashSet<>(permissions.findAllById(ids));
         if (resolved.size() != new HashSet<>(ids).size()) {
@@ -105,9 +107,9 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     @Override
     @Transactional
     @Auditable(action = "DELETE", entityType = "Role")
-    public void deleteRole(Long roleId) {
-        Role role = requireMutableRole(roleId);
-        if (userRoles.existsByRoleIdAndRevokedAtIsNull(roleId)) {
+    public void deleteRoleByUid(String uid) {
+        Role role = requireMutableRoleByUid(uid);
+        if (userRoles.existsByRoleIdAndRevokedAtIsNull(role.getId())) {
             throw new IllegalArgumentException("Role still has active grants — revoke them first");
         }
         roles.delete(role);
@@ -115,10 +117,10 @@ public class RoleAdminServiceImpl implements RoleAdminService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<RoleGrantDto> listGrants(Long roleId) {
-        requireRole(roleId);
+    public List<RoleGrantDto> listGrantsByUid(String uid) {
+        Role role = requireRoleByUid(uid);
         Long companyId = context.companyId();
-        List<UserRole> grants = userRoles.findByRoleIdAndRevokedAtIsNull(roleId).stream()
+        List<UserRole> grants = userRoles.findByRoleIdAndRevokedAtIsNull(role.getId()).stream()
             .filter(g -> Objects.equals(g.getCompanyId(), companyId))
             .toList();
         Map<Long, AppUser> usersById = users.findAllById(
@@ -134,8 +136,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     @Override
     @Transactional
     @Auditable(action = "GRANT", entityType = "UserRole")
-    public RoleGrantDto grantRole(Long roleId, GrantRoleRequestDto request) {
-        Role role = requireRole(roleId);
+    public RoleGrantDto grantRoleByUid(String uid, GrantRoleRequestDto request) {
+        Role role = requireRoleByUid(uid);
         Long companyId = context.companyId();
         AppUser user = users.findByUsername(request.username().trim())
             .orElseThrow(() -> new NoSuchElementException("User not found: " + request.username()));
@@ -157,20 +159,23 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     @Override
     @Transactional
     @Auditable(action = "REVOKE", entityType = "UserRole")
-    public void revokeGrant(Long grantId) {
-        UserRole grant = userRoles.findById(grantId)
-            .orElseThrow(() -> new NoSuchElementException("Grant not found: " + grantId));
+    public void revokeGrantByUid(String grantUid) {
+        UserRole grant = userRoles.findByUid(grantUid)
+            .orElseThrow(() -> new NoSuchElementException("Grant not found: " + grantUid));
         grant.revoke(Instant.now());
         userRoles.save(grant);
+        // Force the affected user to re-mint a token so the lost permissions
+        // drop out of their `perms` claim immediately, not at token expiry.
+        tokenGuard.invalidateUserTokens(grant.getUserId());
     }
 
-    private Role requireRole(Long roleId) {
-        return roles.findById(roleId)
-            .orElseThrow(() -> new NoSuchElementException("Role not found: " + roleId));
+    private Role requireRoleByUid(String uid) {
+        return roles.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Role not found: " + uid));
     }
 
-    private Role requireMutableRole(Long roleId) {
-        Role role = requireRole(roleId);
+    private Role requireMutableRoleByUid(String uid) {
+        Role role = requireRoleByUid(uid);
         if (role.isSystem()) {
             throw new IllegalArgumentException("System role '" + role.getCode() + "' cannot be modified");
         }

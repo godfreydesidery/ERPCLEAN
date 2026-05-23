@@ -70,6 +70,7 @@ CREATE TABLE branch (
 -- Identity (DATA-MODEL.md §1.4-1.8)
 CREATE TABLE app_user (
     id                  BIGINT       NOT NULL PRIMARY KEY,
+    uid                 CHAR(26)     NOT NULL,
     username            VARCHAR(80)  NOT NULL,
     password_hash       VARCHAR(120) NOT NULL,
     display_name        VARCHAR(120) NOT NULL,
@@ -87,11 +88,13 @@ CREATE TABLE app_user (
     created_by          BIGINT       NOT NULL,
     updated_by          BIGINT       NOT NULL,
     version             INT          NOT NULL DEFAULT 0,
-    CONSTRAINT uk_app_user_username UNIQUE (username)
+    CONSTRAINT uk_app_user_username UNIQUE (username),
+    CONSTRAINT uk_app_user_uid UNIQUE (uid)
 );
 
 CREATE TABLE role (
     id          BIGINT       NOT NULL PRIMARY KEY,
+    uid         CHAR(26)     NOT NULL,
     code        VARCHAR(40)  NOT NULL,
     name        VARCHAR(120) NOT NULL,
     description TEXT,
@@ -102,7 +105,8 @@ CREATE TABLE role (
     created_by  BIGINT       NOT NULL,
     updated_by  BIGINT       NOT NULL,
     version     INT          NOT NULL DEFAULT 0,
-    CONSTRAINT uk_role_code UNIQUE (code)
+    CONSTRAINT uk_role_code UNIQUE (code),
+    CONSTRAINT uk_role_uid UNIQUE (uid)
 );
 
 CREATE TABLE permission (
@@ -123,6 +127,7 @@ CREATE TABLE role_permission (
 
 CREATE TABLE user_role (
     id          BIGINT      NOT NULL PRIMARY KEY,
+    uid         CHAR(26)    NOT NULL,
     user_id     BIGINT      NOT NULL,
     role_id     BIGINT      NOT NULL,
     company_id  BIGINT      NOT NULL,
@@ -133,7 +138,8 @@ CREATE TABLE user_role (
     CONSTRAINT fk_user_role_user    FOREIGN KEY (user_id)    REFERENCES app_user (id),
     CONSTRAINT fk_user_role_role    FOREIGN KEY (role_id)    REFERENCES role (id),
     CONSTRAINT fk_user_role_company FOREIGN KEY (company_id) REFERENCES company (id),
-    CONSTRAINT fk_user_role_branch  FOREIGN KEY (branch_id)  REFERENCES branch (id)
+    CONSTRAINT fk_user_role_branch  FOREIGN KEY (branch_id)  REFERENCES branch (id),
+    CONSTRAINT uk_user_role_uid UNIQUE (uid)
 );
 
 -- Audit log (DATA-MODEL.md §1.9). Append-only; hash-chained.

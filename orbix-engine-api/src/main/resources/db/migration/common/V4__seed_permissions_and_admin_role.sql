@@ -20,9 +20,9 @@ INSERT INTO permission (id, code, description, module) VALUES
     (9,  'ITEM.UPDATE',              'Edit catalog items',                     'catalog'),
     (10, 'ITEM.ARCHIVE',             'Archive catalog items',                  'catalog');
 
-INSERT INTO role (id, code, name, description, is_system, status,
+INSERT INTO role (id, uid, code, name, description, is_system, status,
                   created_at, updated_at, created_by, updated_by, version)
-VALUES (1, 'ADMIN', 'System administrator',
+VALUES (1, '01ARZ3NDEKTSV4RRFFQ69G5FAV', 'ADMIN', 'System administrator',
         'Granted every permission by virtue of being the system role.',
         TRUE, 'ACTIVE',
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, 0, 0);

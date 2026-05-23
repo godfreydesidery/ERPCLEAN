@@ -2,6 +2,9 @@ package com.orbix.engine.modules.auth.service;
 
 import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
+import com.orbix.engine.modules.auth.domain.dto.SessionDto;
+
+import java.util.List;
 
 public interface AuthService {
 
@@ -25,6 +28,9 @@ public interface AuthService {
 
     /** Revoke every refresh token owned by the given user (sign-out everywhere). */
     void logoutEverywhere(Long userId);
+
+    /** List the user's active sessions (non-revoked, unexpired refresh tokens). US-IAM-003. */
+    List<SessionDto> listSessions(Long userId);
 
     /**
      * Issue a fresh access + refresh pair for an already-authenticated user.

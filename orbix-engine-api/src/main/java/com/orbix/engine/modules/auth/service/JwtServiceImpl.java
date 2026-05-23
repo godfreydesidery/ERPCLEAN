@@ -53,6 +53,7 @@ public class JwtServiceImpl implements JwtService {
         return Jwts.builder()
             .issuer(issuer)
             .subject(Long.toString(userId))
+            .id(java.util.UUID.randomUUID().toString())   // jti — for single-token revocation
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(accessTtl)))
             // userId lives in the standard `sub` claim (set above). We do NOT
@@ -82,7 +83,9 @@ public class JwtServiceImpl implements JwtService {
             Long.valueOf(c.getSubject()),
             c.get("cid", Long.class),
             bid == null || bid < 0 ? null : bid,
-            (List<String>) c.get("perms", List.class)
+            (List<String>) c.get("perms", List.class),
+            c.getId(),
+            c.getIssuedAt() == null ? null : c.getIssuedAt().toInstant()
         );
     }
 }

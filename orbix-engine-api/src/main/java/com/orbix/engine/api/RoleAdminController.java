@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.iam.domain.dto.CreateRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.GrantRoleRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.PermissionDto;
@@ -13,19 +14,21 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
 
 /**
- * Role / permission administration (US-IAM-008, US-IAM-009). Every endpoint is
- * gated by {@code IAM.MANAGE_ROLES}. Backs the web RoleAdminComponent.
+ * Role / permission administration (US-IAM-008, US-IAM-009). Roles and grants
+ * are addressed by {@code uid}. Every endpoint is gated by {@code IAM.MANAGE_ROLES}.
  */
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @PreAuthorize("hasAuthority('IAM.MANAGE_ROLES')")
+@Validated
 public class RoleAdminController {
 
     private final RoleAdminService service;
@@ -40,50 +43,50 @@ public class RoleAdminController {
         return service.listRoles();
     }
 
-    @GetMapping("/roles/{id}")
-    public RoleDetailDto getRole(@PathVariable Long id) {
-        return service.getRole(id);
+    @GetMapping("/roles/uid/{uid}")
+    public RoleDetailDto getRole(@PathVariable @ValidUlid String uid) {
+        return service.getRoleByUid(uid);
     }
 
     @PostMapping("/roles")
     public ResponseEntity<RoleDetailDto> createRole(@Valid @RequestBody CreateRoleRequestDto request) {
         RoleDetailDto role = service.createRole(request);
-        return ResponseEntity.created(URI.create("/api/v1/roles/" + role.id())).body(role);
+        return ResponseEntity.created(URI.create("/api/v1/roles/uid/" + role.uid())).body(role);
     }
 
-    @PatchMapping("/roles/{id}")
-    public RoleDetailDto updateRole(@PathVariable Long id,
+    @PatchMapping("/roles/uid/{uid}")
+    public RoleDetailDto updateRole(@PathVariable @ValidUlid String uid,
                                     @Valid @RequestBody UpdateRoleRequestDto request) {
-        return service.updateRole(id, request);
+        return service.updateRoleByUid(uid, request);
     }
 
-    @PutMapping("/roles/{id}/permissions")
-    public RoleDetailDto setPermissions(@PathVariable Long id,
+    @PutMapping("/roles/uid/{uid}/permissions")
+    public RoleDetailDto setPermissions(@PathVariable @ValidUlid String uid,
                                         @Valid @RequestBody SetRolePermissionsRequestDto request) {
-        return service.setPermissions(id, request);
+        return service.setPermissionsByUid(uid, request);
     }
 
-    @DeleteMapping("/roles/{id}")
-    public ResponseEntity<Void> deleteRole(@PathVariable Long id) {
-        service.deleteRole(id);
+    @DeleteMapping("/roles/uid/{uid}")
+    public ResponseEntity<Void> deleteRole(@PathVariable @ValidUlid String uid) {
+        service.deleteRoleByUid(uid);
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/roles/{id}/grants")
-    public List<RoleGrantDto> listGrants(@PathVariable Long id) {
-        return service.listGrants(id);
+    @GetMapping("/roles/uid/{uid}/grants")
+    public List<RoleGrantDto> listGrants(@PathVariable @ValidUlid String uid) {
+        return service.listGrantsByUid(uid);
     }
 
-    @PostMapping("/roles/{id}/grants")
-    public ResponseEntity<RoleGrantDto> grantRole(@PathVariable Long id,
+    @PostMapping("/roles/uid/{uid}/grants")
+    public ResponseEntity<RoleGrantDto> grantRole(@PathVariable @ValidUlid String uid,
                                                   @Valid @RequestBody GrantRoleRequestDto request) {
-        RoleGrantDto grant = service.grantRole(id, request);
-        return ResponseEntity.created(URI.create("/api/v1/grants/" + grant.id())).body(grant);
+        RoleGrantDto grant = service.grantRoleByUid(uid, request);
+        return ResponseEntity.created(URI.create("/api/v1/grants/uid/" + grant.uid())).body(grant);
     }
 
-    @DeleteMapping("/grants/{grantId}")
-    public ResponseEntity<Void> revokeGrant(@PathVariable Long grantId) {
-        service.revokeGrant(grantId);
+    @DeleteMapping("/grants/uid/{grantUid}")
+    public ResponseEntity<Void> revokeGrant(@PathVariable @ValidUlid String grantUid) {
+        service.revokeGrantByUid(grantUid);
         return ResponseEntity.noContent().build();
     }
 }

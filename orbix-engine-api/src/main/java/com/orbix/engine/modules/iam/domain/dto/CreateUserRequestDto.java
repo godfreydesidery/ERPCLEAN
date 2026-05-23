@@ -14,6 +14,6 @@ public record CreateUserRequestDto(
     @Size(max = 120) String email,
     @Size(max = 40) String phone,
     Long defaultBranchId,
-    @Size(min = 8, max = 80) String password,
+    @Size(min = 10, max = 80) String password,
     Boolean mustChangePassword
 ) {}

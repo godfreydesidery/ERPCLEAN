@@ -8,6 +8,7 @@ import java.time.Instant;
 /** An active role grant, as listed under a role or a user in admin screens. */
 public record RoleGrantDto(
     Long id,
+    String uid,
     Long userId,
     Long roleId,
     String username,
@@ -19,6 +20,7 @@ public record RoleGrantDto(
     public static RoleGrantDto from(UserRole grant, AppUser user) {
         return new RoleGrantDto(
             grant.getId(),
+            grant.getUid(),
             grant.getUserId(),
             grant.getRoleId(),
             user != null ? user.getUsername() : null,

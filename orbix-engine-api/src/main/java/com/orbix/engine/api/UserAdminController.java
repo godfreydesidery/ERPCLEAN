@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.iam.domain.dto.ChangePasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.CreateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.CreateUserResponseDto;
@@ -14,18 +15,20 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
  * Day-2 user administration (F0.4c). Companion to {@link RoleAdminController}.
- * All endpoints except the self-service password change require
- * {@code IAM.MANAGE_USERS}.
+ * Users are addressed by {@code uid}; all endpoints except the self-service
+ * password change require {@code IAM.MANAGE_USERS}.
  */
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
+@Validated
 public class UserAdminController {
 
     private final UserAdminService service;
@@ -36,10 +39,10 @@ public class UserAdminController {
         return service.listUsers();
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public UserDetailDto getUser(@PathVariable("id") Long id) {
-        return service.getUser(id);
+    public UserDetailDto getUser(@PathVariable @ValidUlid String uid) {
+        return service.getUserByUid(uid);
     }
 
     @PostMapping
@@ -49,42 +52,42 @@ public class UserAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createUser(request));
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public UserDetailDto updateUser(@PathVariable("id") Long id,
+    public UserDetailDto updateUser(@PathVariable @ValidUlid String uid,
                                     @Valid @RequestBody UpdateUserRequestDto request) {
-        return service.updateUser(id, request);
+        return service.updateUserByUid(uid, request);
     }
 
-    @PostMapping("/{id}/reset-password")
+    @PostMapping("/uid/{uid}/reset-password")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public ResetPasswordResponseDto resetPassword(@PathVariable("id") Long id,
+    public ResetPasswordResponseDto resetPassword(@PathVariable @ValidUlid String uid,
                                                   @Valid @RequestBody ResetPasswordRequestDto request) {
-        return service.resetPassword(id, request);
+        return service.resetPasswordByUid(uid, request);
     }
 
-    @PostMapping("/{id}/disable")
+    @PostMapping("/uid/{uid}/disable")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public UserDetailDto disableUser(@PathVariable("id") Long id) {
-        return service.disableUser(id);
+    public UserDetailDto disableUser(@PathVariable @ValidUlid String uid) {
+        return service.disableUserByUid(uid);
     }
 
-    @PostMapping("/{id}/enable")
+    @PostMapping("/uid/{uid}/enable")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public UserDetailDto enableUser(@PathVariable("id") Long id) {
-        return service.enableUser(id);
+    public UserDetailDto enableUser(@PathVariable @ValidUlid String uid) {
+        return service.enableUserByUid(uid);
     }
 
-    @PostMapping("/{id}/unlock")
+    @PostMapping("/uid/{uid}/unlock")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public UserDetailDto unlockUser(@PathVariable("id") Long id) {
-        return service.unlockUser(id);
+    public UserDetailDto unlockUser(@PathVariable @ValidUlid String uid) {
+        return service.unlockUserByUid(uid);
     }
 
-    @PostMapping("/{id}/force-logout")
+    @PostMapping("/uid/{uid}/force-logout")
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")
-    public ResponseEntity<Void> forceLogout(@PathVariable("id") Long id) {
-        service.forceLogout(id);
+    public ResponseEntity<Void> forceLogout(@PathVariable @ValidUlid String uid) {
+        service.forceLogoutByUid(uid);
         return ResponseEntity.noContent().build();
     }
 

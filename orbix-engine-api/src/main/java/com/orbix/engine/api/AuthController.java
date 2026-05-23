@@ -4,6 +4,7 @@ import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.auth.domain.dto.LogoutRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.RefreshRequestDto;
+import com.orbix.engine.modules.auth.domain.dto.SessionDto;
 import com.orbix.engine.modules.auth.service.AuthService;
 import com.orbix.engine.modules.auth.service.AuthService.InvalidCredentialsException;
 import com.orbix.engine.modules.auth.service.AuthService.InvalidRefreshTokenException;
@@ -16,6 +17,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -43,12 +46,21 @@ public class AuthController {
     @PostMapping("/logout-everywhere")
     public ResponseEntity<Void> logoutEverywhere() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) {
+        if (auth == null || !(auth.getPrincipal() instanceof Long userId)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Long userId = (Long) auth.getPrincipal();
         authService.logoutEverywhere(userId);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Active sessions for the current user — drives the "log out everywhere" screen (US-IAM-003). */
+    @GetMapping("/sessions")
+    public ResponseEntity<List<SessionDto>> sessions() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long userId)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(authService.listSessions(userId));
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

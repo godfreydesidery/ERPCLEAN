@@ -20,25 +20,25 @@ public interface UserAdminService {
 
     List<UserSummaryDto> listUsers();
 
-    UserDetailDto getUser(Long userId);
+    UserDetailDto getUserByUid(String uid);
 
     /** Admin-issued create. Returns the new user + any server-generated temp password. */
     CreateUserResponseDto createUser(CreateUserRequestDto request);
 
-    UserDetailDto updateUser(Long userId, UpdateUserRequestDto request);
+    UserDetailDto updateUserByUid(String uid, UpdateUserRequestDto request);
 
     /** Admin-issued password reset. Returns any server-generated temp password. */
-    ResetPasswordResponseDto resetPassword(Long userId, ResetPasswordRequestDto request);
+    ResetPasswordResponseDto resetPasswordByUid(String uid, ResetPasswordRequestDto request);
 
-    UserDetailDto disableUser(Long userId);
+    UserDetailDto disableUserByUid(String uid);
 
-    UserDetailDto enableUser(Long userId);
+    UserDetailDto enableUserByUid(String uid);
 
     /** Clears the lock-out timer without changing user status. */
-    UserDetailDto unlockUser(Long userId);
+    UserDetailDto unlockUserByUid(String uid);
 
     /** Revokes every active refresh token for the user — kills all sessions everywhere. */
-    void forceLogout(Long userId);
+    void forceLogoutByUid(String uid);
 
     /** Self-service password change — must supply current password. */
     void changeMyPassword(ChangePasswordRequestDto request);

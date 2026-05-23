@@ -6,6 +6,7 @@ import com.orbix.engine.modules.iam.domain.entity.Role;
 /** Lightweight role row for the role list screen. */
 public record RoleSummaryDto(
     Long id,
+    String uid,
     String code,
     String name,
     String description,
@@ -16,6 +17,7 @@ public record RoleSummaryDto(
     public static RoleSummaryDto from(Role role) {
         return new RoleSummaryDto(
             role.getId(),
+            role.getUid(),
             role.getCode(),
             role.getName(),
             role.getDescription(),

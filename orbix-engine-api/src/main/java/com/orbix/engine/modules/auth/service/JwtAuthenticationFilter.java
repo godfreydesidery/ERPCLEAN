@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.auth.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.TokenGuardService;
 import com.orbix.engine.modules.iam.service.BranchAccessGuard;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,19 +31,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final RequestContext requestContext;
     private final BranchAccessGuard branchAccessGuard;
+    private final TokenGuardService tokenGuard;
 
     public JwtAuthenticationFilter(JwtService jwtService,
                                    RequestContext requestContext,
-                                   BranchAccessGuard branchAccessGuard) {
+                                   BranchAccessGuard branchAccessGuard,
+                                   TokenGuardService tokenGuard) {
         this.jwtService = jwtService;
         this.requestContext = requestContext;
         this.branchAccessGuard = branchAccessGuard;
+        this.tokenGuard = tokenGuard;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        String clientVersion = request.getHeader("X-Client-Version");
+        String ip = clientIp(request);
+        // Always capture transport metadata — anonymous requests (e.g. login)
+        // need it for audit even though they carry no identity yet.
+        requestContext.bindClient(clientVersion, ip);
+
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
@@ -51,7 +61,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 claims = jwtService.parse(token);
             } catch (Exception ex) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
+                deny(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
+                return;
+            }
+
+            // Immediate revocation (US-IAM-002/007): a blacklisted jti, or a token
+            // issued before this user's invalidation cutoff, is rejected even
+            // though its signature and expiry are still valid.
+            if (tokenGuard.isJtiBlacklisted(claims.jti())) {
+                deny(response, HttpServletResponse.SC_UNAUTHORIZED, "Token revoked");
+                return;
+            }
+            long invalidatedAt = tokenGuard.userInvalidatedAtEpoch(claims.userId());
+            if (invalidatedAt > 0 && claims.issuedAt() != null
+                    && claims.issuedAt().getEpochSecond() < invalidatedAt) {
+                deny(response, HttpServletResponse.SC_UNAUTHORIZED, "Session revoked");
                 return;
             }
 
@@ -60,7 +84,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 try {
                     branchAccessGuard.verify(claims.userId(), claims.companyId(), requestedBranch);
                 } catch (AccessDeniedException ex) {
-                    response.sendError(HttpServletResponse.SC_FORBIDDEN, ex.getMessage());
+                    deny(response, HttpServletResponse.SC_FORBIDDEN, ex.getMessage());
                     return;
                 }
             }
@@ -76,7 +100,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 claims.userId(),
                 claims.companyId(),
                 requestedBranch != null ? requestedBranch : claims.branchId(),
-                request.getHeader("X-Client-Version")
+                clientVersion,
+                ip,
+                claims.jti()
             );
         }
         try {
@@ -86,8 +112,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * Reject by writing the status directly. We do NOT use
+     * {@code response.sendError()} here: that triggers a container ERROR
+     * dispatch to {@code /error}, which re-enters the security chain as an
+     * anonymous user and is denied 403 — masking our intended 401 and breaking
+     * the web client's 401-driven token-refresh.
+     */
+    private static void deny(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"message\":\"" + message.replace("\"", "'") + "\"}");
+    }
+
     private static Long parseLong(String value) {
         if (value == null || value.isBlank()) return null;
         try { return Long.parseLong(value); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** Best-effort client IP: first hop of X-Forwarded-For, else the socket address. */
+    private static String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

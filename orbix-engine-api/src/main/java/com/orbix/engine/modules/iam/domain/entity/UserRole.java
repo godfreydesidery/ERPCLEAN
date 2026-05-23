@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.iam.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -13,11 +14,11 @@ import java.time.Instant;
  * branch). DATA-MODEL.md §1.8.
  */
 @Entity
-@Table(name = "user_role")
+@Table(name = "user_role", uniqueConstraints = @UniqueConstraint(name = "uk_user_role_uid", columnNames = "uid"))
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class UserRole {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class UserRole extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "user_role_seq")

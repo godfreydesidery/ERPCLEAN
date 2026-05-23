@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.iam.domain.entity;
 
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -14,12 +15,12 @@ import java.util.Set;
 
 /** A named bundle of permissions. DATA-MODEL.md §1.5. */
 @Entity
-@Table(name = "role")
+@Table(name = "role", uniqueConstraints = @UniqueConstraint(name = "uk_role_uid", columnNames = "uid"))
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
+@EqualsAndHashCode(of = "id", callSuper = false)
 @ToString(exclude = "permissions")
-public class Role {
+public class Role extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "role_seq")
