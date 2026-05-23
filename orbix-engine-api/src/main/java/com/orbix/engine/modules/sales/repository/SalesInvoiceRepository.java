@@ -1,6 +1,8 @@
 package com.orbix.engine.modules.sales.repository;
 
 import com.orbix.engine.modules.sales.domain.entity.SalesInvoice;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     List<SalesInvoice> findByCompanyIdOrderByIdDesc(Long companyId);
 
     List<SalesInvoice> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId);
+
+    Page<SalesInvoice> findByCompanyIdOrderByIdDesc(Long companyId, Pageable pageable);
+
+    Page<SalesInvoice> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId, Pageable pageable);
 
     List<SalesInvoice> findByCustomerIdOrderByIdDesc(Long customerId);
 

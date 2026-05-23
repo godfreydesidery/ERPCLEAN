@@ -9,6 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { CatalogService } from '../catalog/catalog.service';
 import { Item, PriceList } from '../catalog/catalog.models';
 import { PartyService } from '../party/party.service';
@@ -31,7 +32,7 @@ interface LineRow {
 @Component({
   selector: 'orbix-sales-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -39,7 +40,7 @@ interface LineRow {
           <a routerLink=".." class="text-decoration-none text-secondary">Sales</a> &rsaquo; Invoices
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Sales invoices</h1>
-        <p class="text-secondary mb-0 small">{{ invoices().length }} invoice{{ invoices().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} invoice{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -191,7 +192,7 @@ interface LineRow {
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Invoices</h2>
-            <span class="badge text-bg-light text-secondary">{{ invoices().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (invoices().length === 0) {
             <div class="p-5 text-center">
@@ -226,6 +227,13 @@ interface LineRow {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -437,6 +445,10 @@ export class InvoicesComponent implements OnInit {
 
   protected readonly paymentTerms = PAYMENT_TERMS;
   protected readonly invoices = signal<SalesInvoice[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<SalesInvoice | null>(null);
   protected readonly customers = signal<Customer[]>([]);
   protected readonly salesAgents = signal<SalesAgent[]>([]);
@@ -510,10 +522,21 @@ export class InvoicesComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.sales.listInvoices(this.branchId()).subscribe({
-      next: rows => this.invoices.set(rows),
+    this.sales.listInvoices(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.invoices.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
   }
 
   select(invoice: SalesInvoice): void { this.selected.set(invoice); }

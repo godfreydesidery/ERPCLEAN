@@ -5,6 +5,7 @@ import com.orbix.engine.modules.cash.domain.enums.CashDirection;
 import com.orbix.engine.modules.cash.domain.enums.CashRefType;
 import com.orbix.engine.modules.cash.domain.enums.GlCategory;
 import com.orbix.engine.modules.cash.service.CashLedgerService;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -21,6 +22,8 @@ import com.orbix.engine.modules.sales.repository.ReceiptAllocationRepository;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceRepository;
 import com.orbix.engine.modules.sales.repository.SalesReceiptRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -174,15 +177,13 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SalesReceiptDto> list(Long branchId) {
+    public PageDto<SalesReceiptDto> list(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<SalesReceipt> rows = scope == null
-            ? receipts.findByCompanyIdOrderByIdDesc(companyId)
-            : receipts.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
-        return rows.stream()
-            .map(r -> SalesReceiptDto.from(r, allocations.findBySalesReceiptId(r.getId())))
-            .toList();
+        Page<SalesReceipt> page = scope == null
+            ? receipts.findByCompanyIdOrderByIdDesc(companyId, pageable)
+            : receipts.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        return PageDto.of(page, r -> SalesReceiptDto.from(r, allocations.findBySalesReceiptId(r.getId())));
     }
 
     @Override

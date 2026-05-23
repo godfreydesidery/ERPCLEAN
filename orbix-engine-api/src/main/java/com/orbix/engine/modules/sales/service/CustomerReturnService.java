@@ -1,9 +1,11 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.sales.domain.dto.CreateCustomerReturnRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerCreditNoteDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerReturnDto;
 import com.orbix.engine.modules.sales.domain.dto.IssueCreditNoteRequestDto;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -24,7 +26,7 @@ public interface CustomerReturnService {
 
     CustomerCreditNoteDto issueCreditNote(Long returnId, IssueCreditNoteRequestDto request);
 
-    List<CustomerReturnDto> list(Long branchId);
+    PageDto<CustomerReturnDto> list(Long branchId, Pageable pageable);
 
     CustomerReturnDto get(Long returnId);
 

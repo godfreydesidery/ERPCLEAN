@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
+import { Page } from '../../core/api/page';
 import {
   CreateCustomerReturnRequest,
   CreatePackingListRequest,
@@ -22,11 +23,9 @@ export class SalesService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listInvoices(branchId: string | null): Observable<SalesInvoice[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<SalesInvoice[]>>(
-      `${this.base}/sales-invoices`, { params }
+  listInvoices(branchId: string | null, page: number, size: number): Observable<Page<SalesInvoice>> {
+    return unwrap(this.http.get<ApiResponse<Page<SalesInvoice>>>(
+      `${this.base}/sales-invoices`, { params: branchPageParams(branchId, page, size) }
     ));
   }
 
@@ -58,11 +57,9 @@ export class SalesService {
 
   // ---- sales receipts (F4.3) ----------------------------------------------
 
-  listReceipts(branchId: string | null): Observable<SalesReceipt[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<SalesReceipt[]>>(
-      `${this.base}/sales-receipts`, { params }
+  listReceipts(branchId: string | null, page: number, size: number): Observable<Page<SalesReceipt>> {
+    return unwrap(this.http.get<ApiResponse<Page<SalesReceipt>>>(
+      `${this.base}/sales-receipts`, { params: branchPageParams(branchId, page, size) }
     ));
   }
 
@@ -88,11 +85,9 @@ export class SalesService {
 
   // ---- customer returns + credit notes (F4.4) -----------------------------
 
-  listReturns(branchId: string | null): Observable<CustomerReturn[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<CustomerReturn[]>>(
-      `${this.base}/customer-returns`, { params }
+  listReturns(branchId: string | null, page: number, size: number): Observable<Page<CustomerReturn>> {
+    return unwrap(this.http.get<ApiResponse<Page<CustomerReturn>>>(
+      `${this.base}/customer-returns`, { params: branchPageParams(branchId, page, size) }
     ));
   }
 
@@ -169,4 +164,11 @@ export class SalesService {
       `${this.base}/packing-lists/${id}/cancel`, {}
     ));
   }
+}
+
+/** Standard branch-scoped list params (branchId optional + page/size). */
+function branchPageParams(branchId: string | null, page: number, size: number): HttpParams {
+  let params = new HttpParams().set('page', page).set('size', size);
+  if (branchId != null) params = params.set('branchId', branchId);
+  return params;
 }

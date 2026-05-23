@@ -9,6 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { SalesService } from './sales.service';
 import {
   CreateReceiptAllocation,
@@ -23,7 +24,7 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
 @Component({
   selector: 'orbix-sales-receipts',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -31,7 +32,7 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
           <a routerLink=".." class="text-decoration-none text-secondary">Sales</a> &rsaquo; Receipts
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Sales receipts</h1>
-        <p class="text-secondary mb-0 small">{{ receipts().length }} receipt{{ receipts().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} receipt{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -175,7 +176,7 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Receipts</h2>
-            <span class="badge text-bg-light text-secondary">{{ receipts().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (receipts().length === 0) {
             <div class="p-5 text-center">
@@ -205,6 +206,13 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -390,6 +398,10 @@ export class ReceiptsComponent implements OnInit {
 
   protected readonly methods = RECEIPT_METHODS;
   protected readonly receipts = signal<SalesReceipt[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<SalesReceipt | null>(null);
   protected readonly openInvoices = signal<SalesInvoice[]>([]);
   protected readonly invoicePickerOptions = computed<SearchSelectOption[]>(
@@ -427,17 +439,29 @@ export class ReceiptsComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.sales.listReceipts(this.branchId()).subscribe({
-      next: rows => this.receipts.set(rows),
+    this.sales.listReceipts(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.receipts.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
   }
 
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
+  }
+
   loadOpenInvoices(): void {
     if (this.newCustomerId === null) { this.openInvoices.set([]); return; }
-    this.sales.listInvoices(this.branchId()).subscribe({
-      next: rows => this.openInvoices.set(
-        rows.filter(i => i.customerId === this.newCustomerId
+    // Picker source: pull a large page and filter to this customer's open invoices.
+    this.sales.listInvoices(this.branchId(), 0, 500).subscribe({
+      next: page => this.openInvoices.set(
+        page.content.filter(i => i.customerId === this.newCustomerId
           && (i.status === 'POSTED' || i.status === 'PARTIALLY_PAID')
           && i.totalAmount - i.paidAmount > 0)
       ),

@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { SalesService } from './sales.service';
 import {
   CreateCustomerReturnLine,
@@ -24,7 +25,7 @@ interface LineRow {
 @Component({
   selector: 'orbix-customer-returns',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -32,7 +33,7 @@ interface LineRow {
           <a routerLink=".." class="text-decoration-none text-secondary">Sales</a> &rsaquo; Returns
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Customer returns</h1>
-        <p class="text-secondary mb-0 small">{{ returns().length }} return{{ returns().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} return{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -149,7 +150,7 @@ interface LineRow {
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Returns</h2>
-            <span class="badge text-bg-light text-secondary">{{ returns().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (returns().length === 0) {
             <div class="p-5 text-center">
@@ -179,6 +180,13 @@ interface LineRow {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -337,6 +345,10 @@ export class ReturnsComponent implements OnInit {
 
   protected readonly reasons = RETURN_REASONS;
   protected readonly returns = signal<CustomerReturn[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<CustomerReturn | null>(null);
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
@@ -360,10 +372,20 @@ export class ReturnsComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.sales.listReturns(this.branchId()).subscribe({
-      next: rows => this.returns.set(rows),
+    this.sales.listReturns(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.returns.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
+  }
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
   }
   select(r: CustomerReturn): void { this.selected.set(r); }
   addLine(): void { this.newLines.push({ itemId: null, qty: null, unitPrice: null }); }
