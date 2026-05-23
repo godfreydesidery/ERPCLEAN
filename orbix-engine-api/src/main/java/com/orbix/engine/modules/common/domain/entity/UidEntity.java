@@ -7,6 +7,8 @@ import jakarta.persistence.PrePersist;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Base class for entities whose UID is exposed externally — in URLs, API
@@ -36,6 +38,10 @@ import lombok.Setter;
 public abstract class UidEntity {
 
     @Setter(AccessLevel.PROTECTED) // tests + Flyway-Java migrations only; never app code
+    // CHAR(26), not VARCHAR: ULIDs are always exactly 26 chars (see migrations
+    // and CLAUDE.md). @JdbcTypeCode pins the SQL type so ddl-auto=validate
+    // matches the CHAR(26) columns; portable across MariaDB and Postgres.
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "uid", nullable = false, length = 26, unique = true, updatable = false)
     private String uid;
 

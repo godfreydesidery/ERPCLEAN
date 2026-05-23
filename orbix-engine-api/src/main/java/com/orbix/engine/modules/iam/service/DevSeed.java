@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.iam.service;
 
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.Role;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
@@ -72,12 +73,12 @@ public class DevSeed implements CommandLineRunner {
         Long branchId = nextVal("branch_seq");
         jdbc.update("""
             INSERT INTO branch
-              (id, company_id, code, name, type, time_zone, is_default, status,
+              (id, uid, company_id, code, name, type, time_zone, is_default, status,
                created_at, updated_at, created_by, updated_by, version)
-            VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?, ?, 0)
             """,
-            branchId, companyId, "HQ", "Head Office", "RETAIL", "Africa/Kampala",
-            "ACTIVE", now, now, systemActor, systemActor);
+            branchId, UidGenerator.next(), companyId, "HQ", "Head Office", "RETAIL",
+            "Africa/Kampala", "ACTIVE", now, now, systemActor, systemActor);
 
         AppUser admin = new AppUser(
             DEV_USERNAME,
