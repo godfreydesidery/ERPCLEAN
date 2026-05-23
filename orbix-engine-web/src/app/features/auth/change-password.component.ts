@@ -45,12 +45,12 @@ import { UserAdminService } from '../admin/users/user-admin.service';
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
                 <input class="form-control" [type]="showNew() ? 'text' : 'password'"
-                       name="new" [(ngModel)]="newPassword" required minlength="8" maxlength="80">
+                       name="new" [(ngModel)]="newPassword" required minlength="10" maxlength="80">
                 <button type="button" class="btn btn-outline-secondary" (click)="toggleNew()">
                   <i class="bi" [class.bi-eye]="!showNew()" [class.bi-eye-slash]="showNew()"></i>
                 </button>
               </div>
-              <small class="form-text text-secondary">Minimum 8 characters. Choose something only you would guess.</small>
+              <small class="form-text text-secondary">Minimum 10 characters. Avoid common or easily guessed passwords.</small>
             </div>
             <div>
               <label class="form-label small fw-semibold text-secondary">Confirm new password</label>
@@ -166,7 +166,8 @@ export class ChangePasswordComponent {
         this.busy.set(false);
         if (err instanceof HttpErrorResponse) {
           const envelope = err.error as ApiResponse<unknown> | null;
-          this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+          const fieldMsg = envelope?.errors?.[0]?.message;
+          this.error.set(fieldMsg ?? envelope?.message ?? `Request failed (${err.status})`);
         } else {
           this.error.set('Unexpected error');
         }

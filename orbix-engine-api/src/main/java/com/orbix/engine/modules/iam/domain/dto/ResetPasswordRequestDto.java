@@ -9,6 +9,6 @@ import jakarta.validation.constraints.Size;
  * to set their own password on next login.
  */
 public record ResetPasswordRequestDto(
-    @Size(min = 10, max = 80) String newPassword,
+    @Size(min = 10, max = 80, message = "Password must be at least 10 characters") String newPassword,
     Boolean mustChangePassword
 ) {}

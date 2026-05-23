@@ -123,8 +123,8 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
               @if (!newForm.generatePassword) {
                 <label class="form-label small fw-semibold text-secondary">Password</label>
                 <input class="form-control" type="text" name="password" [(ngModel)]="newForm.password"
-                       minlength="8" maxlength="80" required>
-                <small class="form-text text-secondary">Minimum 8 characters. User will be forced to change it on first login.</small>
+                       minlength="10" maxlength="80" required>
+                <small class="form-text text-secondary">Minimum 10 characters. User will be forced to change it on first login.</small>
               }
             </fieldset>
 
@@ -499,7 +499,8 @@ export class UserAdminComponent implements OnInit {
   private showError(err: unknown): void {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
-      this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+      const fieldMsg = envelope?.errors?.[0]?.message;
+      this.error.set(fieldMsg ?? envelope?.message ?? `Request failed (${err.status})`);
     } else {
       this.error.set('Unexpected error');
     }
