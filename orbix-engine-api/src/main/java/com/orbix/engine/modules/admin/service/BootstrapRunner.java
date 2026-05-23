@@ -2,6 +2,7 @@ package com.orbix.engine.modules.admin.service;
 
 import com.orbix.engine.modules.admin.config.BootstrapProperties;
 import com.orbix.engine.modules.admin.domain.dto.FirstRunRequestDto;
+import com.orbix.engine.modules.iam.domain.RootAdmin;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -57,9 +58,9 @@ public class BootstrapRunner implements ApplicationRunner {
                 props.branch().name().trim(),
                 props.company().timezone()),
             new FirstRunRequestDto.AdminUserDto(
-                props.admin().username().trim(),
+                RootAdmin.USERNAME,
                 props.admin().password(),
-                props.admin().displayName().trim()));
+                RootAdmin.DISPLAY_NAME));
 
         var result = setup.bootstrap(request);
         log.info("Bootstrap: initialised org={} company={} branch={} admin={} (company-wide, no default branch)",

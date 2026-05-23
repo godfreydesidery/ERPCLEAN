@@ -42,9 +42,12 @@ public record BootstrapProperties(
         @DefaultValue("Head Office") String name
     ) {}
 
+    /**
+     * Only the password is configurable. Username + display name are fixed
+     * constants ({@code RootAdmin.USERNAME} / {@code DISPLAY_NAME}) so the
+     * break-glass account is unambiguous and protectable.
+     */
     public record Admin(
-        @DefaultValue("rootadmin") String username,
-        @DefaultValue("") String password,
-        @DefaultValue("Root Administrator") String displayName
+        @DefaultValue("") String password
     ) {}
 }

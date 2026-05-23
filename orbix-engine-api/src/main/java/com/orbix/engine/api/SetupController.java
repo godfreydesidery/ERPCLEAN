@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.admin.config.BootstrapProperties;
 import com.orbix.engine.modules.admin.service.FirstRunSetupService;
+import com.orbix.engine.modules.iam.domain.RootAdmin;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -58,7 +59,7 @@ public class SetupController {
         if (!firstRunSetupService.isBootstrapped()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(RESET, false));
         }
-        firstRunSetupService.resetAdminPassword(bootstrap.admin().username(), envPassword);
+        firstRunSetupService.resetAdminPassword(RootAdmin.USERNAME, envPassword);
         return ResponseEntity.ok(Map.of(RESET, true));
     }
 

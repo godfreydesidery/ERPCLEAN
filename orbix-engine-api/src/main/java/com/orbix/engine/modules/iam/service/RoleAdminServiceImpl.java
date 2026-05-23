@@ -43,6 +43,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     private final UserRoleRepository userRoles;
     private final AppUserRepository users;
     private final TokenGuardService tokenGuard;
+    private final RootAdminGuard rootAdminGuard;
     private final RequestContext context;
 
     @Override
@@ -141,6 +142,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
         Long companyId = context.companyId();
         AppUser user = users.findByUsername(request.username().trim())
             .orElseThrow(() -> new NoSuchElementException("User not found: " + request.username()));
+        // rootadmin is company-wide ADMIN forever — no added/branch-scoped roles.
+        rootAdminGuard.assertMutable(user, "granted roles");
 
         boolean alreadyGranted = userRoles
             .findByUserIdAndCompanyIdAndRevokedAtIsNull(user.getId(), companyId).stream()
@@ -162,6 +165,9 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     public void revokeGrantByUid(String grantUid) {
         UserRole grant = userRoles.findByUid(grantUid)
             .orElseThrow(() -> new NoSuchElementException("Grant not found: " + grantUid));
+        // Can't strip rootadmin's grant — that would cut off its access.
+        users.findById(grant.getUserId())
+            .ifPresent(u -> rootAdminGuard.assertMutable(u, "stripped of its roles"));
         grant.revoke(Instant.now());
         userRoles.save(grant);
         // Force the affected user to re-mint a token so the lost permissions

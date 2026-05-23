@@ -3,6 +3,7 @@ package com.orbix.engine.modules.auth.service;
 import com.orbix.engine.modules.auth.domain.dto.LoginRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.LoginResponseDto;
 import com.orbix.engine.modules.auth.domain.dto.SessionDto;
+import com.orbix.engine.modules.iam.domain.RootAdmin;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.auth.domain.entity.RefreshToken;
 import com.orbix.engine.modules.iam.repository.AppUserRepository;
@@ -146,15 +147,20 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (!passwords.matches(request.password(), user.getPasswordHash())) {
-            user.recordFailedLogin(now, LOCKOUT_THRESHOLD, LOCKOUT_BASE, LOCKOUT_MAX, FAILED_LOGIN_WINDOW);
-            users.save(user);
-            if (isLocked(user, now)) {
-                // This attempt tripped the lockout — say so immediately.
-                audit.write(new AuditLogWriter.Record(
-                    user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                    "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
-                    authMeta("reason", "THRESHOLD_REACHED")));
-                throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
+            // rootadmin is exempt from lockout — the break-glass account must
+            // never be lockable out of the system. Its 24-char random env
+            // password is the brute-force protection instead.
+            if (!RootAdmin.is(user.getUsername())) {
+                user.recordFailedLogin(now, LOCKOUT_THRESHOLD, LOCKOUT_BASE, LOCKOUT_MAX, FAILED_LOGIN_WINDOW);
+                users.save(user);
+                if (isLocked(user, now)) {
+                    // This attempt tripped the lockout — say so immediately.
+                    audit.write(new AuditLogWriter.Record(
+                        user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
+                        "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                        authMeta("reason", "THRESHOLD_REACHED")));
+                    throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
+                }
             }
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),

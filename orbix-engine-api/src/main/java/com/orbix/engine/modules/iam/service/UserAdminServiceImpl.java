@@ -19,6 +19,7 @@ import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import com.orbix.engine.modules.iam.domain.RootAdmin;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
 import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
@@ -56,6 +57,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final PasswordEncoder passwords;
     private final PasswordPolicyService passwordPolicy;
     private final TokenGuardService tokenGuard;
+    private final RootAdminGuard rootAdminGuard;
     private final RequestContext context;
 
     private static final int MAX_PAGE_SIZE = 100;
@@ -98,6 +100,9 @@ public class UserAdminServiceImpl implements UserAdminService {
         Long actorId = context.userId();
 
         String username = request.username().trim();
+        if (RootAdmin.is(username)) {
+            throw new IllegalArgumentException("Username '" + RootAdmin.USERNAME + "' is reserved");
+        }
         if (users.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists: " + username);
         }
@@ -137,6 +142,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Auditable(action = "UPDATE", entityType = "AppUser")
     public UserDetailDto updateUserByUid(String uid, UpdateUserRequestDto request) {
         AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "modified");
         if (request.defaultBranchId() != null) {
             verifyBranchInCompany(request.defaultBranchId(), user.getDefaultCompanyId());
         }
@@ -155,6 +161,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Auditable(action = "RESET_PASSWORD", entityType = "AppUser")
     public ResetPasswordResponseDto resetPasswordByUid(String uid, ResetPasswordRequestDto request) {
         AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "password-reset (it is managed via the bootstrap env)");
 
         boolean serverGenerated = request.newPassword() == null || request.newPassword().isBlank();
         String plain = serverGenerated ? generateTempPassword() : request.newPassword();
@@ -183,6 +190,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Auditable(action = "DISABLE", entityType = "AppUser")
     public UserDetailDto disableUserByUid(String uid) {
         AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "disabled");
         guardSelfMutation(user, "disable yourself");
         user.setStatus(AppUserStatus.INACTIVE, context.userId());
         AppUser saved = users.save(user);
@@ -228,6 +236,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         if (userId == null) throw new AccessDeniedException("Not authenticated");
         AppUser user = users.findById(userId)
             .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+        rootAdminGuard.assertMutable(user, "changed here (rootadmin is managed via the bootstrap env)");
 
         if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new AccessDeniedException("Current password is incorrect");
