@@ -3,11 +3,12 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuditService } from './audit.service';
 import { AuditFilters, AuditIntegrityResult, AuditLogRow } from './audit.models';
+import { PagerComponent } from '../../../core/ui/pager.component';
 
 @Component({
   selector: 'orbix-audit-log',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, PagerComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Security</p>
@@ -90,13 +91,13 @@ import { AuditFilters, AuditIntegrityResult, AuditLogRow } from './audit.models'
           </tbody>
         </table>
       </div>
-      <div class="card-footer d-flex align-items-center justify-content-between small text-secondary">
-        <span>{{ total() }} rows · page {{ page() + 1 }} of {{ totalPages() || 1 }}</span>
-        <div class="btn-group">
-          <button class="btn btn-outline-secondary btn-sm" [disabled]="page() === 0" (click)="search(page() - 1)">Prev</button>
-          <button class="btn btn-outline-secondary btn-sm" [disabled]="page() + 1 >= totalPages()" (click)="search(page() + 1)">Next</button>
+      @if (totalPages() > 1) {
+        <div class="card-footer">
+          <orbix-pager [page]="page()" [totalPages]="totalPages()"
+                       [totalElements]="total()" [pageSize]="size"
+                       (pageChange)="search($event)"/>
         </div>
-      </div>
+      }
     </div>
   `
 })
@@ -112,7 +113,7 @@ export class AuditLogComponent implements OnInit {
   protected readonly checking = signal(false);
   protected readonly integrity = signal<AuditIntegrityResult | null>(null);
 
-  private readonly size = 50;
+  protected readonly size = 50;
 
   ngOnInit(): void {
     this.search(0);

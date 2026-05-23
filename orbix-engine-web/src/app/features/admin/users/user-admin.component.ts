@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { PagerComponent } from '../../../core/ui/pager.component';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
@@ -28,7 +29,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 @Component({
   selector: 'orbix-user-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -266,12 +267,10 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
           </ul>
         }
         @if (totalPages() > 1) {
-          <div class="card-footer d-flex align-items-center justify-content-between small text-secondary">
-            <span>Page {{ page() + 1 }} of {{ totalPages() }} · {{ total() }} total</span>
-            <div class="btn-group">
-              <button class="btn btn-outline-secondary btn-sm" [disabled]="page() === 0" (click)="goTo(page() - 1)">Prev</button>
-              <button class="btn btn-outline-secondary btn-sm" [disabled]="page() + 1 >= totalPages()" (click)="goTo(page() + 1)">Next</button>
-            </div>
+          <div class="card-footer">
+            <orbix-pager [page]="page()" [totalPages]="totalPages()"
+                         [totalElements]="total()" [pageSize]="pageSize"
+                         (pageChange)="goTo($event)"/>
           </div>
         }
       </div>
@@ -417,7 +416,7 @@ export class UserAdminComponent implements OnInit {
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly total = signal(0);
-  private readonly pageSize = 25;
+  protected readonly pageSize = 25;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit(): void {
