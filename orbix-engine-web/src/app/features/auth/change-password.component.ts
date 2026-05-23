@@ -34,7 +34,7 @@ import { UserAdminService } from '../admin/users/user-admin.service';
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-key"></i></span>
                 <input class="form-control" [type]="showCurrent() ? 'text' : 'password'"
-                       name="current" [(ngModel)]="currentPassword" required>
+                       name="current" [(ngModel)]="currentPassword" required autocomplete="current-password">
                 <button type="button" class="btn btn-outline-secondary" (click)="toggleCurrent()">
                   <i class="bi" [class.bi-eye]="!showCurrent()" [class.bi-eye-slash]="showCurrent()"></i>
                 </button>
@@ -45,7 +45,7 @@ import { UserAdminService } from '../admin/users/user-admin.service';
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
                 <input class="form-control" [type]="showNew() ? 'text' : 'password'"
-                       name="new" [(ngModel)]="newPassword" required minlength="10" maxlength="80">
+                       name="new" [(ngModel)]="newPassword" required minlength="10" maxlength="80" autocomplete="new-password">
                 <button type="button" class="btn btn-outline-secondary" (click)="toggleNew()">
                   <i class="bi" [class.bi-eye]="!showNew()" [class.bi-eye-slash]="showNew()"></i>
                 </button>
@@ -56,7 +56,7 @@ import { UserAdminService } from '../admin/users/user-admin.service';
               <label class="form-label small fw-semibold text-secondary">Confirm new password</label>
               <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-shield-check"></i></span>
-                <input class="form-control" type="password" name="confirm" [(ngModel)]="confirm" required>
+                <input class="form-control" type="password" name="confirm" [(ngModel)]="confirm" required autocomplete="new-password">
               </div>
               @if (confirm && confirm !== newPassword) {
                 <small class="form-text text-danger">Passwords don't match.</small>

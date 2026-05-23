@@ -46,6 +46,13 @@ public interface AuthService {
         }
     }
 
+    /** Thrown when a known account is currently locked out (failed-attempt threshold reached). */
+    class AccountLockedException extends RuntimeException {
+        public AccountLockedException(String message) {
+            super(message);
+        }
+    }
+
     class InvalidRefreshTokenException extends RuntimeException {
         public InvalidRefreshTokenException() {
             super("Refresh token is invalid or expired");

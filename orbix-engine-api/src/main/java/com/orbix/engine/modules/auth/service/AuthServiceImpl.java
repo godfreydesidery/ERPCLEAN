@@ -92,39 +92,74 @@ public class AuthServiceImpl implements AuthService {
         return s == null ? "null" : "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
+    private static boolean isLocked(AppUser user, Instant now) {
+        return user.getLockedUntil() != null && now.isBefore(user.getLockedUntil());
+    }
+
+    private static String lockMessage(Instant now, Instant lockedUntil) {
+        long secs = Math.max(0, Duration.between(now, lockedUntil).getSeconds());
+        long mins = Math.max(1, (secs + 59) / 60);
+        return "Account locked due to repeated failed sign-ins. Try again in about "
+            + mins + " minute" + (mins == 1 ? "" : "s") + ", or ask an administrator to unlock it.";
+    }
+
     @Override
     // noRollbackFor: the failed-login path writes (increments the lockout
     // counter) and THEN throws. Default rollback-on-RuntimeException would
     // discard that write, so the counter never advanced and lockout never
-    // engaged. Keep the increment committed while still surfacing the 401.
-    @Transactional(noRollbackFor = InvalidCredentialsException.class)
+    // engaged. Keep the increment committed while still surfacing the error.
+    @Transactional(noRollbackFor = { InvalidCredentialsException.class, AccountLockedException.class })
     public LoginResponseDto login(LoginRequestDto request) {
         AppUser user = users.findByUsername(request.username()).orElse(null);
         Instant now = Instant.now();
 
-        if (user == null || !user.canLogIn(now)) {
-            // Spend a bcrypt verify against a throwaway hash so a missing or
-            // locked account isn't distinguishable from a wrong password by
-            // response timing (username enumeration defence).
+        if (user == null) {
+            // Dummy bcrypt so a missing account isn't distinguishable from a
+            // wrong password by response timing (username enumeration defence).
             passwords.matches(request.password(), dummyHash);
-            String reason = user == null ? "NO_SUCH_USER" : "LOCKED_OR_INACTIVE";
             audit.write(new AuditLogWriter.Record(
-                user == null ? 0L : user.getId(),
-                user == null ? null : user.getDefaultCompanyId(),
-                user == null ? null : user.getDefaultBranchId(),
-                "LOGIN_FAILED", ENTITY, request.username(), null,
-                authMeta("reason", reason)));
+                0L, null, null, "LOGIN_FAILED", ENTITY, request.username(), null,
+                authMeta("reason", "NO_SUCH_USER")));
+            throw new InvalidCredentialsException();
+        }
+
+        // Locked: tell the legitimate user (distinct from a wrong password) so
+        // they know to wait or contact an admin, instead of a confusing generic
+        // "invalid credentials" while the right password keeps being rejected.
+        if (isLocked(user, now)) {
+            passwords.matches(request.password(), dummyHash);
+            audit.write(new AuditLogWriter.Record(
+                user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
+                "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                authMeta("reason", "LOGIN_WHILE_LOCKED")));
+            throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
+        }
+
+        if (!user.canLogIn(now)) {
+            // Not locked (handled above) ⇒ inactive/suspended. Stay generic.
+            passwords.matches(request.password(), dummyHash);
+            audit.write(new AuditLogWriter.Record(
+                user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                authMeta("reason", "INACTIVE")));
             throw new InvalidCredentialsException();
         }
 
         if (!passwords.matches(request.password(), user.getPasswordHash())) {
             user.recordFailedLogin(now, LOCKOUT_THRESHOLD, LOCKOUT_BASE, LOCKOUT_MAX, FAILED_LOGIN_WINDOW);
             users.save(user);
-            boolean nowLocked = user.getLockedUntil() != null && now.isBefore(user.getLockedUntil());
+            if (isLocked(user, now)) {
+                // This attempt tripped the lockout — say so immediately.
+                audit.write(new AuditLogWriter.Record(
+                    user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
+                    "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                    authMeta("reason", "THRESHOLD_REACHED")));
+                throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
+            }
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                nowLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILED", ENTITY,
-                user.getId().toString(), null, authMeta("reason", "BAD_CREDENTIALS")));
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                authMeta("reason", "BAD_CREDENTIALS")));
             throw new InvalidCredentialsException();
         }
 

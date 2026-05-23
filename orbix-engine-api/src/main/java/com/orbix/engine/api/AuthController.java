@@ -6,6 +6,7 @@ import com.orbix.engine.modules.auth.domain.dto.LogoutRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.RefreshRequestDto;
 import com.orbix.engine.modules.auth.domain.dto.SessionDto;
 import com.orbix.engine.modules.auth.service.AuthService;
+import com.orbix.engine.modules.auth.service.AuthService.AccountLockedException;
 import com.orbix.engine.modules.auth.service.AuthService.InvalidCredentialsException;
 import com.orbix.engine.modules.auth.service.AuthService.InvalidRefreshTokenException;
 import com.orbix.engine.modules.common.domain.dto.ApiResponseDto;
@@ -67,6 +68,14 @@ public class AuthController {
     public ResponseEntity<ApiResponseDto<Object>> onInvalidCredentials(InvalidCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
             ApiResponseDto.error(401, ResponseCode.AUTH_INVALID_CREDENTIALS, ex.getMessage())
+        );
+    }
+
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiResponseDto<Object>> onAccountLocked(AccountLockedException ex) {
+        // 423 Locked — distinct from a wrong password so the user knows to wait / contact admin.
+        return ResponseEntity.status(HttpStatus.LOCKED).body(
+            ApiResponseDto.error(423, ResponseCode.AUTH_INVALID_CREDENTIALS, ex.getMessage())
         );
     }
 
