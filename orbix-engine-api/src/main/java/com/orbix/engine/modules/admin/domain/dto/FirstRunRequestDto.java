@@ -2,14 +2,17 @@ package com.orbix.engine.modules.admin.domain.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record FirstRunRequestDto(
-    @Valid @NotBlank OrganisationInfoDto organisation,
-    @Valid CompanyInfoDto company,
-    @Valid BranchInfoDto branch,
-    @Valid AdminUserDto admin
+    // @NotNull (not @NotBlank) — these are nested objects, not strings.
+    // @NotBlank on a non-CharSequence throws HV000030 at validation time (500).
+    @Valid @NotNull OrganisationInfoDto organisation,
+    @Valid @NotNull CompanyInfoDto company,
+    @Valid @NotNull BranchInfoDto branch,
+    @Valid @NotNull AdminUserDto admin
 ) {
 
     public record OrganisationInfoDto(
