@@ -98,7 +98,8 @@ docker run -d --name orbix \
 ```
 
 First boot takes ~30 s (MariaDB init + Flyway migrations + JVM warm).
-Then hit `http://<elastic-ip>/setup` to run the one-time setup wizard.
+With `orbix.env` present (see **App bootstrap** below) the app self-creates
+the company + `rootadmin` on first boot — just log in at `http://<ip>/`.
 
 ## Watch it boot
 
@@ -129,21 +130,51 @@ forward, no data loss. **Wipe the QA data when you want** a clean slate:
 ```bash
 docker stop orbix && docker rm orbix
 docker volume rm orbix-data        # destroys all QA data
-# then re-run the Run step — fresh DB, re-run /setup
+# then re-run the Run step — fresh DB re-bootstraps from orbix.env on next start
 ```
+
+## App bootstrap (company + rootadmin)
+
+Bootstrapping is **env-driven** — no interactive wizard. On a fresh DB,
+if `ORBIX_BOOTSTRAP_ENABLED=true`, the app creates org + company + branch
++ a company-wide **`rootadmin`** on startup, then no-ops on later boots.
+
+1. On the box, copy the template and fill in the two secrets:
+   ```bash
+   cd ~/orbix/orbix-engine-infra/qa
+   cp orbix.env.example orbix.env         # orbix.env is gitignored
+   # set ORBIX_BOOTSTRAP_ADMIN_PASSWORD (>=12 chars) and ORBIX_BOOTSTRAP_RESET_TOKEN
+   ```
+2. Deploy. `deploy.*` passes `orbix.env` to `docker run --env-file`. Log
+   in at `http://<ip>/` as `rootadmin` with that password.
+
+`rootadmin` is **company-wide, no default branch** — full ADMIN across
+every branch; pick a branch in the UI for branch-specific actions.
+
+> Fail-fast: if `ENABLED=true` but the admin password is missing/weak
+> (<12 chars or a common placeholder), the app refuses to start.
+
+### Rotating the rootadmin password
+
+The password lives in `orbix.env`. To change it:
+
+1. Edit `ORBIX_BOOTSTRAP_ADMIN_PASSWORD` in `orbix.env` on the box.
+2. Redeploy (`deploy.ps1`) so the container picks up the new env, **then**
+   apply it to the existing user via the token-gated endpoint:
+   ```bash
+   curl -X POST http://<ip>/api/v1/setup/reset-rootadmin-password \
+     -H "X-Bootstrap-Token: <ORBIX_BOOTSTRAP_RESET_TOKEN>"
+   ```
+   The endpoint takes **no password body** — it only re-applies the env
+   value, so it can re-sync but never set a caller-chosen credential.
+   Blank `RESET_TOKEN` disables the endpoint (503); wrong token = 401.
 
 ## Credentials
 
-DB user `orbix` / password `orbixlocal`, root `rootlocal`. These never
-leave the container (MariaDB binds 127.0.0.1 only). Override via env
-on `docker run` if you want different ones at first init:
-
-```bash
--e DB_PASSWORD=<...> -e DB_ROOT_PASSWORD=<...>
-```
-
-Override only affects the **first run** — once the data dir is
-initialised, MariaDB ignores the env vars.
+- **App login**: `rootadmin` / `ORBIX_BOOTSTRAP_ADMIN_PASSWORD` (from `orbix.env`).
+- **MariaDB**: user `orbix` / `orbixlocal`, root `rootlocal` — never leave
+  the container (binds 127.0.0.1). Override DB creds at **first init** only via
+  `-e DB_PASSWORD=… -e DB_ROOT_PASSWORD=…`; ignored once the data dir exists.
 
 ## Reset everything
 

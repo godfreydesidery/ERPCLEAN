@@ -55,7 +55,14 @@ echo '==> restart container'
 docker stop "$container" 2>/dev/null || true
 docker rm "$container" 2>/dev/null || true
 docker volume create "$vol" >/dev/null
-docker run -d --name "$container" -p 80:8081 -v "$vol":/var/lib/mysql --restart unless-stopped "$image"
+ENV_ARG=""
+if [ -f orbix-engine-infra/qa/orbix.env ]; then
+  ENV_ARG="--env-file orbix-engine-infra/qa/orbix.env"
+  echo '==> using orbix.env (env-driven bootstrap)'
+else
+  echo 'WARNING: orbix-engine-infra/qa/orbix.env missing — app will start NOT bootstrapped'
+fi
+docker run -d --name "$container" -p 80:8081 -v "$vol":/var/lib/mysql `$ENV_ARG --restart unless-stopped "$image"
 docker image prune -f >/dev/null || true
 echo '==> deployed'
 "@

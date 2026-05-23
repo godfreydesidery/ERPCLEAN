@@ -68,3 +68,6 @@ infra/local-data/
 
 # QA deploy local overrides (SSH key path / PAT live here, never committed)
 orbix-engine-infra/qa/deploy.env.local
+
+# QA runtime secrets (rootadmin password + bootstrap reset token) — lives on the box
+orbix-engine-infra/qa/orbix.env
