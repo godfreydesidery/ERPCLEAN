@@ -1,10 +1,12 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.RecallStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -42,7 +44,7 @@ public interface StockBatchService {
      */
     StockBatchDto recallBatch(Long batchId, RecallStockBatchRequestDto request);
 
-    List<StockBatchDto> listBatches(Long branchId, Long itemId, StockBatchStatus status);
+    PageDto<StockBatchDto> listBatches(Long branchId, Long itemId, StockBatchStatus status, Pageable pageable);
 
     /** Active batches whose expiry falls on or before {@code today + daysAhead}. */
     List<StockBatchDto> listExpiringSoon(Long branchId, int daysAhead);

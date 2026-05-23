@@ -1,11 +1,13 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.stock.domain.dto.RecallStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,11 +23,13 @@ public class StockBatchController {
     private final StockBatchService service;
 
     @GetMapping
-    public List<StockBatchDto> listBatches(
+    public PageDto<StockBatchDto> listBatches(
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) Long itemId,
-            @RequestParam(required = false) StockBatchStatus status) {
-        return service.listBatches(branchId, itemId, status);
+            @RequestParam(required = false) StockBatchStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return service.listBatches(branchId, itemId, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/expiring-soon")

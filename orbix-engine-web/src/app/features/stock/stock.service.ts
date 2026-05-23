@@ -98,13 +98,15 @@ export class StockService {
 
   // ---- stock batches (F2.4) -------------------------------------------------
 
-  listBatches(filter: { branchId?: string; itemId?: string; status?: StockBatchStatus } = {}):
-      Observable<StockBatch[]> {
-    let params = new HttpParams();
+  listBatches(
+    filter: { branchId?: string; itemId?: string; status?: StockBatchStatus } = {},
+    page = 0, size = 20
+  ): Observable<Page<StockBatch>> {
+    let params = new HttpParams().set('page', page).set('size', size);
     if (filter.branchId != null) params = params.set('branchId', filter.branchId);
     if (filter.itemId != null) params = params.set('itemId', filter.itemId);
     if (filter.status) params = params.set('status', filter.status);
-    return unwrap(this.http.get<ApiResponse<StockBatch[]>>(
+    return unwrap(this.http.get<ApiResponse<Page<StockBatch>>>(
       `${this.base}/stock-batches`, { params }
     ));
   }

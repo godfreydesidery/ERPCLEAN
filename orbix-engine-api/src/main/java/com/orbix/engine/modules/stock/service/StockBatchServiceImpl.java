@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -14,6 +15,8 @@ import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.repository.StockBatchRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -150,25 +153,11 @@ public class StockBatchServiceImpl implements StockBatchService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<StockBatchDto> listBatches(Long branchId, Long itemId, StockBatchStatus status) {
+    public PageDto<StockBatchDto> listBatches(Long branchId, Long itemId, StockBatchStatus status, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<StockBatch> rows;
-        if (scope != null) {
-            rows = batches.findByCompanyIdAndBranchIdOrderByExpiryAtAscIdAsc(companyId, scope);
-        } else if (itemId != null) {
-            rows = batches.findByCompanyIdAndItemIdOrderByExpiryAtAscIdAsc(companyId, itemId);
-        } else if (status != null) {
-            rows = batches.findByCompanyIdAndStatusOrderByExpiryAtAscIdAsc(companyId, status);
-        } else {
-            rows = batches.findByCompanyIdOrderByExpiryAtAscIdAsc(companyId);
-        }
-        return rows.stream()
-            .filter(b -> scope == null || Objects.equals(b.getBranchId(), scope))
-            .filter(b -> itemId == null || Objects.equals(b.getItemId(), itemId))
-            .filter(b -> status == null || b.getStatus() == status)
-            .map(StockBatchDto::from)
-            .toList();
+        Page<StockBatch> page = batches.search(companyId, scope, itemId, status, pageable);
+        return PageDto.of(page, StockBatchDto::from);
     }
 
     @Override
