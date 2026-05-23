@@ -65,3 +65,6 @@ infra/local-data/
 
 # Claude Code per-developer settings
 .claude/settings.local.json
+
+# QA deploy local overrides (SSH key path / PAT live here, never committed)
+orbix-engine-infra/qa/deploy.env.local

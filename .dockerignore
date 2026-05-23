@@ -1,0 +1,34 @@
+# The QA image build context is the repo root (orbix-engine-infra/qa/Dockerfile).
+# Keep it lean — only orbix-engine-api/ and orbix-engine-web/ sources are needed;
+# everything below is regenerated, irrelevant, or must never enter an image.
+
+# Build outputs / caches (regenerated inside the build stages)
+**/node_modules
+**/target
+**/dist
+**/.angular
+**/build
+**/.gradle
+**/.dart_tool
+
+# VCS + IDE
+.git
+.gitignore
+.idea
+.vscode
+**/*.iml
+
+# Local infra state — includes the local MariaDB/Postgres/MinIO data dirs
+infra/local-data
+
+# Apps not part of the QA web+api image
+orbix-engine-pos
+orbix-engine-wms
+
+# Secrets — never copy into an image layer
+**/.env
+.env
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12

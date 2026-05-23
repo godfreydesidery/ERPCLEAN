@@ -48,7 +48,14 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/v3/api-docs/**"
                 ).permitAll()
-                .anyRequest().authenticated()
+                // The API surface stays locked (each endpoint also @PreAuthorize-gated);
+                // actuator beyond health/info too.
+                .requestMatchers("/api/**", "/actuator/**").authenticated()
+                // Everything else is the static Angular bundle + SPA deep links
+                // (served from classpath:/static/ by SpaForwardConfig when the QA
+                // image bakes dist/ into the jar) — public, like any web app's
+                // HTML/JS/CSS. In dev /static is empty, so this is a no-op there.
+                .anyRequest().permitAll()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
