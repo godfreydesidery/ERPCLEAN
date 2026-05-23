@@ -1,6 +1,8 @@
 package com.orbix.engine.modules.procurement.repository;
 
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,10 @@ public interface SupplierInvoiceRepository extends JpaRepository<SupplierInvoice
     List<SupplierInvoice> findByCompanyIdOrderByIdDesc(Long companyId);
 
     List<SupplierInvoice> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId);
+
+    Page<SupplierInvoice> findByCompanyIdOrderByIdDesc(Long companyId, Pageable pageable);
+
+    Page<SupplierInvoice> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId, Pageable pageable);
 
     /**
      * F8.7 / US-RPT-007 — POSTED-or-later invoices for a supplier in

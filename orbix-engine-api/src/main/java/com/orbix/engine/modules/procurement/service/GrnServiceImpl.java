@@ -4,6 +4,7 @@ import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -26,6 +27,8 @@ import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -254,15 +257,13 @@ public class GrnServiceImpl implements GrnService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<GrnDto> list(Long branchId) {
+    public PageDto<GrnDto> list(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<Grn> rows = scope == null
-            ? grns.findByCompanyIdOrderByIdDesc(companyId)
-            : grns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
-        return rows.stream()
-            .map(g -> GrnDto.from(g, grnLines.findByGrnIdOrderByIdAsc(g.getId())))
-            .toList();
+        Page<Grn> page = scope == null
+            ? grns.findByCompanyIdOrderByIdDesc(companyId, pageable)
+            : grns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        return PageDto.of(page, g -> GrnDto.from(g, grnLines.findByGrnIdOrderByIdAsc(g.getId())));
     }
 
     @Override

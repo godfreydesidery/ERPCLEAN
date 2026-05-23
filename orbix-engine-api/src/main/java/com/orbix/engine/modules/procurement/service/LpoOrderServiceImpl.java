@@ -4,6 +4,7 @@ import com.orbix.engine.modules.catalog.domain.entity.Item;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -19,6 +20,8 @@ import com.orbix.engine.modules.procurement.repository.LpoOrderRepository;
 import lombok.RequiredArgsConstructor;
 import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.SettingsService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -132,15 +135,13 @@ public class LpoOrderServiceImpl implements LpoOrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<LpoOrderDto> list(Long branchId) {
+    public PageDto<LpoOrderDto> list(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<LpoOrder> rows = scope == null
-            ? orders.findByCompanyIdOrderByIdDesc(companyId)
-            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
-        return rows.stream()
-            .map(o -> LpoOrderDto.from(o, lines.findByLpoOrderIdOrderByLineNoAsc(o.getId())))
-            .toList();
+        Page<LpoOrder> page = scope == null
+            ? orders.findByCompanyIdOrderByIdDesc(companyId, pageable)
+            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        return PageDto.of(page, o -> LpoOrderDto.from(o, lines.findByLpoOrderIdOrderByLineNoAsc(o.getId())));
     }
 
     @Override

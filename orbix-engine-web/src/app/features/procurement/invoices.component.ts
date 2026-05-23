@@ -9,6 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { ProcurementService } from './procurement.service';
 import {
   Grn,
@@ -24,7 +25,7 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -32,7 +33,7 @@ interface AllocRow {
           <a routerLink=".." class="text-decoration-none text-secondary">Procurement</a> &rsaquo; Supplier invoices
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Supplier invoices</h1>
-        <p class="text-secondary mb-0 small">{{ invoices().length }} invoice{{ invoices().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} invoice{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -175,7 +176,7 @@ interface AllocRow {
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Invoices</h2>
-            <span class="badge text-bg-light text-secondary">{{ invoices().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (invoices().length === 0) {
             <div class="p-5 text-center">
@@ -210,6 +211,13 @@ interface AllocRow {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -411,6 +419,10 @@ export class InvoicesComponent implements OnInit {
   );
 
   protected readonly invoices = signal<SupplierInvoice[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<SupplierInvoice | null>(null);
   protected readonly grnOptions = signal<Grn[]>([]);
   protected readonly grnPickerOptions = computed<SearchSelectOption[]>(
@@ -465,10 +477,21 @@ export class InvoicesComponent implements OnInit {
   }
 
   refresh(): void {
-    this.procurement.listSupplierInvoices(this.branchId()).subscribe({
-      next: rows => this.invoices.set(rows),
+    this.procurement.listSupplierInvoices(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.invoices.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
   }
 
   loadGrns(): void {
@@ -476,9 +499,10 @@ export class InvoicesComponent implements OnInit {
       this.grnOptions.set([]);
       return;
     }
-    this.procurement.listGrns(this.branchId()).subscribe({
-      next: rows => this.grnOptions.set(
-        rows.filter(g => g.supplierId === this.newSupplierId && g.status === 'POSTED')
+    // Picker source: pull a large page and filter to this supplier's posted GRNs.
+    this.procurement.listGrns(this.branchId(), 0, 500).subscribe({
+      next: page => this.grnOptions.set(
+        page.content.filter(g => g.supplierId === this.newSupplierId && g.status === 'POSTED')
       ),
       error: err => this.showError(err)
     });

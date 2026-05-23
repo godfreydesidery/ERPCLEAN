@@ -9,6 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { ProcurementService } from './procurement.service';
 import {
   CreateSupplierPaymentAllocation,
@@ -27,7 +28,7 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-payments',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -35,7 +36,7 @@ interface AllocRow {
           <a routerLink=".." class="text-decoration-none text-secondary">Procurement</a> &rsaquo; Payments
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Supplier payments</h1>
-        <p class="text-secondary mb-0 small">{{ payments().length }} payment{{ payments().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} payment{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -182,7 +183,7 @@ interface AllocRow {
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">Payments</h2>
-            <span class="badge text-bg-light text-secondary">{{ payments().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (payments().length === 0) {
             <div class="p-5 text-center">
@@ -212,6 +213,13 @@ interface AllocRow {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -393,6 +401,10 @@ export class PaymentsComponent implements OnInit {
   protected readonly methods = PAYMENT_METHODS;
 
   protected readonly payments = signal<SupplierPayment[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<SupplierPayment | null>(null);
   protected readonly openInvoices = signal<SupplierInvoice[]>([]);
   protected readonly invoicePickerOptions = computed<SearchSelectOption[]>(
@@ -430,10 +442,21 @@ export class PaymentsComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.procurement.listSupplierPayments(this.branchId()).subscribe({
-      next: rows => this.payments.set(rows),
+    this.procurement.listSupplierPayments(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.payments.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
   }
 
   loadOpenInvoices(): void {
@@ -441,9 +464,10 @@ export class PaymentsComponent implements OnInit {
       this.openInvoices.set([]);
       return;
     }
-    this.procurement.listSupplierInvoices(this.branchId()).subscribe({
-      next: rows => this.openInvoices.set(
-        rows.filter(i =>
+    // Picker source: pull a large page and filter to this supplier's open invoices.
+    this.procurement.listSupplierInvoices(this.branchId(), 0, 500).subscribe({
+      next: page => this.openInvoices.set(
+        page.content.filter(i =>
           i.supplierId === this.newSupplierId
           && (i.status === 'POSTED' || i.status === 'PARTIALLY_PAID')
           && i.totalAmount - i.paidAmount > 0

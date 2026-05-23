@@ -1,10 +1,10 @@
 package com.orbix.engine.modules.procurement.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
-
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 /**
  * LPO lifecycle (F3.1). State machine:
@@ -28,7 +28,7 @@ public interface LpoOrderService {
     /** Moves DRAFT / PENDING_APPROVAL → CANCELLED. */
     LpoOrderDto cancel(Long lpoId);
 
-    List<LpoOrderDto> list(Long branchId);
+    PageDto<LpoOrderDto> list(Long branchId, Pageable pageable);
 
     LpoOrderDto get(Long lpoId);
 }

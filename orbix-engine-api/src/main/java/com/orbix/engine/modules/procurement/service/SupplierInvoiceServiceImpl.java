@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.procurement.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -18,6 +19,8 @@ import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository
 import lombok.RequiredArgsConstructor;
 import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.SettingsService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -129,15 +132,13 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SupplierInvoiceDto> list(Long branchId) {
+    public PageDto<SupplierInvoiceDto> list(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<SupplierInvoice> rows = scope == null
-            ? invoices.findByCompanyIdOrderByIdDesc(companyId)
-            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
-        return rows.stream()
-            .map(i -> SupplierInvoiceDto.from(i, allocations.findBySupplierInvoiceId(i.getId())))
-            .toList();
+        Page<SupplierInvoice> page = scope == null
+            ? invoices.findByCompanyIdOrderByIdDesc(companyId, pageable)
+            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        return PageDto.of(page, i -> SupplierInvoiceDto.from(i, allocations.findBySupplierInvoiceId(i.getId())));
     }
 
     @Override

@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
+import { Page } from '../../core/api/page';
 import {
   CreateGrnRequest,
   CreateLpoOrderRequest,
@@ -20,10 +21,10 @@ export class ProcurementService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listLpos(branchId: string | null): Observable<LpoOrder[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<LpoOrder[]>>(`${this.base}/lpos`, { params }));
+  listLpos(branchId: string | null, page: number, size: number): Observable<Page<LpoOrder>> {
+    return unwrap(this.http.get<ApiResponse<Page<LpoOrder>>>(
+      `${this.base}/lpos`, { params: branchPageParams(branchId, page, size) }
+    ));
   }
 
   getLpo(id: string): Observable<LpoOrder> {
@@ -52,10 +53,10 @@ export class ProcurementService {
 
   // ---- GRN (F3.2) ----------------------------------------------------------
 
-  listGrns(branchId: string | null): Observable<Grn[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<Grn[]>>(`${this.base}/grns`, { params }));
+  listGrns(branchId: string | null, page: number, size: number): Observable<Page<Grn>> {
+    return unwrap(this.http.get<ApiResponse<Page<Grn>>>(
+      `${this.base}/grns`, { params: branchPageParams(branchId, page, size) }
+    ));
   }
 
   getGrn(id: string): Observable<Grn> {
@@ -76,11 +77,9 @@ export class ProcurementService {
 
   // ---- supplier invoices (F3.3) -------------------------------------------
 
-  listSupplierInvoices(branchId: string | null): Observable<SupplierInvoice[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<SupplierInvoice[]>>(
-      `${this.base}/supplier-invoices`, { params }
+  listSupplierInvoices(branchId: string | null, page: number, size: number): Observable<Page<SupplierInvoice>> {
+    return unwrap(this.http.get<ApiResponse<Page<SupplierInvoice>>>(
+      `${this.base}/supplier-invoices`, { params: branchPageParams(branchId, page, size) }
     ));
   }
 
@@ -110,11 +109,9 @@ export class ProcurementService {
 
   // ---- supplier payments (F3.4) -------------------------------------------
 
-  listSupplierPayments(branchId: string | null): Observable<SupplierPayment[]> {
-    let params = new HttpParams();
-    if (branchId != null) params = params.set('branchId', branchId);
-    return unwrap(this.http.get<ApiResponse<SupplierPayment[]>>(
-      `${this.base}/supplier-payments`, { params }
+  listSupplierPayments(branchId: string | null, page: number, size: number): Observable<Page<SupplierPayment>> {
+    return unwrap(this.http.get<ApiResponse<Page<SupplierPayment>>>(
+      `${this.base}/supplier-payments`, { params: branchPageParams(branchId, page, size) }
     ));
   }
 
@@ -141,4 +138,11 @@ export class ProcurementService {
       `${this.base}/supplier-payments/${id}/cancel`, {}
     ));
   }
+}
+
+/** Standard branch-scoped list params (branchId optional + page/size). */
+function branchPageParams(branchId: string | null, page: number, size: number): HttpParams {
+  let params = new HttpParams().set('page', page).set('size', size);
+  if (branchId != null) params = params.set('branchId', branchId);
+  return params;
 }

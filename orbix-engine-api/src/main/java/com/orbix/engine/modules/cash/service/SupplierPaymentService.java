@@ -2,8 +2,8 @@ package com.orbix.engine.modules.cash.service;
 
 import com.orbix.engine.modules.cash.domain.dto.CreateSupplierPaymentRequestDto;
 import com.orbix.engine.modules.cash.domain.dto.SupplierPaymentDto;
-
-import java.util.List;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Supplier payments + per-invoice allocation (F3.4). Creating a payment captures
@@ -22,7 +22,7 @@ public interface SupplierPaymentService {
     /** DRAFT → CANCELLED. */
     SupplierPaymentDto cancel(Long paymentId);
 
-    List<SupplierPaymentDto> list(Long branchId);
+    PageDto<SupplierPaymentDto> list(Long branchId, Pageable pageable);
 
     SupplierPaymentDto get(Long paymentId);
 }
