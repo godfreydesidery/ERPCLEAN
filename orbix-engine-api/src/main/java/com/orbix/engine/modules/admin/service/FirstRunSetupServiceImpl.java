@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FirstRunSetupServiceImpl implements FirstRunSetupService {
 
     private static final Long SYSTEM_ACTOR = 0L;
-    private static final String DEFAULT_TIMEZONE = "Africa/Kampala";
+    private static final String DEFAULT_TIMEZONE = "Africa/Dar_es_Salaam";
 
     private final OrganisationRepository organisations;
     private final CompanyRepository companies;

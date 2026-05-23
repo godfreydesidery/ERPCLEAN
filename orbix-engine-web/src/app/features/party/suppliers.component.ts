@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -214,7 +214,7 @@ import {
                   <td><span class="badge text-bg-light border text-secondary font-monospace">{{ supplier.party.code }}</span></td>
                   <td>
                     <div class="fw-semibold text-dark">{{ supplier.party.name }}</div>
-                    @if (supplier.defaultCurrencyCode && supplier.defaultCurrencyCode !== 'UGX') {
+                    @if (supplier.defaultCurrencyCode && supplier.defaultCurrencyCode !== 'TZS') {
                       <span class="small text-secondary">{{ supplier.defaultCurrencyCode }}</span>
                     }
                   </td>

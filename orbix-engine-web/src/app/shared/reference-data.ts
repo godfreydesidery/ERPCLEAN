@@ -1,4 +1,4 @@
-import { SearchSelectOption } from '../core/ui/search-select.component';
+﻿import { SearchSelectOption } from '../core/ui/search-select.component';
 
 /** IANA time zones from the browser (Intl), with a small fallback for older engines. */
 export function timeZoneOptions(): SearchSelectOption[] {
@@ -10,7 +10,7 @@ export function timeZoneOptions(): SearchSelectOption[] {
     zones = [];
   }
   if (zones.length === 0) {
-    zones = ['UTC', 'Africa/Kampala', 'Africa/Nairobi', 'Africa/Dar_es_Salaam', 'Africa/Kigali',
+    zones = ['UTC', 'Africa/Dar_es_Salaam', 'Africa/Nairobi', 'Africa/Kampala', 'Africa/Kigali',
       'Africa/Lagos', 'Africa/Johannesburg', 'Europe/London', 'America/New_York'];
   }
   return zones.map(z => ({ id: z, label: z }));

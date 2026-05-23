@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -479,7 +479,7 @@ export class PriceListComponent implements OnInit {
 
 function blankListForm() {
   return {
-    code: '', name: '', currencyCode: 'UGX',
+    code: '', name: '', currencyCode: 'TZS',
     validFrom: new Date().toISOString().slice(0, 10), validTo: '',
     isDefault: false, taxInclusive: false
   };
