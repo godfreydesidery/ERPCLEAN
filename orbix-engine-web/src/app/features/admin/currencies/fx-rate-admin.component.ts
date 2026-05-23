@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,11 +7,12 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CurrencyAdminService } from './currency-admin.service';
 import { Currency, FxRate } from './currency-admin.models';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 
 @Component({
   selector: 'orbix-fx-rate-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
@@ -39,21 +40,13 @@ import { Currency, FxRate } from './currency-admin.models';
               <div class="row g-2">
                 <div class="col-6">
                   <label class="form-label small fw-semibold text-secondary">From</label>
-                  <select class="form-select" name="from" [(ngModel)]="form.fromCurrency" required>
-                    <option value="" disabled>Select…</option>
-                    @for (c of currencies(); track c.code) {
-                      <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="currencyOptions()" [(ngModel)]="form.fromCurrency"
+                                       name="from" required placeholder="Search…"/>
                 </div>
                 <div class="col-6">
                   <label class="form-label small fw-semibold text-secondary">To</label>
-                  <select class="form-select" name="to" [(ngModel)]="form.toCurrency" required>
-                    <option value="" disabled>Select…</option>
-                    @for (c of currencies(); track c.code) {
-                      <option [value]="c.code">{{ c.code }} — {{ c.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="currencyOptions()" [(ngModel)]="form.toCurrency"
+                                       name="to" required placeholder="Search…"/>
                 </div>
               </div>
               <div>
@@ -68,7 +61,7 @@ import { Currency, FxRate } from './currency-admin.models';
               </div>
               <div class="d-flex gap-2 pt-2 border-top">
                 <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
-                        [disabled]="saving() || qf.invalid">
+                        [disabled]="saving() || qf.invalid || !form.fromCurrency || !form.toCurrency">
                   @if (saving()) { <span class="spinner-border spinner-border-sm"></span> }
                   @else { <i class="bi bi-graph-up"></i> }
                   Quote rate
@@ -142,6 +135,8 @@ export class FxRateAdminComponent implements OnInit {
   private readonly api = inject(CurrencyAdminService);
 
   protected readonly currencies = signal<Currency[]>([]);
+  protected readonly currencyOptions = computed<SearchSelectOption[]>(
+    () => this.currencies().map(c => ({ id: c.code, label: `${c.code} — ${c.name}` })));
   protected readonly rates = signal<FxRate[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -157,7 +152,7 @@ export class FxRateAdminComponent implements OnInit {
   }
 
   quote(): void {
-    if (this.form.rate === null) return;
+    if (this.form.rate === null || !this.form.fromCurrency || !this.form.toCurrency) return;
     this.run(this.api.quoteRate({
       fromCurrency: this.form.fromCurrency,
       toCurrency: this.form.toCurrency,

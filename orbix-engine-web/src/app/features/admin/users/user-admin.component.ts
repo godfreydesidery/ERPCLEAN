@@ -1,10 +1,11 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
@@ -27,7 +28,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 @Component({
   selector: 'orbix-user-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -99,12 +100,9 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                   <label class="form-label small fw-semibold text-secondary">
                     Default branch <span class="text-muted">(opt)</span>
                   </label>
-                  <select class="form-select" name="branchId" [(ngModel)]="newForm.defaultBranchId">
-                    <option [ngValue]="null">— No default —</option>
-                    @for (b of branches(); track b.id) {
-                      <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="branchOptions()" [(ngModel)]="newForm.defaultBranchId"
+                                       name="branchId"
+                                       placeholder="— No default —"/>
                   <small class="form-text text-secondary">
                     Where the user lands on login. This does NOT grant them access — open the user after
                     creating to assign their roles.
@@ -154,7 +152,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                    [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
           </div>
           <div class="status-pills d-flex gap-1 flex-wrap">
-            @for (opt of filterOptions; track opt.value) {
+            @for (opt of SearchSelectOptions; track opt.value) {
               <button type="button" class="status-pill"
                       [class.is-active]="filter() === opt.value"
                       (click)="filter.set(opt.value)">
@@ -387,6 +385,8 @@ export class UserAdminComponent implements OnInit {
   private readonly router = inject(Router);
 
   protected readonly branches = signal<AccessibleBranch[]>([]);
+  protected readonly branchOptions = computed<SearchSelectOption[]>(
+    () => this.branches().map(b => ({ id: b.id, label: `${b.code} · ${b.name}` })));
   protected readonly users = signal<UserSummary[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -400,7 +400,7 @@ export class UserAdminComponent implements OnInit {
   protected readonly searchSignal = signal('');
   protected searchTerm = '';
   protected readonly filter = signal<UserListFilter>('all');
-  protected readonly filterOptions: { label: string; value: UserListFilter }[] = [
+  protected readonly SearchSelectOptions: { label: string; value: UserListFilter }[] = [
     { label: 'All',      value: 'all' },
     { label: 'Active',   value: 'active' },
     { label: 'Disabled', value: 'disabled' },

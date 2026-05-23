@@ -120,13 +120,8 @@ interface AllocRow {
                     @for (row of allocations; track $index) {
                       <tr>
                         <td>
-                          <select class="form-select form-select-sm"
-                                  [name]="'gid' + $index" [(ngModel)]="row.grnId">
-                            <option [ngValue]="null">— pick a GRN —</option>
-                            @for (g of grnOptions(); track g.id) {
-                              <option [ngValue]="g.id">{{ g.number }} ({{ g.totalAmount | number:'1.0-2' }})</option>
-                            }
-                          </select>
+                          <orbix-search-select [options]="grnPickerOptions()" [(ngModel)]="row.grnId"
+                                               [name]="'gid' + $index" placeholder="— pick a GRN —"/>
                         </td>
                         <td>
                           <input class="form-control form-control-sm text-end" type="number" step="0.0001" min="0"
@@ -418,6 +413,8 @@ export class InvoicesComponent implements OnInit {
   protected readonly invoices = signal<SupplierInvoice[]>([]);
   protected readonly selected = signal<SupplierInvoice | null>(null);
   protected readonly grnOptions = signal<Grn[]>([]);
+  protected readonly grnPickerOptions = computed<SearchSelectOption[]>(
+    () => this.grnOptions().map(g => ({ id: g.id, label: `${g.number} (${g.totalAmount})` })));
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);

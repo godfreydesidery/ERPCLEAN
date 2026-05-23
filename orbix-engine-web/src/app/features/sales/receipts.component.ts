@@ -116,16 +116,10 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
                     @for (row of allocations; track $index) {
                       <tr>
                         <td>
-                          <select class="form-select form-select-sm"
-                                  [name]="'iid' + $index" [(ngModel)]="row.invoiceId"
-                                  (ngModelChange)="onInvoicePicked(row, $event)">
-                            <option [ngValue]="null">— pick —</option>
-                            @for (inv of openInvoices(); track inv.id) {
-                              <option [ngValue]="inv.id">
-                                {{ inv.number }} ({{ inv.totalAmount - inv.paidAmount | number:'1.0-2' }} outstanding)
-                              </option>
-                            }
-                          </select>
+                          <orbix-search-select [options]="invoicePickerOptions()" [(ngModel)]="row.invoiceId"
+                                               [name]="'iid' + $index"
+                                               (ngModelChange)="onInvoicePicked(row, $event)"
+                                               placeholder="— pick —"/>
                         </td>
                         <td>
                           <input class="form-control form-control-sm text-end" type="number" step="0.0001" min="0"
@@ -398,6 +392,8 @@ export class ReceiptsComponent implements OnInit {
   protected readonly receipts = signal<SalesReceipt[]>([]);
   protected readonly selected = signal<SalesReceipt | null>(null);
   protected readonly openInvoices = signal<SalesInvoice[]>([]);
+  protected readonly invoicePickerOptions = computed<SearchSelectOption[]>(
+    () => this.openInvoices().map(inv => ({ id: inv.id, label: `${inv.number} (${inv.totalAmount - inv.paidAmount} outstanding)` })));
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);

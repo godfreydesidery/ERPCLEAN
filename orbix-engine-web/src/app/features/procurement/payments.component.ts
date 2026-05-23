@@ -120,16 +120,10 @@ interface AllocRow {
                     @for (row of allocations; track $index) {
                       <tr>
                         <td>
-                          <select class="form-select form-select-sm"
-                                  [name]="'iid' + $index" [(ngModel)]="row.invoiceId"
-                                  (ngModelChange)="onInvoicePicked(row, $event)">
-                            <option [ngValue]="null">— pick an invoice —</option>
-                            @for (inv of openInvoices(); track inv.id) {
-                              <option [ngValue]="inv.id">
-                                {{ inv.number }} ({{ inv.totalAmount - inv.paidAmount | number:'1.0-2' }} outstanding)
-                              </option>
-                            }
-                          </select>
+                          <orbix-search-select [options]="invoicePickerOptions()" [(ngModel)]="row.invoiceId"
+                                               [name]="'iid' + $index"
+                                               (ngModelChange)="onInvoicePicked(row, $event)"
+                                               placeholder="— pick an invoice —"/>
                         </td>
                         <td>
                           <input class="form-control form-control-sm text-end" type="number" step="0.0001" min="0"
@@ -401,6 +395,8 @@ export class PaymentsComponent implements OnInit {
   protected readonly payments = signal<SupplierPayment[]>([]);
   protected readonly selected = signal<SupplierPayment | null>(null);
   protected readonly openInvoices = signal<SupplierInvoice[]>([]);
+  protected readonly invoicePickerOptions = computed<SearchSelectOption[]>(
+    () => this.openInvoices().map(inv => ({ id: inv.id, label: `${inv.number} (${inv.totalAmount - inv.paidAmount} outstanding)` })));
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);

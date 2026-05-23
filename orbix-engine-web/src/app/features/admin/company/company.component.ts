@@ -2,13 +2,14 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CompanyService } from './company.service';
 import { Company, UpdateCompanyRequest } from './company.models';
-import { FilterableSelectComponent, FilterOption } from '../../../shared/filter-select.component';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { countryOptions, timeZoneOptions } from '../../../shared/reference-data';
 import { CurrencyAdminService } from '../currencies/currency-admin.service';
 
 @Component({
   selector: 'orbix-company-profile',
   standalone: true,
-  imports: [FormsModule, FilterableSelectComponent],
+  imports: [FormsModule, SearchSelectComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Settings</p>
@@ -46,17 +47,18 @@ import { CurrencyAdminService } from '../currencies/currency-admin.service';
             </div>
             <div class="col-md-3">
               <label class="form-label small mb-1">Currency *</label>
-              <orbix-filter-select [options]="currencyOptions()" [value]="f.currencyCode"
-                                   (valueChange)="f.currencyCode = $event ?? ''" placeholder="Search currency…"/>
+              <orbix-search-select [options]="currencyOptions()" [(ngModel)]="f.currencyCode"
+                                   name="currencyCode" placeholder="Search currency…"/>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
               <label class="form-label small mb-1">Country *</label>
-              <input class="form-control form-control-sm text-uppercase" maxlength="2" [(ngModel)]="f.countryCode" name="countryCode">
+              <orbix-search-select [options]="countryOptions" [(ngModel)]="f.countryCode"
+                                   name="countryCode" placeholder="Search country…"/>
             </div>
             <div class="col-md-4">
               <label class="form-label small mb-1">Time zone *</label>
-              <orbix-filter-select [options]="tzOptions()" [value]="f.timeZone"
-                                   (valueChange)="f.timeZone = $event ?? ''" placeholder="Search time zone…"/>
+              <orbix-search-select [options]="tzOptions()" [(ngModel)]="f.timeZone"
+                                   name="timeZone" placeholder="Search time zone…"/>
             </div>
 
             <div class="col-md-4">
@@ -94,7 +96,7 @@ import { CurrencyAdminService } from '../currencies/currency-admin.service';
       </div>
 
       <div class="d-flex gap-2">
-        <button class="btn btn-primary" (click)="save()" [disabled]="saving() || !f.name?.trim()">
+        <button class="btn btn-primary" (click)="save()" [disabled]="saving() || !f.name.trim()">
           {{ saving() ? 'Saving…' : 'Save profile' }}
         </button>
         <button class="btn btn-outline-secondary" (click)="reload()" [disabled]="saving()">Discard</button>
@@ -112,14 +114,15 @@ export class CompanyProfileComponent implements OnInit {
   protected readonly info = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly currencyOptions = signal<FilterOption[]>([]);
-  protected readonly tzOptions = signal<FilterOption[]>(loadTimeZones());
+  protected readonly currencyOptions = signal<SearchSelectOption[]>([]);
+  protected readonly tzOptions = signal<SearchSelectOption[]>(timeZoneOptions());
+  protected readonly countryOptions: SearchSelectOption[] = countryOptions();
 
   ngOnInit(): void {
     this.reload();
     this.currencyApi.listCurrencies().subscribe({
       next: list => this.currencyOptions.set(
-        list.map(c => ({ value: c.code, label: `${c.code} — ${c.name}` }))),
+        list.map(c => ({ id: c.code, label: `${c.code} — ${c.name}` }))),
       error: () => this.currencyOptions.set([])
     });
   }
@@ -163,20 +166,4 @@ export class CompanyProfileComponent implements OnInit {
       defaultQuotationNote: c.defaultQuotationNote
     });
   }
-}
-
-/** IANA time zones from the browser (Intl), with a small fallback for older engines. */
-function loadTimeZones(): FilterOption[] {
-  const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
-  let zones: string[];
-  try {
-    zones = intl.supportedValuesOf ? intl.supportedValuesOf('timeZone') : [];
-  } catch {
-    zones = [];
-  }
-  if (zones.length === 0) {
-    zones = ['UTC', 'Africa/Kampala', 'Africa/Nairobi', 'Africa/Dar_es_Salaam', 'Africa/Kigali',
-      'Africa/Lagos', 'Africa/Johannesburg', 'Europe/London', 'America/New_York'];
-  }
-  return zones.map(z => ({ value: z, label: z }));
 }

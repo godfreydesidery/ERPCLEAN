@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { RoleAdminService } from '../roles/role-admin.service';
 import { RoleSummary } from '../roles/role-admin.models';
 import { UserAdminService } from './user-admin.service';
@@ -18,7 +19,7 @@ import {
 @Component({
   selector: 'orbix-user-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
   template: `
     <header class="mb-3">
       <a routerLink="/admin/users" class="text-decoration-none small text-secondary d-inline-flex align-items-center gap-1 mb-2">
@@ -126,12 +127,9 @@ import {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-semibold text-secondary">Default branch</label>
-                  <select class="form-select" name="br" [(ngModel)]="editForm.defaultBranchId">
-                    <option [ngValue]="null">— No default —</option>
-                    @for (b of branches(); track b.id) {
-                      <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="branchOptions()" [(ngModel)]="editForm.defaultBranchId"
+                                       name="br"
+                                       placeholder="— No default —"/>
                 </div>
               </div>
             </fieldset>
@@ -367,6 +365,8 @@ export class UserDetailComponent implements OnInit {
   protected readonly user = signal<UserDetail | null>(null);
   protected readonly roles = signal<RoleSummary[]>([]);
   protected readonly branches = signal<AccessibleBranch[]>([]);
+  protected readonly branchOptions = computed<SearchSelectOption[]>(
+    () => this.branches().map(b => ({ id: b.id, label: `${b.code} · ${b.name}` })));
   protected readonly busy = signal(false);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
