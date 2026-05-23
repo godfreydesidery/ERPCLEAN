@@ -102,4 +102,28 @@ public class Company {
         this.createdBy = actorId;
         this.updatedBy = actorId;
     }
+
+    /** Edit the company profile (US-COMP-002). The immutable {@code code} is not touched. */
+    public void updateProfile(String name, String legalName, String tin, String vrn,
+                              String physicalAddress, String postalAddress, String phone,
+                              String email, String website, String currencyCode,
+                              String countryCode, String timeZone,
+                              String defaultInvoiceNote, String defaultQuotationNote, Long actorId) {
+        this.name = name;
+        this.legalName = legalName;
+        this.tin = tin;
+        this.vrn = vrn;
+        this.physicalAddress = physicalAddress;
+        this.postalAddress = postalAddress;
+        this.phone = phone;
+        this.email = email;
+        this.website = website;
+        this.currencyCode = currencyCode;
+        this.countryCode = countryCode;
+        this.timeZone = timeZone;
+        this.defaultInvoiceNote = defaultInvoiceNote;
+        this.defaultQuotationNote = defaultQuotationNote;
+        this.updatedAt = Instant.now();
+        this.updatedBy = actorId;
+    }
 }
