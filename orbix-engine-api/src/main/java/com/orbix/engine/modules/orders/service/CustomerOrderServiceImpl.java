@@ -40,7 +40,8 @@ import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import com.orbix.engine.modules.stock.service.StockReservationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,18 +81,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.orders.deposit-required-pct:30}")
-    private BigDecimal depositRequiredPct;
-
-    @Value("${orbix.orders.default-layby-reserve-days:30}")
-    private int defaultLaybyReserveDays;
-
-    @Value("${orbix.orders.default-pre-order-reserve-days:7}")
-    private int defaultPreOrderReserveDays;
-
-    @Value("${orbix.orders.cancel-refund-window-days:7}")
-    private int cancelRefundWindowDays;
+    private final SettingsService settings;
 
     // ---------------------------------------------------------------------
     // Create / patch
@@ -580,6 +570,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     private boolean withinRefundWindow(CustomerOrder order) {
+        int cancelRefundWindowDays = settings.getInt(SettingKey.ORDERS_CANCEL_REFUND_WINDOW_DAYS);
         if (cancelRefundWindowDays <= 0) return false;
         long daysSince = Duration.between(order.getCreatedAt(), Instant.now()).toDays();
         return daysSince <= cancelRefundWindowDays;
@@ -607,13 +598,13 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     private Instant defaultReservedUntil(CustomerOrderType type) {
         int days = type == CustomerOrderType.LAYBY
-            ? defaultLaybyReserveDays
-            : defaultPreOrderReserveDays;
+            ? settings.getInt(SettingKey.ORDERS_LAYBY_RESERVE_DAYS)
+            : settings.getInt(SettingKey.ORDERS_PRE_ORDER_RESERVE_DAYS);
         return Instant.now().plus(days, ChronoUnit.DAYS);
     }
 
     private BigDecimal defaultDeposit(BigDecimal total) {
-        return total.multiply(depositRequiredPct)
+        return total.multiply(settings.getDecimal(SettingKey.ORDERS_DEPOSIT_REQUIRED_PCT))
             .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
     }
 

@@ -16,7 +16,8 @@ import com.orbix.engine.modules.procurement.repository.GrnRepository;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceGrnRepository;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,9 +45,7 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.procurement.invoice-match-tolerance-pct}")
-    private BigDecimal toleranceFraction;
+    private final SettingsService settings;
 
     @Override
     @Transactional
@@ -189,7 +188,7 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
             return;
         }
         BigDecimal diff = invoiceTotal.subtract(allocated).abs();
-        BigDecimal allowed = invoiceTotal.multiply(toleranceFraction).abs()
+        BigDecimal allowed = invoiceTotal.multiply(settings.getDecimal(SettingKey.PROCUREMENT_INVOICE_MATCH_TOLERANCE)).abs()
             .setScale(4, RoundingMode.HALF_UP);
         if (diff.compareTo(allowed) > 0) {
             throw new IllegalArgumentException(

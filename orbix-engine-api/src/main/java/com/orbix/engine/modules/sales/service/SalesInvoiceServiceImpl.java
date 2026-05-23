@@ -31,7 +31,8 @@ import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,9 +70,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.sales.discount-threshold-pct}")
-    private BigDecimal discountThresholdPct;
+    private final SettingsService settings;
 
     @Override
     @Transactional
@@ -255,7 +254,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     private void validateDiscountApprover(CreateSalesInvoiceRequestDto request, Long actorId,
                                           Long companyId) {
-        BigDecimal threshold = discountThresholdPct;
+        BigDecimal threshold = settings.getDecimal(SettingKey.SALES_DISCOUNT_THRESHOLD_PCT);
         boolean needsApproval = request.lines().stream()
             .map(CreateSalesInvoiceRequestDto.Line::discountPct)
             .filter(Objects::nonNull)

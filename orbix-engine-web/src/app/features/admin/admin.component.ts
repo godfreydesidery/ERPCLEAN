@@ -77,6 +77,7 @@ export class AdminComponent {
     { label: 'Users',               description: 'Create staff accounts, reset passwords, disable.',    link: 'users',      permission: 'IAM.MANAGE_USERS',     icon: 'bi-people',       tint: 'blue'   },
     { label: 'Roles & permissions', description: 'Create roles, assign permissions, grant to users.',  link: 'roles',      permission: 'IAM.MANAGE_ROLES',     icon: 'bi-shield-lock',  tint: 'rose'   },
     { label: 'Audit log',           description: 'Review security events and verify integrity.',       link: 'audit',      permission: 'IAM.VIEW_AUDIT',       icon: 'bi-journal-text', tint: 'violet' },
+    { label: 'Configuration',       description: 'Tune approval thresholds and operational defaults.', link: 'settings',   permission: 'ADMIN.MANAGE_SETTINGS', icon: 'bi-sliders',     tint: 'amber'  },
     { label: 'Branches & sections', description: 'Manage branches and their internal sections.',       link: 'branches',   permission: 'ADMIN.MANAGE_BRANCHES', icon: 'bi-building',     tint: 'green'  },
     { label: 'Delivery routes',     description: 'Sales territories agents and van loads anchor to.',  link: 'routes',     permission: 'ADMIN.MANAGE_ROUTES',  icon: 'bi-signpost-split', tint: 'orange' },
     { label: 'Tills',               description: 'POS terminals registered against each branch.',      link: 'tills',      permission: 'ADMIN.MANAGE_BRANCHES', icon: 'bi-cash-stack',   tint: 'amber'  },

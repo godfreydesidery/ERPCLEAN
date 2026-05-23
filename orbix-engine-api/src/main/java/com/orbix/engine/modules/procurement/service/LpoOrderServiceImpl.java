@@ -17,7 +17,8 @@ import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
 import com.orbix.engine.modules.procurement.repository.LpoOrderLineRepository;
 import com.orbix.engine.modules.procurement.repository.LpoOrderRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,9 +49,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.procurement.lpo-auto-approval-threshold}")
-    private BigDecimal autoApprovalThreshold;
+    private final SettingsService settings;
 
     @Override
     @Transactional
@@ -92,6 +91,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Auditable(action = "SUBMIT", entityType = AGG)
     public LpoOrderDto submit(Long lpoId) {
         LpoOrder order = requireOrder(lpoId);
+        BigDecimal autoApprovalThreshold = settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL);
         boolean autoApprove = autoApprovalThreshold.signum() > 0
             && order.getTotalAmount().compareTo(autoApprovalThreshold) <= 0;
         if (autoApprove) {
