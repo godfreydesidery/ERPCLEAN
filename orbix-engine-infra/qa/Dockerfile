@@ -17,8 +17,12 @@
 # ---------- Stage 1: build the Angular bundle ----------
 FROM node:20-alpine AS web-build
 WORKDIR /web
-COPY orbix-engine-web/package.json orbix-engine-web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# package-lock.json is gitignored in this repo, so the box's `git clone` doesn't
+# have it — use `npm install` (resolves from package.json) rather than `npm ci`
+# (which demands a committed lockfile). Commit the lockfile and switch back to
+# `npm ci` if you want byte-reproducible installs.
+COPY orbix-engine-web/package.json ./
+RUN npm install --no-audit --no-fund
 COPY orbix-engine-web/ ./
 RUN npm run build
 # Output lands in /web/dist/orbix-engine-web/browser/ (Angular application builder).
