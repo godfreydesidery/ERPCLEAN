@@ -2,11 +2,13 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CompanyService } from './company.service';
 import { Company, UpdateCompanyRequest } from './company.models';
+import { FilterableSelectComponent, FilterOption } from '../../../shared/filter-select.component';
+import { CurrencyAdminService } from '../currencies/currency-admin.service';
 
 @Component({
   selector: 'orbix-company-profile',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, FilterableSelectComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Settings</p>
@@ -42,17 +44,19 @@ import { Company, UpdateCompanyRequest } from './company.models';
               <label class="form-label small mb-1">VRN</label>
               <input class="form-control form-control-sm" [(ngModel)]="f.vrn" name="vrn">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
               <label class="form-label small mb-1">Currency *</label>
-              <input class="form-control form-control-sm text-uppercase" maxlength="3" [(ngModel)]="f.currencyCode" name="currencyCode">
+              <orbix-filter-select [options]="currencyOptions()" [value]="f.currencyCode"
+                                   (valueChange)="f.currencyCode = $event ?? ''" placeholder="Search currency…"/>
             </div>
             <div class="col-md-2">
               <label class="form-label small mb-1">Country *</label>
               <input class="form-control form-control-sm text-uppercase" maxlength="2" [(ngModel)]="f.countryCode" name="countryCode">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-4">
               <label class="form-label small mb-1">Time zone *</label>
-              <input class="form-control form-control-sm" [(ngModel)]="f.timeZone" name="timeZone">
+              <orbix-filter-select [options]="tzOptions()" [value]="f.timeZone"
+                                   (valueChange)="f.timeZone = $event ?? ''" placeholder="Search time zone…"/>
             </div>
 
             <div class="col-md-4">
@@ -100,6 +104,7 @@ import { Company, UpdateCompanyRequest } from './company.models';
 })
 export class CompanyProfileComponent implements OnInit {
   private readonly api = inject(CompanyService);
+  private readonly currencyApi = inject(CurrencyAdminService);
 
   protected readonly form = signal<UpdateCompanyRequest | null>(null);
   protected readonly code = signal('');
@@ -107,7 +112,17 @@ export class CompanyProfileComponent implements OnInit {
   protected readonly info = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
 
-  ngOnInit(): void { this.reload(); }
+  protected readonly currencyOptions = signal<FilterOption[]>([]);
+  protected readonly tzOptions = signal<FilterOption[]>(loadTimeZones());
+
+  ngOnInit(): void {
+    this.reload();
+    this.currencyApi.listCurrencies().subscribe({
+      next: list => this.currencyOptions.set(
+        list.map(c => ({ value: c.code, label: `${c.code} — ${c.name}` }))),
+      error: () => this.currencyOptions.set([])
+    });
+  }
 
   reload(): void {
     this.info.set(null);
@@ -148,4 +163,20 @@ export class CompanyProfileComponent implements OnInit {
       defaultQuotationNote: c.defaultQuotationNote
     });
   }
+}
+
+/** IANA time zones from the browser (Intl), with a small fallback for older engines. */
+function loadTimeZones(): FilterOption[] {
+  const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
+  let zones: string[];
+  try {
+    zones = intl.supportedValuesOf ? intl.supportedValuesOf('timeZone') : [];
+  } catch {
+    zones = [];
+  }
+  if (zones.length === 0) {
+    zones = ['UTC', 'Africa/Kampala', 'Africa/Nairobi', 'Africa/Dar_es_Salaam', 'Africa/Kigali',
+      'Africa/Lagos', 'Africa/Johannesburg', 'Europe/London', 'America/New_York'];
+  }
+  return zones.map(z => ({ value: z, label: z }));
 }
