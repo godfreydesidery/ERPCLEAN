@@ -11,6 +11,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.PostPettyCashRequestDto;
 import com.orbix.engine.modules.pos.domain.entity.PettyCash;
@@ -59,6 +60,7 @@ class PettyCashServiceImplTest {
     @Mock private PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private PettyCashServiceImpl service;
 

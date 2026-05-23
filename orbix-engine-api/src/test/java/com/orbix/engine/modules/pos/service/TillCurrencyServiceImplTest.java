@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.entity.Till;
 import com.orbix.engine.modules.pos.domain.entity.TillCurrency;
 import com.orbix.engine.modules.pos.repository.TillCurrencyRepository;
@@ -39,6 +40,7 @@ class TillCurrencyServiceImplTest {
     @Mock private CurrencyRepository currencies;
     @Mock private CompanyRepository companies;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private TillCurrencyServiceImpl service;
 

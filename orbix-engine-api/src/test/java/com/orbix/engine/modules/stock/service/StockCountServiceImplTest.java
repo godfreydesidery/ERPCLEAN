@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockCountRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
@@ -47,6 +48,7 @@ class StockCountServiceImplTest {
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private StockCountServiceImpl service;
 

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.pos.domain.dto.TillReportDto;
 import com.orbix.engine.modules.pos.domain.entity.PettyCash;
 import com.orbix.engine.modules.pos.domain.entity.PosPayment;
@@ -49,6 +50,7 @@ class TillReportServiceImplTest {
     @Mock private CashPickupRepository pickups;
     @Mock private PettyCashRepository pettyCash;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private TillReportServiceImpl service;
 

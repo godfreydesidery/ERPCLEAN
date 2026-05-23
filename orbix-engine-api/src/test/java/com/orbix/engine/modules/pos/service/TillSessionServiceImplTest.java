@@ -3,10 +3,13 @@ package com.orbix.engine.modules.pos.service;
 import com.orbix.engine.modules.admin.domain.entity.Company;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.cash.service.CashLedgerService;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
@@ -24,7 +27,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -63,6 +65,8 @@ class TillSessionServiceImplTest {
     @Mock private PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private SettingsService settings;
 
     @InjectMocks private TillSessionServiceImpl service;
 
@@ -72,7 +76,8 @@ class TillSessionServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
-        ReflectionTestUtils.setField(service, "varianceThreshold", new BigDecimal("1000"));
+        lenient().when(settings.getDecimal(SettingKey.POS_SESSION_VARIANCE_THRESHOLD))
+            .thenReturn(new BigDecimal("1000"));
 
         Till till = new Till(COMPANY_ID, BRANCH_ID, "TILL-1", "Main till", PRICE_LIST_ID, ACTOR_ID);
         till.setId(TILL_ID);

@@ -12,6 +12,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
 import com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository;
@@ -54,6 +55,7 @@ class SupplierPaymentServiceImplTest {
     @Mock private CashLedgerService cashLedger;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private SupplierPaymentServiceImpl service;
 

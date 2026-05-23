@@ -2,6 +2,7 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -46,6 +47,7 @@ class StockBatchServiceImplTest {
     @Mock private StockMoveService stockMoveService;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private StockBatchServiceImpl service;
 
@@ -208,6 +210,7 @@ class StockBatchServiceImplTest {
     void listExpiringSoon_filtersByCompanyAndCutoff() {
         LocalDate today = LocalDate.now();
         StockBatch soon = batch(11L, "B-NEAR", today.plusDays(2), new BigDecimal("5"), new BigDecimal("100"));
+        when(branchScope.requireReadable(null)).thenReturn(null);  // company-wide caller: no branch filter
         when(batches.findByCompanyIdAndStatusAndExpiryAtBeforeOrderByExpiryAtAscIdAsc(
                 eq(COMPANY_ID), eq(StockBatchStatus.ACTIVE), any(LocalDate.class)))
             .thenReturn(List.of(soon));
