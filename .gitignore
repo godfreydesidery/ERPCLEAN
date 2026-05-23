@@ -71,3 +71,5 @@ orbix-engine-infra/qa/deploy.env.local
 
 # QA runtime secrets (rootadmin password + bootstrap reset token) — lives on the box
 orbix-engine-infra/qa/orbix.env
+# Human-readable QA credentials record (generated secrets) — never commit
+orbix-engine-infra/qa/CREDENTIALS.local.md
