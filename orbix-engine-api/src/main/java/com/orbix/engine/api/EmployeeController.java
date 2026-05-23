@@ -1,19 +1,21 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.CreateEmployeeRequestDto;
 import com.orbix.engine.modules.party.domain.dto.EmployeeResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateEmployeeRequestDto;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.service.EmployeeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 
 /** Employee management (F1.7). Gated by {@code PARTY.MANAGE_EMPLOYEES}. */
 @RestController
@@ -26,8 +28,12 @@ public class EmployeeController {
     private final EmployeeService service;
 
     @GetMapping
-    public List<EmployeeResponseDto> listEmployees() {
-        return service.listEmployees();
+    public PageDto<EmployeeResponseDto> listEmployees(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) PartyStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return service.listEmployees(q, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{partyUid}")

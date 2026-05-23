@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../core/branch/branch.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { PartyService } from './party.service';
 import { PartyDetailsFormComponent } from './party-details-form.component';
 import {
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'orbix-employees',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, PartyDetailsFormComponent, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, PartyDetailsFormComponent, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -27,7 +28,7 @@ import {
           <a routerLink=".." class="text-decoration-none text-secondary">Parties</a> &rsaquo; Employees
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Employees</h1>
-        <p class="text-secondary mb-0 small">{{ employees().length }} employee{{ employees().length === 1 ? '' : 's' }} on the roster.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} employee{{ total() === 1 ? '' : 's' }} on the roster.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()"
               [title]="showForm() ? 'Close the form without saving' : 'Open the form to register a new employee'">
@@ -161,13 +162,13 @@ import {
         <div class="search-box flex-grow-1">
           <i class="bi bi-search"></i>
           <input type="search" class="form-control" placeholder="Search by employee code, name or title"
-                 [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+                 [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()">
         </div>
         <div class="status-pills d-flex gap-1 flex-wrap">
           @for (opt of statusOptions; track opt.value) {
             <button type="button" class="status-pill"
                     [class.is-active]="statusFilter() === opt.value"
-                    (click)="statusFilter.set(opt.value)">
+                    (click)="setFilter(opt.value)">
               {{ opt.label }}
             </button>
           }
@@ -176,7 +177,7 @@ import {
     </div>
 
     <div class="card border-0 shadow-sm overflow-hidden">
-      @if (filtered().length === 0) {
+      @if (employees().length === 0) {
         <div class="p-5 text-center">
           <div class="empty-icon mx-auto mb-3"><i class="bi bi-person-badge"></i></div>
           <h2 class="h6 fw-bold mb-1 text-dark">No employees match</h2>
@@ -199,7 +200,7 @@ import {
               </tr>
             </thead>
             <tbody>
-              @for (employee of filtered(); track employee.partyId) {
+              @for (employee of employees(); track employee.partyId) {
                 <tr [class.table-active]="editing()?.partyId === employee.partyId">
                   <td><span class="badge text-bg-light border text-secondary font-monospace">{{ employee.employeeCode }}</span></td>
                   <td class="fw-semibold text-dark">{{ employee.party.name }}</td>
@@ -237,7 +238,7 @@ import {
         </div>
 
         <ul class="list-unstyled mb-0 d-md-none">
-          @for (employee of filtered(); track employee.partyId) {
+          @for (employee of employees(); track employee.partyId) {
             <li class="party-card">
               <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                 <div class="flex-grow-1">
@@ -273,6 +274,13 @@ import {
             </li>
           }
         </ul>
+      }
+      @if (totalPages() > 1) {
+        <div class="card-footer bg-white border-top">
+          <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                       [totalElements]="total()" [pageSize]="pageSize"
+                       (pageChange)="goTo($event)"/>
+        </div>
       }
     </div>
     }
@@ -373,6 +381,9 @@ export class EmployeesComponent implements OnInit {
   protected readonly partyMode = signal<'pick' | 'create'>('pick');
 
   protected readonly partyOptions = computed<SearchSelectOption[]>(() => {
+    // Exclusion is best-effort: employees() holds only the current page, so a
+    // party that's already an employee on another page may still appear here —
+    // the backend rejects the duplicate role with a clear message.
     const employeeIds = new Set(this.employees().map(e => e.partyId));
     return this.parties()
       .filter(p => p.status === 'ACTIVE' && !employeeIds.has(p.id))
@@ -391,7 +402,6 @@ export class EmployeesComponent implements OnInit {
   });
 
   protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
-  protected readonly searchSignal = signal('');
   protected searchTerm = '';
 
   protected readonly statusOptions = [
@@ -401,17 +411,12 @@ export class EmployeesComponent implements OnInit {
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
-  protected readonly filtered = computed(() => {
-    const status = this.statusFilter();
-    const q = this.searchSignal().trim().toLowerCase();
-    return this.employees().filter(e => {
-      if (status && e.party.status !== status) return false;
-      if (!q) return true;
-      return e.employeeCode.toLowerCase().includes(q)
-          || e.party.name.toLowerCase().includes(q)
-          || (e.jobTitle?.toLowerCase().includes(q) ?? false);
-    });
-  });
+  // --- server-side pagination state ----------------------------------------
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   protected partyId: string | null = null;
   protected employeeCode = '';
@@ -543,14 +548,32 @@ export class EmployeesComponent implements OnInit {
     this.hireDate = null;
   }
 
+  onSearchChange(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { this.pageNo.set(0); this.load(); }, 300);
+  }
+
+  setFilter(status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null): void {
+    this.statusFilter.set(status);
+    this.pageNo.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.load();
+  }
+
   private load(): void {
-    this.party.listEmployees().subscribe({
-      next: list => this.employees.set(list),
+    this.party.listEmployees(this.searchTerm, this.statusFilter(), this.pageNo(), this.pageSize).subscribe({
+      next: pageData => {
+        this.employees.set(pageData.content);
+        this.total.set(pageData.totalElements);
+        this.totalPages.set(pageData.totalPages);
+        this.pageNo.set(pageData.page);
+      },
       error: err => this.showError(err)
-    });
-    this.party.listParties().subscribe({
-      next: list => this.parties.set(list),
-      error: () => { /* picker is auxiliary */ }
     });
   }
 

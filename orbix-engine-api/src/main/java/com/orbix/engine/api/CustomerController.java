@@ -1,19 +1,21 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.dto.CustomerResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateCustomerRequestDto;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 
 /** Customer management (F1.7). Gated by {@code PARTY.MANAGE_CUSTOMERS}. */
 @RestController
@@ -26,8 +28,12 @@ public class CustomerController {
     private final CustomerService service;
 
     @GetMapping
-    public List<CustomerResponseDto> listCustomers() {
-        return service.listCustomers();
+    public PageDto<CustomerResponseDto> listCustomers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) PartyStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return service.listCustomers(q, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{partyUid}")

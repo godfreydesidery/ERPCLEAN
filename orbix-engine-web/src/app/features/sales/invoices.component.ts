@@ -485,8 +485,10 @@ export class InvoicesComponent implements OnInit {
   }
 
   private loadSelectables(): void {
-    this.party.listCustomers().subscribe({
-      next: rows => this.customers.set(rows.filter(c => c.party.status === 'ACTIVE')),
+    // Picker source: pull a large active page (a type-ahead picker is the
+    // longer-term answer, mirroring the items picker below).
+    this.party.listCustomers('', 'ACTIVE', 0, 500).subscribe({
+      next: page => this.customers.set(page.content),
       error: err => this.showError(err)
     });
     this.party.listSalesAgents().subscribe({

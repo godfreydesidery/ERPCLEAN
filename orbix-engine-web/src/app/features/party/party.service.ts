@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, catchError, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
+import { Page } from '../../core/api/page';
 import {
   CreateCustomerRequest,
   CreateEmployeeRequest,
@@ -50,8 +51,10 @@ export class PartyService {
 
   // ---- customers ------------------------------------------------------------
 
-  listCustomers(): Observable<Customer[]> {
-    return unwrap(this.http.get<ApiResponse<Customer[]>>(`${this.base}/customers`));
+  listCustomers(q: string, status: string | null, page: number, size: number): Observable<Page<Customer>> {
+    return unwrap(this.http.get<ApiResponse<Page<Customer>>>(
+      `${this.base}/customers`, { params: pageParams(q, status, page, size) }
+    ));
   }
 
   createCustomer(request: CreateCustomerRequest): Observable<Customer> {
@@ -74,8 +77,10 @@ export class PartyService {
 
   // ---- suppliers ------------------------------------------------------------
 
-  listSuppliers(): Observable<Supplier[]> {
-    return unwrap(this.http.get<ApiResponse<Supplier[]>>(`${this.base}/suppliers`));
+  listSuppliers(q: string, status: string | null, page: number, size: number): Observable<Page<Supplier>> {
+    return unwrap(this.http.get<ApiResponse<Page<Supplier>>>(
+      `${this.base}/suppliers`, { params: pageParams(q, status, page, size) }
+    ));
   }
 
   createSupplier(request: CreateSupplierRequest): Observable<Supplier> {
@@ -98,8 +103,10 @@ export class PartyService {
 
   // ---- employees ------------------------------------------------------------
 
-  listEmployees(): Observable<Employee[]> {
-    return unwrap(this.http.get<ApiResponse<Employee[]>>(`${this.base}/employees`));
+  listEmployees(q: string, status: string | null, page: number, size: number): Observable<Page<Employee>> {
+    return unwrap(this.http.get<ApiResponse<Page<Employee>>>(
+      `${this.base}/employees`, { params: pageParams(q, status, page, size) }
+    ));
   }
 
   createEmployee(request: CreateEmployeeRequest): Observable<Employee> {
@@ -143,4 +150,12 @@ export class PartyService {
   activateSalesAgent(partyUid: string): Observable<void> {
     return this.http.post(`${this.base}/sales-agents/uid/${partyUid}/activate`, {}).pipe(map(() => void 0));
   }
+}
+
+/** Builds the standard list query params (q / status / page / size), omitting blanks. */
+function pageParams(q: string, status: string | null, page: number, size: number): HttpParams {
+  let params = new HttpParams().set('page', page).set('size', size);
+  if (q?.trim()) params = params.set('q', q.trim());
+  if (status) params = params.set('status', status);
+  return params;
 }

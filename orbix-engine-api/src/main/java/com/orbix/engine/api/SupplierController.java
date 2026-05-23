@@ -1,19 +1,21 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.CreateSupplierRequestDto;
 import com.orbix.engine.modules.party.domain.dto.SupplierResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateSupplierRequestDto;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.service.SupplierService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 
 /** Supplier management (F1.7). Gated by {@code PARTY.MANAGE_SUPPLIERS}. */
 @RestController
@@ -26,8 +28,12 @@ public class SupplierController {
     private final SupplierService service;
 
     @GetMapping
-    public List<SupplierResponseDto> listSuppliers() {
-        return service.listSuppliers();
+    public PageDto<SupplierResponseDto> listSuppliers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) PartyStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return service.listSuppliers(q, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{partyUid}")
