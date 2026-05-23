@@ -197,7 +197,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
               <tbody>
                 @for (u of filtered(); track u.id) {
                   <tr class="u-table-row"
-                      [routerLink]="['/admin/users', u.id]"
+                      [routerLink]="['/admin/users', u.uid]"
                       tabindex="0">
                     <td>
                       <div class="d-flex align-items-center gap-2">
@@ -242,7 +242,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
             @for (u of filtered(); track u.id) {
               <li>
                 <a class="u-row text-decoration-none"
-                   [routerLink]="['/admin/users', u.id]">
+                   [routerLink]="['/admin/users', u.uid]">
                   <span class="u-avatar">{{ initials(u.displayName) }}</span>
                   <div class="flex-grow-1 min-w-0">
                     <p class="fw-semibold text-dark mb-0 text-truncate">{{ u.displayName }}</p>
@@ -478,12 +478,12 @@ export class UserAdminComponent implements OnInit {
           // Stash the temp password so the detail page can show the banner
           // after navigation.
           globalThis.sessionStorage.setItem(
-            'orbix.tempPwd.' + resp.user.id,
+            'orbix.tempPwd.' + resp.user.uid,
             JSON.stringify({ username: resp.user.username, password: resp.temporaryPassword })
           );
         }
         // Hand off to the detail page so the admin can assign roles.
-        void this.router.navigate(['/admin/users', resp.user.id]);
+        void this.router.navigate(['/admin/users', resp.user.uid]);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });

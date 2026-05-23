@@ -23,38 +23,38 @@ export class UserAdminService {
     return unwrap(this.http.get<ApiResponse<UserSummary[]>>(`${this.base}/users`));
   }
 
-  getUser(id: string): Observable<UserDetail> {
-    return unwrap(this.http.get<ApiResponse<UserDetail>>(`${this.base}/users/${id}`));
+  getUser(uid: string): Observable<UserDetail> {
+    return unwrap(this.http.get<ApiResponse<UserDetail>>(`${this.base}/users/uid/${uid}`));
   }
 
   createUser(request: CreateUserRequest): Observable<CreateUserResponse> {
     return unwrap(this.http.post<ApiResponse<CreateUserResponse>>(`${this.base}/users`, request));
   }
 
-  updateUser(id: string, request: UpdateUserRequest): Observable<UserDetail> {
-    return unwrap(this.http.patch<ApiResponse<UserDetail>>(`${this.base}/users/${id}`, request));
+  updateUser(uid: string, request: UpdateUserRequest): Observable<UserDetail> {
+    return unwrap(this.http.patch<ApiResponse<UserDetail>>(`${this.base}/users/uid/${uid}`, request));
   }
 
-  resetPassword(id: string, request: ResetPasswordRequest): Observable<ResetPasswordResponse> {
+  resetPassword(uid: string, request: ResetPasswordRequest): Observable<ResetPasswordResponse> {
     return unwrap(this.http.post<ApiResponse<ResetPasswordResponse>>(
-      `${this.base}/users/${id}/reset-password`, request
+      `${this.base}/users/uid/${uid}/reset-password`, request
     ));
   }
 
-  disableUser(id: string): Observable<UserDetail> {
-    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/${id}/disable`, {}));
+  disableUser(uid: string): Observable<UserDetail> {
+    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/uid/${uid}/disable`, {}));
   }
 
-  enableUser(id: string): Observable<UserDetail> {
-    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/${id}/enable`, {}));
+  enableUser(uid: string): Observable<UserDetail> {
+    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/uid/${uid}/enable`, {}));
   }
 
-  unlockUser(id: string): Observable<UserDetail> {
-    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/${id}/unlock`, {}));
+  unlockUser(uid: string): Observable<UserDetail> {
+    return unwrap(this.http.post<ApiResponse<UserDetail>>(`${this.base}/users/uid/${uid}/unlock`, {}));
   }
 
-  forceLogout(id: string): Observable<void> {
-    return this.http.post(`${this.base}/users/${id}/force-logout`, {}).pipe(map(() => void 0));
+  forceLogout(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/users/uid/${uid}/force-logout`, {}).pipe(map(() => void 0));
   }
 
   changeMyPassword(request: ChangePasswordRequest): Observable<void> {

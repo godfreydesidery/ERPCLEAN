@@ -377,14 +377,14 @@ export class UserDetailComponent implements OnInit {
   protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as string | null };
 
   ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id');
-    if (!id) {
-      this.error.set('Invalid user id');
+    const uid = this.route.snapshot.paramMap.get('uid');
+    if (!uid) {
+      this.error.set('Invalid user uid');
       this.loading.set(false);
       return;
     }
     // Pick up a temp-password handoff from the create flow on the list page.
-    const stashKey = 'orbix.tempPwd.' + id;
+    const stashKey = 'orbix.tempPwd.' + uid;
     const stash = globalThis.sessionStorage.getItem(stashKey);
     if (stash) {
       try {
@@ -394,7 +394,7 @@ export class UserDetailComponent implements OnInit {
       globalThis.sessionStorage.removeItem(stashKey);
     }
 
-    this.loadUser(id);
+    this.loadUser(uid);
     this.branchService.listBranches().subscribe({
       next: list => this.branches.set(list),
       error: () => this.branches.set([])
@@ -442,12 +442,12 @@ export class UserDetailComponent implements OnInit {
     const branchId = pick === '' ? null : pick;
     this.busy.set(true);
     this.error.set(null);
-    this.roleApi.grantRole(role.id, { username: user.username, branchId }).subscribe({
+    this.roleApi.grantRole(role.uid, { username: user.username, branchId }).subscribe({
       next: () => {
         this.busy.set(false);
         this.grantPick[role.id] = null;
         this.info.set(`Granted ${role.code} to ${user.username}.`);
-        this.loadUser(user.id);
+        this.loadUser(user.uid);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -457,11 +457,11 @@ export class UserDetailComponent implements OnInit {
     if (!globalThis.confirm(`Revoke this role from ${user.username}?`)) return;
     this.busy.set(true);
     this.error.set(null);
-    this.roleApi.revokeGrant(grant.id).subscribe({
+    this.roleApi.revokeGrant(grant.uid).subscribe({
       next: () => {
         this.busy.set(false);
         this.info.set(`Role revoked from ${user.username}.`);
-        this.loadUser(user.id);
+        this.loadUser(user.uid);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -470,7 +470,7 @@ export class UserDetailComponent implements OnInit {
   // --- profile + lifecycle ------------------------------------------------
 
   onSave(user: UserDetail): void {
-    this.run(this.api.updateUser(user.id, {
+    this.run(this.api.updateUser(user.uid, {
       displayName: this.editForm.displayName.trim(),
       email: emptyToNull(this.editForm.email),
       phone: emptyToNull(this.editForm.phone),
@@ -484,21 +484,21 @@ export class UserDetailComponent implements OnInit {
 
   onDisable(user: UserDetail): void {
     if (!globalThis.confirm(`Disable ${user.username}? They will lose access immediately.`)) return;
-    this.run(this.api.disableUser(user.id), updated => {
+    this.run(this.api.disableUser(user.uid), updated => {
       this.info.set(`${user.username} disabled.`);
       this.user.set(updated);
     });
   }
 
   onEnable(user: UserDetail): void {
-    this.run(this.api.enableUser(user.id), updated => {
+    this.run(this.api.enableUser(user.uid), updated => {
       this.info.set(`${user.username} re-enabled.`);
       this.user.set(updated);
     });
   }
 
   onUnlock(user: UserDetail): void {
-    this.run(this.api.unlockUser(user.id), updated => {
+    this.run(this.api.unlockUser(user.uid), updated => {
       this.info.set(`${user.username} unlocked.`);
       this.user.set(updated);
     });
@@ -508,7 +508,7 @@ export class UserDetailComponent implements OnInit {
     if (!globalThis.confirm(`Reset password for ${user.username}? A temporary password will be generated.`)) return;
     this.busy.set(true);
     this.error.set(null);
-    this.api.resetPassword(user.id, {
+    this.api.resetPassword(user.uid, {
       newPassword: null,
       mustChangePassword: true
     }).subscribe({
@@ -530,14 +530,14 @@ export class UserDetailComponent implements OnInit {
 
   onForceLogout(user: UserDetail): void {
     if (!globalThis.confirm(`Force ${user.username} out of every session?`)) return;
-    this.run(this.api.forceLogout(user.id), () => {
+    this.run(this.api.forceLogout(user.uid), () => {
       this.info.set(`${user.username} signed out everywhere.`);
     });
   }
 
-  private loadUser(id: string): void {
+  private loadUser(uid: string): void {
     this.loading.set(true);
-    this.api.getUser(id).subscribe({
+    this.api.getUser(uid).subscribe({
       next: detail => {
         this.user.set(detail);
         this.applyEditForm(detail);

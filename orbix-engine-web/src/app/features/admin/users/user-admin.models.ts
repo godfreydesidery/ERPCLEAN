@@ -4,6 +4,7 @@ export type AppUserStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'SUSPENDED';
 
 export interface UserSummary {
   id: string;
+  uid: string;
   username: string;
   displayName: string;
   email: string | null;
@@ -18,6 +19,7 @@ export interface UserSummary {
 
 export interface RoleGrantSummary {
   id: string;
+  uid: string;
   userId: string;
   roleId: string;
   username: string | null;
@@ -29,6 +31,7 @@ export interface RoleGrantSummary {
 
 export interface UserDetail {
   id: string;
+  uid: string;
   username: string;
   displayName: string;
   email: string | null;

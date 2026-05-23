@@ -10,12 +10,16 @@ export const routes: Routes = [
     loadComponent: () => import('./users/user-admin.component').then(m => m.UserAdminComponent)
   },
   {
-    path: 'users/:id',
+    path: 'users/:uid',
     loadComponent: () => import('./users/user-detail.component').then(m => m.UserDetailComponent)
   },
   {
     path: 'roles',
     loadComponent: () => import('./roles/role-admin.component').then(m => m.RoleAdminComponent)
+  },
+  {
+    path: 'audit',
+    loadComponent: () => import('./audit/audit-log.component').then(m => m.AuditLogComponent)
   },
   {
     path: 'branches',

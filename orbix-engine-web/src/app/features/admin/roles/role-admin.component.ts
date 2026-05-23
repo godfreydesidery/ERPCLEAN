@@ -99,7 +99,7 @@ interface GrantGroup {
                 <li>
                   <button type="button" class="rl-row"
                           [class.is-active]="selected()?.id === role.id"
-                          (click)="selectRole(role.id)">
+                          (click)="selectRole(role.uid)">
                     <div class="flex-grow-1 min-w-0">
                       <p class="fw-semibold text-dark mb-0 text-truncate">{{ role.name }}</p>
                       <p class="small text-secondary mb-0 font-monospace">{{ role.code }}</p>
@@ -519,13 +519,13 @@ export class RoleAdminComponent implements OnInit {
     this.selectedPermissionIds.set(next);
   }
 
-  selectRole(id: string): void {
+  selectRole(uid: string): void {
     this.error.set(null);
     // Reset the Granted-to filter/pagination when switching roles.
     this.grantSearchTerm = '';
     this.grantSearchSignal.set('');
     this.grantsPage.set(0);
-    this.api.getRole(id).subscribe({
+    this.api.getRole(uid).subscribe({
       next: role => {
         this.selected.set(role);
         this.editName = role.name;
@@ -534,7 +534,7 @@ export class RoleAdminComponent implements OnInit {
       },
       error: err => this.showError(err)
     });
-    this.api.listGrants(id).subscribe({
+    this.api.listGrants(uid).subscribe({
       next: grants => this.grants.set(grants),
       error: err => this.showError(err)
     });
@@ -556,7 +556,7 @@ export class RoleAdminComponent implements OnInit {
   }
 
   saveDetails(role: RoleDetail): void {
-    this.run(this.api.updateRole(role.id, {
+    this.run(this.api.updateRole(role.uid, {
       name: this.editName.trim(),
       description: this.editDescription.trim()
     }), updated => {
@@ -567,7 +567,7 @@ export class RoleAdminComponent implements OnInit {
 
   savePermissions(role: RoleDetail): void {
     this.run(
-      this.api.setPermissions(role.id, [...this.selectedPermissionIds()]),
+      this.api.setPermissions(role.uid, [...this.selectedPermissionIds()]),
       updated => {
         this.applySelected(updated);
         this.loadRoles();
@@ -576,7 +576,7 @@ export class RoleAdminComponent implements OnInit {
   }
 
   deleteRole(role: RoleDetail): void {
-    this.run(this.api.deleteRole(role.id), () => {
+    this.run(this.api.deleteRole(role.uid), () => {
       this.selected.set(null);
       this.grants.set([]);
       this.loadRoles();
