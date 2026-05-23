@@ -62,6 +62,9 @@ public class AppUser {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "last_failed_login_at")
+    private Instant lastFailedLoginAt;
+
     /**
      * Forces the user to set a new password on their next login. Flipped on
      * by admin-issued create / reset-password flows; flipped off by the
@@ -113,11 +116,24 @@ public class AppUser {
         this.lastLoginAt = at;
         this.failedLoginCount = 0;
         this.lockedUntil = null;
+        this.lastFailedLoginAt = null;
         this.updatedAt = at;
     }
 
-    public void recordFailedLogin(Instant at, int lockoutThreshold, Duration lockoutFor) {
+    public void recordFailedLogin(Instant at, int lockoutThreshold, Duration lockoutFor, Duration failWindow) {
+        // Decay the counter before counting this attempt: if the previous
+        // lockout has already elapsed, or the last failure is older than the
+        // rolling window, start fresh. Otherwise a single miss right after a
+        // lockout expires would instantly re-lock, and stale failures from
+        // long ago would compound into a lockout weeks later.
+        boolean lockoutElapsed = lockedUntil != null && at.isAfter(lockedUntil);
+        boolean windowExpired = lastFailedLoginAt == null || at.isAfter(lastFailedLoginAt.plus(failWindow));
+        if (lockoutElapsed || windowExpired) {
+            this.failedLoginCount = 0;
+            this.lockedUntil = null;
+        }
         this.failedLoginCount++;
+        this.lastFailedLoginAt = at;
         if (failedLoginCount >= lockoutThreshold) {
             this.lockedUntil = at.plus(lockoutFor);
         }
@@ -152,6 +168,7 @@ public class AppUser {
         if (next == AppUserStatus.ACTIVE) {
             this.lockedUntil = null;
             this.failedLoginCount = 0;
+            this.lastFailedLoginAt = null;
         }
         touch(actorId);
     }
@@ -159,6 +176,7 @@ public class AppUser {
     public void unlock(Long actorId) {
         this.lockedUntil = null;
         this.failedLoginCount = 0;
+        this.lastFailedLoginAt = null;
         touch(actorId);
     }
 

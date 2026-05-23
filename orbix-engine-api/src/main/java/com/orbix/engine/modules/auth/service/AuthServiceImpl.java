@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,6 +29,10 @@ public class AuthServiceImpl implements AuthService {
 
     private static final int LOCKOUT_THRESHOLD = 5;
     private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
+    // Rolling window over which failed attempts accumulate. Once a user goes
+    // this long without a failure, the counter decays so stale misses can't
+    // compound into an instant lockout weeks later.
+    private static final Duration FAILED_LOGIN_WINDOW = Duration.ofMinutes(15);
     private static final SecureRandom RNG = new SecureRandom();
 
     private final AppUserRepository users;
@@ -37,6 +42,10 @@ public class AuthServiceImpl implements AuthService {
     private final PermissionResolverService permissions;
     private final Duration accessTtl;
     private final Duration refreshTtl;
+    /** A real bcrypt hash to verify against when no/locked user matches, so a
+     *  missing or locked account costs the same time as a real password check
+     *  (defeats username enumeration by response timing). */
+    private final String dummyHash;
 
     public AuthServiceImpl(AppUserRepository users,
                            RefreshTokenRepository refreshTokens,
@@ -52,21 +61,29 @@ public class AuthServiceImpl implements AuthService {
         this.permissions = permissions;
         this.accessTtl = accessTtl;
         this.refreshTtl = refreshTtl;
+        this.dummyHash = passwords.encode(new BigInteger(130, RNG).toString(32));
     }
 
     @Override
-    @Transactional
+    // noRollbackFor: the failed-login path writes (increments the lockout
+    // counter) and THEN throws. Default rollback-on-RuntimeException would
+    // discard that write, so the counter never advanced and lockout never
+    // engaged. Keep the increment committed while still surfacing the 401.
+    @Transactional(noRollbackFor = InvalidCredentialsException.class)
     public LoginResponseDto login(LoginRequestDto request) {
-        AppUser user = users.findByUsername(request.username())
-            .orElseThrow(InvalidCredentialsException::new);
-
+        AppUser user = users.findByUsername(request.username()).orElse(null);
         Instant now = Instant.now();
-        if (!user.canLogIn(now)) {
+
+        if (user == null || !user.canLogIn(now)) {
+            // Spend a bcrypt verify against a throwaway hash so a missing or
+            // locked account isn't distinguishable from a wrong password by
+            // response timing (username enumeration defence).
+            passwords.matches(request.password(), dummyHash);
             throw new InvalidCredentialsException();
         }
 
         if (!passwords.matches(request.password(), user.getPasswordHash())) {
-            user.recordFailedLogin(now, LOCKOUT_THRESHOLD, LOCKOUT_DURATION);
+            user.recordFailedLogin(now, LOCKOUT_THRESHOLD, LOCKOUT_DURATION, FAILED_LOGIN_WINDOW);
             users.save(user);
             throw new InvalidCredentialsException();
         }
@@ -78,7 +95,10 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    // noRollbackFor: the theft branch revokes all of the user's tokens and THEN
+    // throws. Default rollback-on-RuntimeException would undo the revocation,
+    // defeating reuse-detection entirely. Commit the revoke, still return 401.
+    @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
     public LoginResponseDto refresh(String rawRefreshToken) {
         Instant now = Instant.now();
         String hash = hash(rawRefreshToken);
@@ -86,10 +106,16 @@ public class AuthServiceImpl implements AuthService {
         RefreshToken stored = refreshTokens.findByTokenHash(hash)
             .orElseThrow(InvalidRefreshTokenException::new);
 
-        if (!stored.isUsable(now)) {
-            // Theft signal: token was already revoked OR expired — burn every refresh token for this user.
+        if (stored.getRevokedAt() != null) {
+            // True theft signal: a single-use token presented again after it was
+            // already rotated/revoked. Burn every refresh token for this user.
             refreshTokens.revokeAllForUser(stored.getUserId(), now);
-            log.warn("Refresh token reused or expired for user {} — revoked all tokens", stored.getUserId());
+            log.warn("Refresh token reuse detected for user {} — revoked all tokens", stored.getUserId());
+            throw new InvalidRefreshTokenException();
+        }
+        if (!stored.isUsable(now)) {
+            // Not revoked but unusable ⇒ simply expired. Benign — reject without
+            // nuking the user's other sessions or crying theft.
             throw new InvalidRefreshTokenException();
         }
 
