@@ -1,15 +1,16 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.dto.CustomerResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateCustomerRequestDto;
-
-import java.util.List;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
+import org.springframework.data.domain.Pageable;
 
 /** Customer-role management (F1.7). Reuses an existing party by TIN where possible. */
 public interface CustomerService {
 
-    List<CustomerResponseDto> listCustomers();
+    PageDto<CustomerResponseDto> listCustomers(String q, PartyStatus status, Pageable pageable);
 
     CustomerResponseDto getCustomerByPartyUid(String partyUid);
 

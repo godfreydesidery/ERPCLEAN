@@ -6,6 +6,7 @@ import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
 import com.orbix.engine.modules.party.domain.entity.Party;
 import com.orbix.engine.modules.party.domain.enums.PartyCategory;
 import com.orbix.engine.modules.party.domain.enums.PartyStatus;
+import com.orbix.engine.modules.party.repository.PartyCodeSequenceRepository;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -33,6 +35,7 @@ class PartyServiceImplTest {
     private static final Long ACTOR_ID = 3L;
 
     @Mock private PartyRepository parties;
+    @Mock private PartyCodeSequenceRepository codeSequences;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -115,6 +118,7 @@ class PartyServiceImplTest {
     @Test
     void deactivate_setsInactiveAndEmitsEvent() {
         Party existing = party(50L, COMPANY_ID, "C-1", null);
+        ReflectionTestUtils.setField(existing, "uid", "01ARZ3NDEKTSV4RRFFQ69G5FAV");
         when(parties.findById(50L)).thenReturn(Optional.of(existing));
 
         service.deactivate(50L);

@@ -1,10 +1,12 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { PagerComponent } from '../../../core/ui/pager.component';
 import { UserAdminService } from './user-admin.service';
 import {
   CreateUserRequest,
@@ -27,7 +29,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 @Component({
   selector: 'orbix-user-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -35,7 +37,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
           <a routerLink=".." class="text-decoration-none text-secondary">Admin</a> &rsaquo; Users
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Users</h1>
-        <p class="text-secondary mb-0 small">{{ users().length }} user{{ users().length === 1 ? '' : 's' }} in this company.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} user{{ total() === 1 ? '' : 's' }} in this company.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleNewForm()">
         <i class="bi" [class.bi-plus-lg]="!showNewForm()" [class.bi-x-lg]="showNewForm()"></i>
@@ -99,12 +101,9 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                   <label class="form-label small fw-semibold text-secondary">
                     Default branch <span class="text-muted">(opt)</span>
                   </label>
-                  <select class="form-select" name="branchId" [(ngModel)]="newForm.defaultBranchId">
-                    <option [ngValue]="null">— No default —</option>
-                    @for (b of branches(); track b.id) {
-                      <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="branchOptions()" [(ngModel)]="newForm.defaultBranchId"
+                                       name="branchId"
+                                       placeholder="— No default —"/>
                   <small class="form-text text-secondary">
                     Where the user lands on login. This does NOT grant them access — open the user after
                     creating to assign their roles.
@@ -125,8 +124,8 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
               @if (!newForm.generatePassword) {
                 <label class="form-label small fw-semibold text-secondary">Password</label>
                 <input class="form-control" type="text" name="password" [(ngModel)]="newForm.password"
-                       minlength="8" maxlength="80" required>
-                <small class="form-text text-secondary">Minimum 8 characters. User will be forced to change it on first login.</small>
+                       minlength="10" maxlength="80" required>
+                <small class="form-text text-secondary">Minimum 10 characters. User will be forced to change it on first login.</small>
               }
             </fieldset>
 
@@ -151,13 +150,13 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
           <div class="search-box flex-grow-1">
             <i class="bi bi-search"></i>
             <input type="search" class="form-control" placeholder="Search by username, name or email"
-                   [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+                   [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()">
           </div>
           <div class="status-pills d-flex gap-1 flex-wrap">
-            @for (opt of filterOptions; track opt.value) {
+            @for (opt of SearchSelectOptions; track opt.value) {
               <button type="button" class="status-pill"
                       [class.is-active]="filter() === opt.value"
-                      (click)="filter.set(opt.value)">
+                      (click)="setFilter(opt.value)">
                 {{ opt.label }}
               </button>
             }
@@ -168,16 +167,14 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
       <div class="card border-0 shadow-sm overflow-hidden">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Users</h2>
-          <span class="badge text-bg-light text-secondary">
-            {{ filtered().length }}@if (filtered().length !== users().length) { / {{ users().length }} }
-          </span>
+          <span class="badge text-bg-light text-secondary">{{ total() }}</span>
         </div>
-        @if (filtered().length === 0) {
+        @if (users().length === 0) {
           <div class="p-5 text-center">
             <div class="empty-icon mx-auto mb-3"><i class="bi bi-people"></i></div>
             <p class="small text-secondary mb-0">
-              @if (users().length === 0) { No users yet. }
-              @else { No users match these filters. }
+              @if (searchTerm || filter() !== 'all') { No users match these filters. }
+              @else { No users yet. }
             </p>
           </div>
         } @else {
@@ -195,9 +192,9 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
                 </tr>
               </thead>
               <tbody>
-                @for (u of filtered(); track u.id) {
+                @for (u of users(); track u.id) {
                   <tr class="u-table-row"
-                      [routerLink]="['/admin/users', u.id]"
+                      [routerLink]="['/admin/users', u.uid]"
                       tabindex="0">
                     <td>
                       <div class="d-flex align-items-center gap-2">
@@ -239,10 +236,10 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
 
           <!-- Mobile: card list (tables are painful on small screens) -->
           <ul class="list-unstyled mb-0 u-list d-md-none">
-            @for (u of filtered(); track u.id) {
+            @for (u of users(); track u.id) {
               <li>
                 <a class="u-row text-decoration-none"
-                   [routerLink]="['/admin/users', u.id]">
+                   [routerLink]="['/admin/users', u.uid]">
                   <span class="u-avatar">{{ initials(u.displayName) }}</span>
                   <div class="flex-grow-1 min-w-0">
                     <p class="fw-semibold text-dark mb-0 text-truncate">{{ u.displayName }}</p>
@@ -268,6 +265,13 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
               </li>
             }
           </ul>
+        }
+        @if (totalPages() > 1) {
+          <div class="card-footer">
+            <orbix-pager [page]="page()" [totalPages]="totalPages()"
+                         [totalElements]="total()" [pageSize]="pageSize"
+                         (pageChange)="goTo($event)"/>
+          </div>
         }
       </div>
     }
@@ -387,6 +391,8 @@ export class UserAdminComponent implements OnInit {
   private readonly router = inject(Router);
 
   protected readonly branches = signal<AccessibleBranch[]>([]);
+  protected readonly branchOptions = computed<SearchSelectOption[]>(
+    () => this.branches().map(b => ({ id: b.id, label: `${b.code} · ${b.name}` })));
   protected readonly users = signal<UserSummary[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -396,11 +402,10 @@ export class UserAdminComponent implements OnInit {
 
   protected newForm: CreateForm = blankCreateForm();
 
-  // --- toolbar state ------------------------------------------------------
-  protected readonly searchSignal = signal('');
+  // --- toolbar / server-side pagination state -----------------------------
   protected searchTerm = '';
   protected readonly filter = signal<UserListFilter>('all');
-  protected readonly filterOptions: { label: string; value: UserListFilter }[] = [
+  protected readonly SearchSelectOptions: { label: string; value: UserListFilter }[] = [
     { label: 'All',      value: 'all' },
     { label: 'Active',   value: 'active' },
     { label: 'Disabled', value: 'disabled' },
@@ -408,23 +413,11 @@ export class UserAdminComponent implements OnInit {
     { label: 'Reset due', value: 'reset' },
   ];
 
-  protected readonly filtered = computed(() => {
-    const q = this.searchSignal().trim().toLowerCase();
-    const f = this.filter();
-    return this.users().filter(u => {
-      switch (f) {
-        case 'active':   if (u.status !== 'ACTIVE') return false; break;
-        case 'disabled': if (u.status === 'ACTIVE') return false; break;
-        case 'locked':   if (!u.locked) return false; break;
-        case 'reset':    if (!u.mustChangePassword) return false; break;
-        default: break;
-      }
-      if (!q) return true;
-      return u.username.toLowerCase().includes(q)
-          || u.displayName.toLowerCase().includes(q)
-          || (u.email?.toLowerCase().includes(q) ?? false);
-    });
-  });
+  protected readonly page = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 25;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit(): void {
     this.load();
@@ -444,9 +437,13 @@ export class UserAdminComponent implements OnInit {
     return (first + last.charAt(0)).toUpperCase();
   }
 
-  /** Resolve a default-branch id to its name; falls back to "—" when null. */
-  branchLabel(branchId: string | null): string {
-    if (branchId === null) return '—';
+  /**
+   * Resolve a default-branch id to its name. Returns "—" when there is no
+   * default branch — note the API omits null fields (non_null inclusion), so
+   * the value arrives as undefined, not null.
+   */
+  branchLabel(branchId: string | null | undefined): string {
+    if (!branchId) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;
   }
@@ -478,20 +475,43 @@ export class UserAdminComponent implements OnInit {
           // Stash the temp password so the detail page can show the banner
           // after navigation.
           globalThis.sessionStorage.setItem(
-            'orbix.tempPwd.' + resp.user.id,
+            'orbix.tempPwd.' + resp.user.uid,
             JSON.stringify({ username: resp.user.username, password: resp.temporaryPassword })
           );
         }
         // Hand off to the detail page so the admin can assign roles.
-        void this.router.navigate(['/admin/users', resp.user.id]);
+        void this.router.navigate(['/admin/users', resp.user.uid]);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });
   }
 
+  onSearchChange(): void {
+    // Debounce so we don't hit the server on every keystroke.
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { this.page.set(0); this.load(); }, 300);
+  }
+
+  setFilter(f: UserListFilter): void {
+    this.filter.set(f);
+    this.page.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.page.set(p);
+    this.load();
+  }
+
   private load(): void {
-    this.api.listUsers().subscribe({
-      next: list => this.users.set(list),
+    this.api.listUsers(this.searchTerm.trim(), this.filter(), this.page(), this.pageSize).subscribe({
+      next: pageData => {
+        this.users.set(pageData.content);
+        this.total.set(pageData.totalElements);
+        this.totalPages.set(pageData.totalPages);
+        this.page.set(pageData.page);
+      },
       error: err => this.showError(err)
     });
   }
@@ -499,7 +519,8 @@ export class UserAdminComponent implements OnInit {
   private showError(err: unknown): void {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
-      this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+      const fieldMsg = envelope?.errors?.[0]?.message;
+      this.error.set(fieldMsg ?? envelope?.message ?? `Request failed (${err.status})`);
     } else {
       this.error.set('Unexpected error');
     }

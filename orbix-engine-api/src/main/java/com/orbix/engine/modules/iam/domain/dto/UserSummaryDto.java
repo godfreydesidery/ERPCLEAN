@@ -11,6 +11,7 @@ import java.time.Instant;
  */
 public record UserSummaryDto(
     Long id,
+    String uid,
     String username,
     String displayName,
     String email,
@@ -27,6 +28,7 @@ public record UserSummaryDto(
         boolean locked = u.getLockedUntil() != null && u.getLockedUntil().isAfter(now);
         return new UserSummaryDto(
             u.getId(),
+            u.getUid(),
             u.getUsername(),
             u.getDisplayName(),
             u.getEmail(),

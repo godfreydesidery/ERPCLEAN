@@ -1,9 +1,9 @@
 package com.orbix.engine.modules.procurement.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
-
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 /**
  * GRN lifecycle (F3.2). Create a DRAFT GRN (against an APPROVED LPO or as a
@@ -21,7 +21,7 @@ public interface GrnService {
     /** DRAFT → CANCELLED. */
     GrnDto cancel(Long grnId);
 
-    List<GrnDto> list(Long branchId);
+    PageDto<GrnDto> list(Long branchId, Pageable pageable);
 
     GrnDto get(Long grnId);
 }

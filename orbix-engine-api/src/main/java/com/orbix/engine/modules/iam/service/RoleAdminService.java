@@ -23,21 +23,21 @@ public interface RoleAdminService {
 
     List<RoleSummaryDto> listRoles();
 
-    RoleDetailDto getRole(Long roleId);
+    RoleDetailDto getRoleByUid(String uid);
 
     RoleDetailDto createRole(CreateRoleRequestDto request);
 
-    RoleDetailDto updateRole(Long roleId, UpdateRoleRequestDto request);
+    RoleDetailDto updateRoleByUid(String uid, UpdateRoleRequestDto request);
 
-    RoleDetailDto setPermissions(Long roleId, SetRolePermissionsRequestDto request);
+    RoleDetailDto setPermissionsByUid(String uid, SetRolePermissionsRequestDto request);
 
     /** Deletes a non-system role. Blocked if the role still has active grants. */
-    void deleteRole(Long roleId);
+    void deleteRoleByUid(String uid);
 
     /** Active grants of this role, scoped to the caller's company. */
-    List<RoleGrantDto> listGrants(Long roleId);
+    List<RoleGrantDto> listGrantsByUid(String uid);
 
-    RoleGrantDto grantRole(Long roleId, GrantRoleRequestDto request);
+    RoleGrantDto grantRoleByUid(String uid, GrantRoleRequestDto request);
 
-    void revokeGrant(Long grantId);
+    void revokeGrantByUid(String grantUid);
 }

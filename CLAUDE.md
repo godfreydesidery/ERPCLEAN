@@ -113,7 +113,7 @@ The same build must run on MySQL 8 (currently MariaDB 11 locally) **and** Postgr
 - `ddl-auto=validate` always. Never `update`.
 
 ### Auth + multi-tenancy
-- JWT (access 1h, refresh 12h — see `orbix.jwt.*` in `application.yml`). Local dev uses an ephemeral in-memory key; production loads RS256 from a secret store.
+- JWT (access 15m, refresh 30d single-use/rotated — see `orbix.jwt.*` in `application.yml`). Local dev uses an ephemeral in-memory key; production loads RS256 from a secret store.
 - Every transactional table carries `company_id` + `branch_id`. A `RequestContext` filter sets current user/company/branch from the JWT + a branch-override header; repository base interfaces inject the predicate automatically.
 
 ### Cross-module communication

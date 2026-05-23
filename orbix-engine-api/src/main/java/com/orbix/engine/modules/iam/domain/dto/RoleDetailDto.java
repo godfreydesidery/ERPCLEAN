@@ -8,6 +8,7 @@ import java.util.List;
 /** Full role view including its granted permissions. */
 public record RoleDetailDto(
     Long id,
+    String uid,
     String code,
     String name,
     String description,
@@ -22,6 +23,7 @@ public record RoleDetailDto(
             .toList();
         return new RoleDetailDto(
             role.getId(),
+            role.getUid(),
             role.getCode(),
             role.getName(),
             role.getDescription(),

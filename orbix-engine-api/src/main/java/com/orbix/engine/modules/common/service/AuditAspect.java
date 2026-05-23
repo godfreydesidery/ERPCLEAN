@@ -37,7 +37,9 @@ public class AuditAspect {
                 context.branchId(),
                 ann.action(),
                 ann.entityType(),
-                result == null ? null : result.toString()
+                null,   // entity id isn't generically extractable from the return value
+                result == null ? null : result.toString(),
+                clientMeta()
             ));
         } catch (Exception ex) {
             // Audit failure must not silently swallow business errors,
@@ -45,5 +47,22 @@ public class AuditAspect {
             // The writer logs and queues for retry.
         }
         return result;
+    }
+
+    /** Small JSON blob with the request's transport metadata, or null if none. */
+    private String clientMeta() {
+        String client = context.clientVersion();
+        String ip = context.ip();
+        if (client == null && ip == null) {
+            return null;
+        }
+        return "{\"client\":" + jsonOrNull(client) + ",\"ip\":" + jsonOrNull(ip) + "}";
+    }
+
+    private static String jsonOrNull(String s) {
+        if (s == null) {
+            return "null";
+        }
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 }

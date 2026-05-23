@@ -1,5 +1,6 @@
-import { Component, OnInit, inject, input, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
@@ -9,7 +10,7 @@ import { BARCODE_TYPES, BarcodeType, ItemBarcode, Uom } from '../catalog.models'
 @Component({
   selector: 'orbix-barcodes-panel',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, SearchSelectComponent],
   template: `
     <h3 class="h6 mt-4">Barcodes</h3>
 
@@ -52,12 +53,8 @@ import { BARCODE_TYPES, BarcodeType, ItemBarcode, Uom } from '../catalog.models'
       </div>
       <div class="col-2">
         <label class="form-label">Pack UoM</label>
-        <select class="form-select" name="puom" [(ngModel)]="form.packUomId">
-          <option [ngValue]="null">—</option>
-          @for (u of uoms(); track u.id) {
-            <option [ngValue]="u.id">{{ u.code }}</option>
-          }
-        </select>
+        <orbix-search-select [options]="uomOptions()" [(ngModel)]="form.packUomId"
+                             name="puom" placeholder="—"/>
       </div>
       <div class="col-2">
         <label class="form-label">Pack qty</label>
@@ -77,6 +74,8 @@ export class BarcodesPanelComponent implements OnInit {
 
   readonly barcodes = signal<ItemBarcode[]>([]);
   readonly uoms = signal<Uom[]>([]);
+  readonly uomOptions = computed<SearchSelectOption[]>(
+    () => this.uoms().map(u => ({ id: u.id, label: u.code })));
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 

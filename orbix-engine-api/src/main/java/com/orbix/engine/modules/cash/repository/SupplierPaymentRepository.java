@@ -1,6 +1,8 @@
 package com.orbix.engine.modules.cash.repository;
 
 import com.orbix.engine.modules.cash.domain.entity.SupplierPayment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ public interface SupplierPaymentRepository extends JpaRepository<SupplierPayment
     List<SupplierPayment> findByCompanyIdOrderByIdDesc(Long companyId);
 
     List<SupplierPayment> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId);
+
+    Page<SupplierPayment> findByCompanyIdOrderByIdDesc(Long companyId, Pageable pageable);
+
+    Page<SupplierPayment> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId, Pageable pageable);
 
     /**
      * F8.7 / US-RPT-007 — POSTED payments for a supplier in {@code [from, to]}

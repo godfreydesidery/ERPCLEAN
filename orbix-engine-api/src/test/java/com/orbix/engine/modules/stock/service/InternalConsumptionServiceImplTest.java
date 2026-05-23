@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostInternalConsumptionRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -39,6 +40,7 @@ class InternalConsumptionServiceImplTest {
     @Mock private StockMoveService stockMoveService;
     @Mock private PermissionResolverService permissions;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private InternalConsumptionServiceImpl service;
 

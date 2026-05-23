@@ -1,9 +1,9 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
-
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Customer receipts + per-invoice allocations (F4.3). Mirror of supplier-payment
@@ -19,7 +19,7 @@ public interface SalesReceiptService {
 
     SalesReceiptDto cancel(Long receiptId);
 
-    List<SalesReceiptDto> list(Long branchId);
+    PageDto<SalesReceiptDto> list(Long branchId, Pageable pageable);
 
     SalesReceiptDto get(Long receiptId);
 }

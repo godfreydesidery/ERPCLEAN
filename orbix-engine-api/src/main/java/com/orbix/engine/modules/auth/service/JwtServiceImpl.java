@@ -4,6 +4,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,11 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class JwtServiceImpl implements JwtService {
+
+    /** The only signing mode currently implemented. */
+    private static final String DEV_IN_MEMORY = "dev-in-memory";
 
     @Value("${orbix.jwt.issuer}") private String issuer;
     @Value("${orbix.jwt.access-ttl}") private Duration accessTtl;
@@ -25,9 +30,21 @@ public class JwtServiceImpl implements JwtService {
 
     @PostConstruct
     void init() {
-        // Local-dev only: generate an in-memory key per process.
-        // Production: load RS256 keys from a secret store; do not commit secrets.
+        // Fail fast rather than silently fall back: a deployment that asks for
+        // RS256-from-secret-store must NOT quietly run on an ephemeral HS256 key
+        // (every restart would invalidate all tokens, and the key isn't shared).
+        if (!DEV_IN_MEMORY.equals(signingMode)) {
+            throw new IllegalStateException(
+                "Unsupported orbix.jwt.signing-mode '" + signingMode + "'. Only '"
+                + DEV_IN_MEMORY + "' (ephemeral HS256) is implemented; RS256 signing "
+                + "from a secret store is not wired yet (ARCHITECTURE.md §2.5/§8). "
+                + "Refusing to start to avoid a silent insecure fallback.");
+        }
+        // Local-dev only: ephemeral in-memory key per process.
         this.signingKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+        log.warn("JWT signing mode '{}': generated an ephemeral in-memory HS256 key. "
+            + "Tokens do not survive a restart and the key is not shared across "
+            + "instances — NOT for production.", DEV_IN_MEMORY);
     }
 
     @Override
@@ -36,10 +53,14 @@ public class JwtServiceImpl implements JwtService {
         return Jwts.builder()
             .issuer(issuer)
             .subject(Long.toString(userId))
+            .id(java.util.UUID.randomUUID().toString())   // jti — for single-token revocation
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(accessTtl)))
+            // userId lives in the standard `sub` claim (set above). We do NOT
+            // add a custom `uid` claim: project-wide `uid` means the Crockford
+            // ULID external identifier, so reusing it for the numeric user id
+            // is a confusing collision.
             .claims(Map.of(
-                "uid", userId,
                 "cid", companyId,
                 "bid", branchId == null ? -1L : branchId,
                 "perms", permissions
@@ -59,10 +80,12 @@ public class JwtServiceImpl implements JwtService {
             .getPayload();
         Long bid = c.get("bid", Long.class);
         return new Claims(
-            c.get("uid", Long.class),
+            Long.valueOf(c.getSubject()),
             c.get("cid", Long.class),
             bid == null || bid < 0 ? null : bid,
-            (List<String>) c.get("perms", List.class)
+            (List<String>) c.get("perms", List.class),
+            c.getId(),
+            c.getIssuedAt() == null ? null : c.getIssuedAt().toInstant()
         );
     }
 }

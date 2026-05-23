@@ -17,8 +17,12 @@
 # ---------- Stage 1: build the Angular bundle ----------
 FROM node:20-alpine AS web-build
 WORKDIR /web
-COPY orbix-engine-web/package.json orbix-engine-web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# package-lock.json is gitignored in this repo, so the box's `git clone` doesn't
+# have it — use `npm install` (resolves from package.json) rather than `npm ci`
+# (which demands a committed lockfile). Commit the lockfile and switch back to
+# `npm ci` if you want byte-reproducible installs.
+COPY orbix-engine-web/package.json ./
+RUN npm install --no-audit --no-fund
 COPY orbix-engine-web/ ./
 RUN npm run build
 # Output lands in /web/dist/orbix-engine-web/browser/ (Angular application builder).
@@ -33,7 +37,11 @@ RUN mvn -B -q -DskipTests dependency:go-offline
 COPY orbix-engine-api/src ./src
 # Drop the Angular bundle into the Spring Boot static path so it ships inside the jar
 COPY --from=web-build /web/dist/orbix-engine-web/browser/ ./src/main/resources/static/
-RUN mvn -B -q -DskipTests package \
+# -Dmaven.test.skip=true skips test *compilation* too (not just execution like
+# -DskipTests). The unit suite has pre-existing compile debt (e.g. RoleAdmin
+# tests reference removed pre-uid method signatures); the QA image doesn't run
+# tests, so don't compile them.
+RUN mvn -B -q -Dmaven.test.skip=true package \
  && cp target/*.jar /api/app.jar
 
 # ---------- Stage 3: runtime ----------

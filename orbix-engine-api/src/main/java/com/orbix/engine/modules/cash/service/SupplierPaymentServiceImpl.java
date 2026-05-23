@@ -11,6 +11,7 @@ import com.orbix.engine.modules.cash.domain.enums.GlCategory;
 import com.orbix.engine.modules.cash.domain.enums.PaymentMethod;
 import com.orbix.engine.modules.cash.repository.SupplierPaymentAllocationRepository;
 import com.orbix.engine.modules.cash.repository.SupplierPaymentRepository;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -20,6 +21,8 @@ import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.entity.SupplierInvoice;
 import com.orbix.engine.modules.procurement.repository.SupplierInvoiceRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -163,15 +166,13 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SupplierPaymentDto> list(Long branchId) {
+    public PageDto<SupplierPaymentDto> list(Long branchId, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        List<SupplierPayment> rows = scope == null
-            ? payments.findByCompanyIdOrderByIdDesc(companyId)
-            : payments.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope);
-        return rows.stream()
-            .map(p -> SupplierPaymentDto.from(p, allocations.findBySupplierPaymentId(p.getId())))
-            .toList();
+        Page<SupplierPayment> page = scope == null
+            ? payments.findByCompanyIdOrderByIdDesc(companyId, pageable)
+            : payments.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        return PageDto.of(page, p -> SupplierPaymentDto.from(p, allocations.findBySupplierPaymentId(p.getId())));
     }
 
     @Override

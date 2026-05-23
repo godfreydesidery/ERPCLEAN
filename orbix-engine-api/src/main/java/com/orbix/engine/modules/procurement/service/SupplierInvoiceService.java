@@ -1,9 +1,9 @@
 package com.orbix.engine.modules.procurement.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.SupplierInvoiceDto;
-
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Supplier invoice + 3-way match against GRNs (F3.3). Creating an invoice
@@ -22,7 +22,7 @@ public interface SupplierInvoiceService {
     /** DRAFT or POSTED → CANCELLED. Allocations stay on the row for audit. */
     SupplierInvoiceDto cancel(Long invoiceId);
 
-    List<SupplierInvoiceDto> list(Long branchId);
+    PageDto<SupplierInvoiceDto> list(Long branchId, Pageable pageable);
 
     SupplierInvoiceDto get(Long invoiceId);
 }

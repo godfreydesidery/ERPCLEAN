@@ -26,13 +26,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.NoSuchElementException;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class FirstRunSetupServiceImpl implements FirstRunSetupService {
 
     private static final Long SYSTEM_ACTOR = 0L;
-    private static final String DEFAULT_TIMEZONE = "Africa/Kampala";
+    private static final String DEFAULT_TIMEZONE = "Africa/Dar_es_Salaam";
 
     private final OrganisationRepository organisations;
     private final CompanyRepository companies;
@@ -115,16 +117,18 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
             passwords.encode(adminInfo.password()),
             adminInfo.displayName(),
             company.getId(),
-            branch.getId(),
+            // No default branch — the bootstrap admin (rootadmin) is company-wide.
+            null,
             SYSTEM_ACTOR
         );
         admin = users.save(admin);
 
         Role adminRole = roles.findByCode("ADMIN").orElseThrow(() ->
             new IllegalStateException("Seed ADMIN role missing — V4 migration did not run"));
+        // branchId = null -> the grant is company-wide (applies to every branch).
         userRoles.save(new UserRole(admin.getId(), adminRole.getId(), company.getId(), null, admin.getId()));
 
-        log.info("First-run bootstrap completed — org={} company={} branch={} admin={}",
+        log.info("First-run bootstrap completed — org={} company={} branch={} admin={} (company-wide)",
             organisation.getId(), company.getId(), branch.getId(), admin.getUsername());
 
         return new FirstRunResponseDto(
@@ -137,5 +141,16 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
             admin.getId(),
             admin.getUsername()
         );
+    }
+
+    @Override
+    @Transactional
+    public void resetAdminPassword(String username, String rawPassword) {
+        AppUser user = users.findByUsername(username)
+            .orElseThrow(() -> new NoSuchElementException("Bootstrap admin not found: " + username));
+        // Re-apply the env-sourced password. mustChange=false: it's ops-managed via env.
+        user.resetPassword(passwords.encode(rawPassword), false, SYSTEM_ACTOR);
+        users.save(user);
+        log.info("Bootstrap admin password reset from env for user={}", username);
     }
 }

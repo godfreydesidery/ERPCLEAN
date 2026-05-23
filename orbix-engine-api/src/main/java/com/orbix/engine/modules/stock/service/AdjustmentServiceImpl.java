@@ -1,7 +1,9 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostAdjustmentRequestDto;
@@ -12,7 +14,6 @@ import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,9 +32,7 @@ public class AdjustmentServiceImpl implements AdjustmentService {
     private final PermissionResolverService permissions;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.stock.adjustment-threshold}")
-    private BigDecimal threshold;
+    private final SettingsService settings;
 
     @Override
     @Transactional
@@ -45,7 +44,7 @@ public class AdjustmentServiceImpl implements AdjustmentService {
         branchScope.requireAccess(request.branchId());
         Long actorId = context.userId();
         BigDecimal value = monetaryImpact(request);
-        boolean aboveThreshold = value.compareTo(threshold) > 0;
+        boolean aboveThreshold = value.compareTo(settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD)) > 0;
         boolean needsAuthoriser = aboveThreshold || request.allowOversell();
         validateAuthoriser(request.authorisedByUserId(), actorId, needsAuthoriser);
 

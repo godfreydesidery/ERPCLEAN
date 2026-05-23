@@ -5,10 +5,13 @@ import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
@@ -36,7 +39,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -79,6 +81,8 @@ class SalesInvoiceServiceImplTest {
     @Mock private PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private SettingsService settings;
 
     @InjectMocks private SalesInvoiceServiceImpl service;
 
@@ -88,7 +92,8 @@ class SalesInvoiceServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
-        ReflectionTestUtils.setField(service, "discountThresholdPct", new BigDecimal("10"));
+        lenient().when(settings.getDecimal(SettingKey.SALES_DISCOUNT_THRESHOLD_PCT))
+            .thenReturn(new BigDecimal("10"));
 
         Item item = new Item(COMPANY_ID, "SKU1", "Sugar", ItemType.SELLABLE, 10L, UOM_ID, VAT_GROUP_ID, ACTOR_ID);
         item.setId(ITEM_ID);

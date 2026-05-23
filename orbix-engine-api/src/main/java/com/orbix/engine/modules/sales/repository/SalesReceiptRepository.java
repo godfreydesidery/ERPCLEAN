@@ -1,6 +1,8 @@
 package com.orbix.engine.modules.sales.repository;
 
 import com.orbix.engine.modules.sales.domain.entity.SalesReceipt;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ public interface SalesReceiptRepository extends JpaRepository<SalesReceipt, Long
     List<SalesReceipt> findByCompanyIdOrderByIdDesc(Long companyId);
 
     List<SalesReceipt> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId);
+
+    Page<SalesReceipt> findByCompanyIdOrderByIdDesc(Long companyId, Pageable pageable);
+
+    Page<SalesReceipt> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId, Pageable pageable);
 
     /**
      * F8.7 / US-RPT-007 — POSTED receipts for a customer in

@@ -9,6 +9,7 @@ export interface Permission {
 
 export interface RoleSummary {
   id: string;
+  uid: string;
   code: string;
   name: string;
   description: string | null;
@@ -19,6 +20,7 @@ export interface RoleSummary {
 
 export interface RoleDetail {
   id: string;
+  uid: string;
   code: string;
   name: string;
   description: string | null;
@@ -29,6 +31,7 @@ export interface RoleDetail {
 
 export interface RoleGrant {
   id: string;
+  uid: string;
   userId: string;
   roleId: string;
   username: string;

@@ -65,3 +65,11 @@ infra/local-data/
 
 # Claude Code per-developer settings
 .claude/settings.local.json
+
+# QA deploy local overrides (SSH key path / PAT live here, never committed)
+orbix-engine-infra/qa/deploy.env.local
+
+# QA runtime secrets (rootadmin password + bootstrap reset token) — lives on the box
+orbix-engine-infra/qa/orbix.env
+# Human-readable QA credentials record (generated secrets) — never commit
+orbix-engine-infra/qa/CREDENTIALS.local.md

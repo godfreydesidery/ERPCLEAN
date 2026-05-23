@@ -5,17 +5,82 @@ and the Angular bundle (served from the jar's `static/` path). Wrong
 shape for production (coupled lifecycle, no scaling) — right shape for
 QA: one image, one `docker run`, one volume.
 
-## Build on the server
+Target box: **16.170.11.41** (`ubuntu@`, see `deploy.env`).
+
+## Deploy on demand (automated)
+
+After the one-time bootstrap below, ship the latest commit to QA with a
+single command from your machine — it SSHes in, pulls the branch,
+rebuilds the image, and restarts the container:
+
+```powershell
+# Windows / PowerShell
+$env:ORBIX_SSH_KEY = "C:\path\to\orbix-qa.pem"
+orbix-engine-infra\qa\deploy.ps1                 # deploys the branch in deploy.env
+orbix-engine-infra\qa\deploy.ps1 -Branch main    # or another branch
+```
 
 ```bash
-# rsync the working tree to the EC2 instance, e.g.
-rsync -az --delete --exclude target --exclude node_modules \
-  ./ ec2-user@<host>:/home/ec2-user/orbix/
+# macOS / Linux / git-bash
+export ORBIX_SSH_KEY=~/keys/orbix-qa.pem
+orbix-engine-infra/qa/deploy.sh
+```
 
-# on the instance
-cd /home/ec2-user/orbix
+Target host/user/branch live in `deploy.env` (committed, non-secret).
+Your `.pem` path and any PAT stay out of git — pass them via env or a
+gitignored `deploy.env.local`.
+
+## First-time bootstrap (once per instance)
+
+The deploy script assumes Docker is installed and the repo is cloned on
+the box. Do this once:
+
+```bash
+ssh -i orbix-qa.pem ubuntu@16.170.11.41
+
+# install Docker, then re-login so the docker group applies
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu
+exit
+ssh -i orbix-qa.pem ubuntu@16.170.11.41
+
+# clone with a fine-grained PAT (repo: ERPCLEAN, Contents: Read-only)
+git clone https://oauth2:<PAT>@github.com/godfreydesidery/ERPCLEAN.git orbix
+exit
+```
+
+The PAT stays in the box's git remote so the automated `deploy.*`
+`git pull` works hands-off. That's acceptable here — the instance is
+private and only you have SSH. If you'd rather not store a token on the
+box, add a read-only **deploy key** (SSH) to the repo and instead
+`git clone git@github.com:godfreydesidery/ERPCLEAN.git orbix`.
+
+Now run `deploy.ps1` / `deploy.sh` from your machine for every release.
+Security group must allow inbound `22` and `80` from your IP.
+
+---
+
+The sections below are the **manual equivalents** of what `deploy.*` does,
+plus reset/wipe operations.
+
+## Build on the server
+
+Clone the repo on the instance with a fine-grained GitHub PAT (repo:
+ERPCLEAN, Contents: Read-only), then build. The `.dockerignore` at the
+repo root keeps `node_modules` / `target` / `.git` / `infra/local-data`
+out of the build context.
+
+```bash
+# on the Ubuntu instance (Docker already installed)
+git clone https://oauth2:<PAT>@github.com/godfreydesidery/ERPCLEAN.git orbix
+cd orbix
 docker build -f orbix-engine-infra/qa/Dockerfile -t orbix:qa .
 ```
+
+> Don't bake the PAT into anything — it lives only in the clone URL. To
+> avoid it lingering in the git remote, run
+> `git remote set-url origin https://github.com/godfreydesidery/ERPCLEAN.git`
+> after the first clone (you'll re-auth on the next pull).
 
 Build takes ~5 min on a `t3.medium` the first time (pulls base images,
 runs `npm ci`, runs `mvn dependency:go-offline`). Subsequent builds
@@ -33,7 +98,8 @@ docker run -d --name orbix \
 ```
 
 First boot takes ~30 s (MariaDB init + Flyway migrations + JVM warm).
-Then hit `http://<elastic-ip>/setup` to run the one-time setup wizard.
+With `orbix.env` present (see **App bootstrap** below) the app self-creates
+the company + `rootadmin` on first boot — just log in at `http://<ip>/`.
 
 ## Watch it boot
 
@@ -50,8 +116,8 @@ You should see, roughly in order:
 ## Update
 
 ```bash
-# Pull latest source, then:
-cd /home/ec2-user/orbix
+cd ~/orbix
+git pull
 docker build -f orbix-engine-infra/qa/Dockerfile -t orbix:qa .
 docker stop orbix && docker rm orbix
 docker run -d --name orbix -p 80:8081 -v orbix-data:/var/lib/mysql \
@@ -59,20 +125,56 @@ docker run -d --name orbix -p 80:8081 -v orbix-data:/var/lib/mysql \
 ```
 
 The `orbix-data` volume survives — Flyway migrates the existing schema
-forward, no data loss.
+forward, no data loss. **Wipe the QA data when you want** a clean slate:
+
+```bash
+docker stop orbix && docker rm orbix
+docker volume rm orbix-data        # destroys all QA data
+# then re-run the Run step — fresh DB re-bootstraps from orbix.env on next start
+```
+
+## App bootstrap (company + rootadmin)
+
+Bootstrapping is **env-driven** — no interactive wizard. On a fresh DB,
+if `ORBIX_BOOTSTRAP_ENABLED=true`, the app creates org + company + branch
++ a company-wide **`rootadmin`** on startup, then no-ops on later boots.
+
+1. On the box, copy the template and fill in the two secrets:
+   ```bash
+   cd ~/orbix/orbix-engine-infra/qa
+   cp orbix.env.example orbix.env         # orbix.env is gitignored
+   # set ORBIX_BOOTSTRAP_ADMIN_PASSWORD (>=12 chars) and ORBIX_BOOTSTRAP_RESET_TOKEN
+   ```
+2. Deploy. `deploy.*` passes `orbix.env` to `docker run --env-file`. Log
+   in at `http://<ip>/` as `rootadmin` with that password.
+
+`rootadmin` is **company-wide, no default branch** — full ADMIN across
+every branch; pick a branch in the UI for branch-specific actions.
+
+> Fail-fast: if `ENABLED=true` but the admin password is missing/weak
+> (<12 chars or a common placeholder), the app refuses to start.
+
+### Rotating the rootadmin password
+
+The password lives in `orbix.env`. To change it:
+
+1. Edit `ORBIX_BOOTSTRAP_ADMIN_PASSWORD` in `orbix.env` on the box.
+2. Redeploy (`deploy.ps1`) so the container picks up the new env, **then**
+   apply it to the existing user via the token-gated endpoint:
+   ```bash
+   curl -X POST http://<ip>/api/v1/setup/reset-rootadmin-password \
+     -H "X-Bootstrap-Token: <ORBIX_BOOTSTRAP_RESET_TOKEN>"
+   ```
+   The endpoint takes **no password body** — it only re-applies the env
+   value, so it can re-sync but never set a caller-chosen credential.
+   Blank `RESET_TOKEN` disables the endpoint (503); wrong token = 401.
 
 ## Credentials
 
-DB user `orbix` / password `orbixlocal`, root `rootlocal`. These never
-leave the container (MariaDB binds 127.0.0.1 only). Override via env
-on `docker run` if you want different ones at first init:
-
-```bash
--e DB_PASSWORD=<...> -e DB_ROOT_PASSWORD=<...>
-```
-
-Override only affects the **first run** — once the data dir is
-initialised, MariaDB ignores the env vars.
+- **App login**: `rootadmin` / `ORBIX_BOOTSTRAP_ADMIN_PASSWORD` (from `orbix.env`).
+- **MariaDB**: user `orbix` / `orbixlocal`, root `rootlocal` — never leave
+  the container (binds 127.0.0.1). Override DB creds at **first init** only via
+  `-e DB_PASSWORD=… -e DB_ROOT_PASSWORD=…`; ignored once the data dir exists.
 
 ## Reset everything
 

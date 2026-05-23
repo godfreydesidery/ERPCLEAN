@@ -91,6 +91,7 @@ class PosSaleServiceImplTest {
     @Mock private com.orbix.engine.modules.iam.service.PermissionResolverService permissions;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private com.orbix.engine.modules.iam.service.BranchScope branchScope;
 
     @InjectMocks private PosSaleServiceImpl service;
 

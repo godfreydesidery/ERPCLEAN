@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { PartyService } from './party.service';
 import { PartyDetailsFormComponent } from './party-details-form.component';
 import {
@@ -18,7 +19,7 @@ import {
 @Component({
   selector: 'orbix-customers',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DecimalPipe, PartyDetailsFormComponent, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DecimalPipe, PartyDetailsFormComponent, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -26,7 +27,7 @@ import {
           <a routerLink=".." class="text-decoration-none text-secondary">Parties</a> &rsaquo; Customers
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Customers</h1>
-        <p class="text-secondary mb-0 small">{{ customers().length }} customer{{ customers().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} customer{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()"
               [title]="showForm() ? 'Close the form without saving' : 'Open the form to register a new customer'">
@@ -155,13 +156,13 @@ import {
         <div class="search-box flex-grow-1">
           <i class="bi bi-search"></i>
           <input type="search" class="form-control" placeholder="Search by code, name or TIN"
-                 [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+                 [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()">
         </div>
         <div class="status-pills d-flex gap-1 flex-wrap">
           @for (opt of statusOptions; track opt.value) {
             <button type="button" class="status-pill"
                     [class.is-active]="statusFilter() === opt.value"
-                    (click)="statusFilter.set(opt.value)">
+                    (click)="setFilter(opt.value)">
               {{ opt.label }}
             </button>
           }
@@ -170,7 +171,7 @@ import {
     </div>
 
     <div class="card border-0 shadow-sm overflow-hidden">
-      @if (filtered().length === 0) {
+      @if (customers().length === 0) {
         <div class="p-5 text-center">
           <div class="empty-icon mx-auto mb-3"><i class="bi bi-person-circle"></i></div>
           <h2 class="h6 fw-bold mb-1 text-dark">No customers match</h2>
@@ -193,7 +194,7 @@ import {
               </tr>
             </thead>
             <tbody>
-              @for (customer of filtered(); track customer.partyId) {
+              @for (customer of customers(); track customer.partyId) {
                 <tr [class.table-active]="editing()?.partyId === customer.partyId">
                   <td><span class="badge text-bg-light border text-secondary font-monospace">{{ customer.party.code }}</span></td>
                   <td>
@@ -241,7 +242,7 @@ import {
         </div>
 
         <ul class="list-unstyled mb-0 d-md-none">
-          @for (customer of filtered(); track customer.partyId) {
+          @for (customer of customers(); track customer.partyId) {
             <li class="party-card">
               <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                 <div class="flex-grow-1">
@@ -281,6 +282,13 @@ import {
             </li>
           }
         </ul>
+      }
+      @if (totalPages() > 1) {
+        <div class="card-footer bg-white border-top">
+          <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                       [totalElements]="total()" [pageSize]="pageSize"
+                       (pageChange)="goTo($event)"/>
+        </div>
       }
     </div>
     }
@@ -383,6 +391,9 @@ export class CustomersComponent implements OnInit {
   protected readonly partyMode = signal<'pick' | 'create'>('pick');
 
   protected readonly partyOptions = computed<SearchSelectOption[]>(() => {
+    // Exclusion is best-effort: customers() holds only the current page, so a
+    // party that's already a customer on another page may still appear here —
+    // the backend rejects the duplicate role with a clear message.
     const customerIds = new Set(this.customers().map(c => c.partyId));
     return this.parties()
       .filter(p => p.status === 'ACTIVE' && !customerIds.has(p.id))
@@ -397,7 +408,6 @@ export class CustomersComponent implements OnInit {
   });
 
   protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
-  protected readonly searchSignal = signal('');
   protected searchTerm = '';
 
   protected readonly statusOptions = [
@@ -407,17 +417,12 @@ export class CustomersComponent implements OnInit {
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
-  protected readonly filtered = computed(() => {
-    const status = this.statusFilter();
-    const q = this.searchSignal().trim().toLowerCase();
-    return this.customers().filter(c => {
-      if (status && c.party.status !== status) return false;
-      if (!q) return true;
-      return c.party.code.toLowerCase().includes(q)
-          || c.party.name.toLowerCase().includes(q)
-          || (c.party.tin?.toLowerCase().includes(q) ?? false);
-    });
-  });
+  // --- server-side pagination state ----------------------------------------
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   protected partyId: string | null = null;
   protected partyDetails: PartyDetails = blankPartyDetails();
@@ -543,14 +548,33 @@ export class CustomersComponent implements OnInit {
     this.tinMatch.set(null);
   }
 
+  onSearchChange(): void {
+    // Debounce so we don't hit the server on every keystroke.
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { this.pageNo.set(0); this.load(); }, 300);
+  }
+
+  setFilter(status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null): void {
+    this.statusFilter.set(status);
+    this.pageNo.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.load();
+  }
+
   private load(): void {
-    this.party.listCustomers().subscribe({
-      next: list => this.customers.set(list),
+    this.party.listCustomers(this.searchTerm, this.statusFilter(), this.pageNo(), this.pageSize).subscribe({
+      next: pageData => {
+        this.customers.set(pageData.content);
+        this.total.set(pageData.totalElements);
+        this.totalPages.set(pageData.totalPages);
+        this.pageNo.set(pageData.page);
+      },
       error: err => this.showError(err)
-    });
-    this.party.listParties().subscribe({
-      next: list => this.parties.set(list),
-      error: () => { /* picker is auxiliary */ }
     });
   }
 

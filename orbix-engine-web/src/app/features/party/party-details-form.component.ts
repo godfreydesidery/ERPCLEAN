@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+﻿import { Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PARTY_CATEGORIES, PartyDetails } from './party.models';
 
@@ -69,7 +69,7 @@ import { PARTY_CATEGORIES, PartyDetails } from './party.models';
           <label class="form-label small fw-semibold text-secondary">Country code</label>
           <input class="form-control text-uppercase font-monospace" name="pcc" maxlength="2"
                  [ngModel]="details().countryCode"
-                 (ngModelChange)="details().countryCode = $event || null" placeholder="UG">
+                 (ngModelChange)="details().countryCode = $event || null" placeholder="TZ">
         </div>
         <div class="col-12">
           <label class="form-label small fw-semibold text-secondary">Notes</label>

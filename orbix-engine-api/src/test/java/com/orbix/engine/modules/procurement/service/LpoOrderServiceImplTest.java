@@ -5,8 +5,11 @@ import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrder;
@@ -20,7 +23,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -55,6 +57,8 @@ class LpoOrderServiceImplTest {
     @Mock private VatGroupRepository vatGroups;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private SettingsService settings;
 
     @InjectMocks private LpoOrderServiceImpl service;
 
@@ -64,7 +68,8 @@ class LpoOrderServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
-        ReflectionTestUtils.setField(service, "autoApprovalThreshold", BigDecimal.ZERO);
+        lenient().when(settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL))
+            .thenReturn(BigDecimal.ZERO);
         Item item = new Item(COMPANY_ID, "SKU1", "Sugar", ItemType.BOTH, 10L, UOM_ID, VAT_GROUP_ID, ACTOR_ID);
         item.setId(ITEM_ID);
         lenient().when(items.findById(ITEM_ID)).thenReturn(Optional.of(item));
@@ -143,7 +148,8 @@ class LpoOrderServiceImplTest {
 
     @Test
     void submit_belowOrAtThreshold_autoApproves_andEmitsApproved() {
-        ReflectionTestUtils.setField(service, "autoApprovalThreshold", new BigDecimal("5000"));
+        when(settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL))
+            .thenReturn(new BigDecimal("5000"));
         LpoOrder order = createdOrder("LPO-AUTO", new BigDecimal("1000"));
         when(orders.findById(order.getId())).thenReturn(Optional.of(order));
 
@@ -157,7 +163,8 @@ class LpoOrderServiceImplTest {
 
     @Test
     void submit_aboveThreshold_goesToPendingApproval() {
-        ReflectionTestUtils.setField(service, "autoApprovalThreshold", new BigDecimal("5000"));
+        when(settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL))
+            .thenReturn(new BigDecimal("5000"));
         LpoOrder order = createdOrder("LPO-BIG", new BigDecimal("10000"));
         when(orders.findById(order.getId())).thenReturn(Optional.of(order));
 

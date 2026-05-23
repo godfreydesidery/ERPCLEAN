@@ -1,6 +1,9 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostAdjustmentRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -16,7 +19,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -42,6 +44,8 @@ class AdjustmentServiceImplTest {
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private PermissionResolverService permissions;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private SettingsService settings;
 
     @InjectMocks private AdjustmentServiceImpl service;
 
@@ -49,7 +53,8 @@ class AdjustmentServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
-        ReflectionTestUtils.setField(service, "threshold", new BigDecimal("50000"));
+        lenient().when(settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD))
+            .thenReturn(new BigDecimal("50000"));
     }
 
     private static PostAdjustmentRequestDto req(BigDecimal qty, BigDecimal unitCost,

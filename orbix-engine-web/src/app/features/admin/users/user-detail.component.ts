@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { RoleAdminService } from '../roles/role-admin.service';
 import { RoleSummary } from '../roles/role-admin.models';
 import { UserAdminService } from './user-admin.service';
@@ -18,7 +19,7 @@ import {
 @Component({
   selector: 'orbix-user-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
   template: `
     <header class="mb-3">
       <a routerLink="/admin/users" class="text-decoration-none small text-secondary d-inline-flex align-items-center gap-1 mb-2">
@@ -126,12 +127,9 @@ import {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-semibold text-secondary">Default branch</label>
-                  <select class="form-select" name="br" [(ngModel)]="editForm.defaultBranchId">
-                    <option [ngValue]="null">— No default —</option>
-                    @for (b of branches(); track b.id) {
-                      <option [ngValue]="b.id">{{ b.code }} · {{ b.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="branchOptions()" [(ngModel)]="editForm.defaultBranchId"
+                                       name="br"
+                                       placeholder="— No default —"/>
                 </div>
               </div>
             </fieldset>
@@ -367,6 +365,8 @@ export class UserDetailComponent implements OnInit {
   protected readonly user = signal<UserDetail | null>(null);
   protected readonly roles = signal<RoleSummary[]>([]);
   protected readonly branches = signal<AccessibleBranch[]>([]);
+  protected readonly branchOptions = computed<SearchSelectOption[]>(
+    () => this.branches().map(b => ({ id: b.id, label: `${b.code} · ${b.name}` })));
   protected readonly busy = signal(false);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -377,14 +377,14 @@ export class UserDetailComponent implements OnInit {
   protected editForm = { displayName: '', email: '', phone: '', defaultBranchId: null as string | null };
 
   ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id');
-    if (!id) {
-      this.error.set('Invalid user id');
+    const uid = this.route.snapshot.paramMap.get('uid');
+    if (!uid) {
+      this.error.set('Invalid user uid');
       this.loading.set(false);
       return;
     }
     // Pick up a temp-password handoff from the create flow on the list page.
-    const stashKey = 'orbix.tempPwd.' + id;
+    const stashKey = 'orbix.tempPwd.' + uid;
     const stash = globalThis.sessionStorage.getItem(stashKey);
     if (stash) {
       try {
@@ -394,7 +394,7 @@ export class UserDetailComponent implements OnInit {
       globalThis.sessionStorage.removeItem(stashKey);
     }
 
-    this.loadUser(id);
+    this.loadUser(uid);
     this.branchService.listBranches().subscribe({
       next: list => this.branches.set(list),
       error: () => this.branches.set([])
@@ -429,8 +429,9 @@ export class UserDetailComponent implements OnInit {
     return grants.some(g => g.branchId === branchId);
   }
 
-  /** Resolve a branch id to its display name; falls back to {@code #id} if unknown. */
-  branchLabel(branchId: string): string {
+  /** Resolve a branch id to its display name; "—" when unset, {@code #id} if unknown. */
+  branchLabel(branchId: string | null | undefined): string {
+    if (!branchId) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;
   }
@@ -442,12 +443,12 @@ export class UserDetailComponent implements OnInit {
     const branchId = pick === '' ? null : pick;
     this.busy.set(true);
     this.error.set(null);
-    this.roleApi.grantRole(role.id, { username: user.username, branchId }).subscribe({
+    this.roleApi.grantRole(role.uid, { username: user.username, branchId }).subscribe({
       next: () => {
         this.busy.set(false);
         this.grantPick[role.id] = null;
         this.info.set(`Granted ${role.code} to ${user.username}.`);
-        this.loadUser(user.id);
+        this.loadUser(user.uid);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -457,11 +458,11 @@ export class UserDetailComponent implements OnInit {
     if (!globalThis.confirm(`Revoke this role from ${user.username}?`)) return;
     this.busy.set(true);
     this.error.set(null);
-    this.roleApi.revokeGrant(grant.id).subscribe({
+    this.roleApi.revokeGrant(grant.uid).subscribe({
       next: () => {
         this.busy.set(false);
         this.info.set(`Role revoked from ${user.username}.`);
-        this.loadUser(user.id);
+        this.loadUser(user.uid);
       },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -470,7 +471,7 @@ export class UserDetailComponent implements OnInit {
   // --- profile + lifecycle ------------------------------------------------
 
   onSave(user: UserDetail): void {
-    this.run(this.api.updateUser(user.id, {
+    this.run(this.api.updateUser(user.uid, {
       displayName: this.editForm.displayName.trim(),
       email: emptyToNull(this.editForm.email),
       phone: emptyToNull(this.editForm.phone),
@@ -484,21 +485,21 @@ export class UserDetailComponent implements OnInit {
 
   onDisable(user: UserDetail): void {
     if (!globalThis.confirm(`Disable ${user.username}? They will lose access immediately.`)) return;
-    this.run(this.api.disableUser(user.id), updated => {
+    this.run(this.api.disableUser(user.uid), updated => {
       this.info.set(`${user.username} disabled.`);
       this.user.set(updated);
     });
   }
 
   onEnable(user: UserDetail): void {
-    this.run(this.api.enableUser(user.id), updated => {
+    this.run(this.api.enableUser(user.uid), updated => {
       this.info.set(`${user.username} re-enabled.`);
       this.user.set(updated);
     });
   }
 
   onUnlock(user: UserDetail): void {
-    this.run(this.api.unlockUser(user.id), updated => {
+    this.run(this.api.unlockUser(user.uid), updated => {
       this.info.set(`${user.username} unlocked.`);
       this.user.set(updated);
     });
@@ -508,7 +509,7 @@ export class UserDetailComponent implements OnInit {
     if (!globalThis.confirm(`Reset password for ${user.username}? A temporary password will be generated.`)) return;
     this.busy.set(true);
     this.error.set(null);
-    this.api.resetPassword(user.id, {
+    this.api.resetPassword(user.uid, {
       newPassword: null,
       mustChangePassword: true
     }).subscribe({
@@ -530,14 +531,14 @@ export class UserDetailComponent implements OnInit {
 
   onForceLogout(user: UserDetail): void {
     if (!globalThis.confirm(`Force ${user.username} out of every session?`)) return;
-    this.run(this.api.forceLogout(user.id), () => {
+    this.run(this.api.forceLogout(user.uid), () => {
       this.info.set(`${user.username} signed out everywhere.`);
     });
   }
 
-  private loadUser(id: string): void {
+  private loadUser(uid: string): void {
     this.loading.set(true);
-    this.api.getUser(id).subscribe({
+    this.api.getUser(uid).subscribe({
       next: detail => {
         this.user.set(detail);
         this.applyEditForm(detail);

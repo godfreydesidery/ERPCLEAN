@@ -1,16 +1,17 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.SupplierInvoiceDto;
 import com.orbix.engine.modules.procurement.service.SupplierInvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 
 /** Supplier invoice + 3-way match (F3.3). Gated by {@code PROCUREMENT.MANAGE_INVOICE}. */
 @RestController
@@ -22,8 +23,10 @@ public class SupplierInvoiceController {
     private final SupplierInvoiceService service;
 
     @GetMapping
-    public List<SupplierInvoiceDto> list(@RequestParam(required = false) Long branchId) {
-        return service.list(branchId);
+    public PageDto<SupplierInvoiceDto> list(@RequestParam(required = false) Long branchId,
+                                            @RequestParam(defaultValue = "0") int page,
+                                            @RequestParam(defaultValue = "20") int size) {
+        return service.list(branchId, PageRequest.of(page, size));
     }
 
     @GetMapping("/{id}")

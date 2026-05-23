@@ -16,6 +16,12 @@ DB_PASSWORD="${DB_PASSWORD:-orbixlocal}"
 # Mounted volumes come up owned by root by default — hand the data dir to mysql.
 chown -R mysql:mysql "$DATA_DIR"
 
+# MariaDB binds a unix socket under /run/mysqld, which doesn't exist in a fresh
+# container (no systemd-tmpfiles to create it). Make it before any mariadbd start
+# — both the bootstrap below and the supervisord-managed mariadbd need it.
+mkdir -p /run/mysqld
+chown -R mysql:mysql /run/mysqld
+
 if [ ! -f "$MARKER" ]; then
   echo "[entrypoint] First run — initialising MariaDB system tables in $DATA_DIR"
   mariadb-install-db --user=mysql --datadir="$DATA_DIR" >/dev/null

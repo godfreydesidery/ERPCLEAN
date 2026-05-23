@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.domain.dto.CreateSupplierRequestDto;
@@ -7,14 +8,15 @@ import com.orbix.engine.modules.party.domain.dto.SupplierResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateSupplierRequestDto;
 import com.orbix.engine.modules.party.domain.entity.Party;
 import com.orbix.engine.modules.party.domain.entity.Supplier;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import com.orbix.engine.modules.party.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.Function;
@@ -33,15 +35,16 @@ public class SupplierServiceImpl implements SupplierService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SupplierResponseDto> listSuppliers() {
-        List<Supplier> rows = suppliers.findByCompanyId(context.companyId());
+    public PageDto<SupplierResponseDto> listSuppliers(String q, PartyStatus status, Pageable pageable) {
+        Page<Supplier> page = suppliers.search(context.companyId(), blankToNull(q), status, pageable);
         Map<Long, Party> partyById = parties.findAllById(
-                rows.stream().map(Supplier::getPartyId).toList())
+                page.getContent().stream().map(Supplier::getPartyId).toList())
             .stream().collect(Collectors.toMap(Party::getId, Function.identity()));
-        return rows.stream()
-            .map(s -> SupplierResponseDto.from(s, partyById.get(s.getPartyId())))
-            .sorted(Comparator.comparing(dto -> dto.party().code()))
-            .toList();
+        return PageDto.of(page, s -> SupplierResponseDto.from(s, partyById.get(s.getPartyId())));
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     @Override

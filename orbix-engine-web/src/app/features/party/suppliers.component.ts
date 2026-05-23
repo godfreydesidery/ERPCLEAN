@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { PartyService } from './party.service';
 import { PartyDetailsFormComponent } from './party-details-form.component';
 import {
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'orbix-suppliers',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, PartyDetailsFormComponent, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, PartyDetailsFormComponent, SearchSelectComponent, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -27,7 +28,7 @@ import {
           <a routerLink=".." class="text-decoration-none text-secondary">Parties</a> &rsaquo; Suppliers
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Suppliers</h1>
-        <p class="text-secondary mb-0 small">{{ suppliers().length }} supplier{{ suppliers().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} supplier{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()"
               [title]="showForm() ? 'Close the form without saving' : 'Open the form to register a new supplier'">
@@ -171,13 +172,13 @@ import {
         <div class="search-box flex-grow-1">
           <i class="bi bi-search"></i>
           <input type="search" class="form-control" placeholder="Search by code, name or TIN"
-                 [(ngModel)]="searchTerm" (ngModelChange)="searchSignal.set(searchTerm)">
+                 [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()">
         </div>
         <div class="status-pills d-flex gap-1 flex-wrap">
           @for (opt of statusOptions; track opt.value) {
             <button type="button" class="status-pill"
                     [class.is-active]="statusFilter() === opt.value"
-                    (click)="statusFilter.set(opt.value)">
+                    (click)="setFilter(opt.value)">
               {{ opt.label }}
             </button>
           }
@@ -186,7 +187,7 @@ import {
     </div>
 
     <div class="card border-0 shadow-sm overflow-hidden">
-      @if (filtered().length === 0) {
+      @if (suppliers().length === 0) {
         <div class="p-5 text-center">
           <div class="empty-icon mx-auto mb-3"><i class="bi bi-truck"></i></div>
           <h2 class="h6 fw-bold mb-1 text-dark">No suppliers match</h2>
@@ -209,12 +210,12 @@ import {
               </tr>
             </thead>
             <tbody>
-              @for (supplier of filtered(); track supplier.partyId) {
+              @for (supplier of suppliers(); track supplier.partyId) {
                 <tr [class.table-active]="editing()?.partyId === supplier.partyId">
                   <td><span class="badge text-bg-light border text-secondary font-monospace">{{ supplier.party.code }}</span></td>
                   <td>
                     <div class="fw-semibold text-dark">{{ supplier.party.name }}</div>
-                    @if (supplier.defaultCurrencyCode && supplier.defaultCurrencyCode !== 'UGX') {
+                    @if (supplier.defaultCurrencyCode && supplier.defaultCurrencyCode !== 'TZS') {
                       <span class="small text-secondary">{{ supplier.defaultCurrencyCode }}</span>
                     }
                   </td>
@@ -252,7 +253,7 @@ import {
         </div>
 
         <ul class="list-unstyled mb-0 d-md-none">
-          @for (supplier of filtered(); track supplier.partyId) {
+          @for (supplier of suppliers(); track supplier.partyId) {
             <li class="party-card">
               <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                 <div class="flex-grow-1">
@@ -290,6 +291,13 @@ import {
             </li>
           }
         </ul>
+      }
+      @if (totalPages() > 1) {
+        <div class="card-footer bg-white border-top">
+          <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                       [totalElements]="total()" [pageSize]="pageSize"
+                       (pageChange)="goTo($event)"/>
+        </div>
       }
     </div>
     }
@@ -396,6 +404,9 @@ export class SuppliersComponent implements OnInit {
   protected readonly partyMode = signal<'pick' | 'create'>('pick');
 
   protected readonly partyOptions = computed<SearchSelectOption[]>(() => {
+    // Exclusion is best-effort: suppliers() holds only the current page, so a
+    // party that's already a supplier on another page may still appear here —
+    // the backend rejects the duplicate role with a clear message.
     const supplierIds = new Set(this.suppliers().map(s => s.partyId));
     return this.parties()
       .filter(p => p.status === 'ACTIVE' && !supplierIds.has(p.id))
@@ -410,7 +421,6 @@ export class SuppliersComponent implements OnInit {
   });
 
   protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
-  protected readonly searchSignal = signal('');
   protected searchTerm = '';
 
   protected readonly statusOptions = [
@@ -420,17 +430,12 @@ export class SuppliersComponent implements OnInit {
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
-  protected readonly filtered = computed(() => {
-    const status = this.statusFilter();
-    const q = this.searchSignal().trim().toLowerCase();
-    return this.suppliers().filter(s => {
-      if (status && s.party.status !== status) return false;
-      if (!q) return true;
-      return s.party.code.toLowerCase().includes(q)
-          || s.party.name.toLowerCase().includes(q)
-          || (s.party.tin?.toLowerCase().includes(q) ?? false);
-    });
-  });
+  // --- server-side pagination state ----------------------------------------
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   protected partyId: string | null = null;
   protected partyDetails: PartyDetails = blankPartyDetails();
@@ -565,14 +570,32 @@ export class SuppliersComponent implements OnInit {
     this.tinMatch.set(null);
   }
 
+  onSearchChange(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => { this.pageNo.set(0); this.load(); }, 300);
+  }
+
+  setFilter(status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null): void {
+    this.statusFilter.set(status);
+    this.pageNo.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.load();
+  }
+
   private load(): void {
-    this.party.listSuppliers().subscribe({
-      next: list => this.suppliers.set(list),
+    this.party.listSuppliers(this.searchTerm, this.statusFilter(), this.pageNo(), this.pageSize).subscribe({
+      next: pageData => {
+        this.suppliers.set(pageData.content);
+        this.total.set(pageData.totalElements);
+        this.totalPages.set(pageData.totalPages);
+        this.pageNo.set(pageData.page);
+      },
       error: err => this.showError(err)
-    });
-    this.party.listParties().subscribe({
-      next: list => this.parties.set(list),
-      error: () => { /* picker is auxiliary */ }
     });
   }
 

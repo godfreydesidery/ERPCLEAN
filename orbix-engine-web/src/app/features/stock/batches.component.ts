@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { StockService } from './stock.service';
 import {
   STOCK_BATCH_STATUSES,
@@ -18,7 +19,7 @@ type Mode = 'all' | 'expiring';
 @Component({
   selector: 'orbix-stock-batches',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -26,7 +27,10 @@ type Mode = 'all' | 'expiring';
           <a routerLink=".." class="text-decoration-none text-secondary">Stock</a> &rsaquo; Batches
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Stock batches</h1>
-        <p class="text-secondary mb-0 small">{{ batches().length }} batch{{ batches().length === 1 ? '' : 'es' }} shown.</p>
+        <p class="text-secondary mb-0 small">
+          @if (mode() === 'all') { {{ total() }} batch{{ total() === 1 ? '' : 'es' }} on file. }
+          @else { {{ batches().length }} batch{{ batches().length === 1 ? '' : 'es' }} expiring soon. }
+        </p>
       </div>
     </header>
 
@@ -152,6 +156,13 @@ type Mode = 'all' | 'expiring';
           </table>
         </div>
       }
+      @if (mode() === 'all' && totalPages() > 1) {
+        <div class="card-footer bg-white border-top">
+          <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                       [totalElements]="total()" [pageSize]="pageSize"
+                       (pageChange)="goTo($event)"/>
+        </div>
+      }
     </div>
   `,
   styles: [`
@@ -213,6 +224,10 @@ export class BatchesComponent implements OnInit {
   protected readonly statuses = STOCK_BATCH_STATUSES;
 
   protected readonly batches = signal<StockBatch[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
 
@@ -234,11 +249,26 @@ export class BatchesComponent implements OnInit {
 
   ngOnInit(): void { this.refresh(); }
 
+  /** A mode/filter change resets to the first page. */
   refresh(): void {
+    this.pageNo.set(0);
+    this.load();
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.load();
+  }
+
+  private load(): void {
     this.error.set(null);
     this.info.set(null);
     const branchId = this.scopeToBranch() ? this.branchId() : null;
     if (this.mode() === 'expiring') {
+      // Bounded report — naturally short, not paginated.
+      this.totalPages.set(0);
+      this.total.set(0);
       this.stock.listExpiringSoon(branchId ?? null, this.daysAhead()).subscribe({
         next: list => this.batches.set(list),
         error: err => this.showError(err)
@@ -248,8 +278,13 @@ export class BatchesComponent implements OnInit {
         branchId: branchId ?? undefined,
         itemId: this.itemIdFilter() ?? undefined,
         status: this.statusFilter() ?? undefined
-      }).subscribe({
-        next: list => this.batches.set(list),
+      }, this.pageNo(), this.pageSize).subscribe({
+        next: page => {
+          this.batches.set(page.content);
+          this.total.set(page.totalElements);
+          this.totalPages.set(page.totalPages);
+          this.pageNo.set(page.page);
+        },
         error: err => this.showError(err)
       });
     }

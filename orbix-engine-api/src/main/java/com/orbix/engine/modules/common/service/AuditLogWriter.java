@@ -14,6 +14,8 @@ public interface AuditLogWriter {
         Long branchId,
         String action,
         String entityType,
-        String afterJson
+        String entityId,
+        String afterJson,
+        String metaJson
     ) {}
 }

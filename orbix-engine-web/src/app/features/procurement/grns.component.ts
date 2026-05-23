@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { PagerComponent } from '../../core/ui/pager.component';
 import { ProcurementService } from './procurement.service';
 import {
   CreateGrnLine,
@@ -18,7 +19,7 @@ import {
 @Component({
   selector: 'orbix-grns',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -26,7 +27,7 @@ import {
           <a routerLink=".." class="text-decoration-none text-secondary">Procurement</a> &rsaquo; GRNs
         </p>
         <h1 class="h3 fw-bold mb-1 text-dark">Goods received notes</h1>
-        <p class="text-secondary mb-0 small">{{ grns().length }} GRN{{ grns().length === 1 ? '' : 's' }} on file.</p>
+        <p class="text-secondary mb-0 small">{{ total() }} GRN{{ total() === 1 ? '' : 's' }} on file.</p>
       </div>
       <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
         <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
@@ -147,7 +148,7 @@ import {
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
             <h2 class="h6 fw-bold mb-0 text-dark">GRNs</h2>
-            <span class="badge text-bg-light text-secondary">{{ grns().length }}</span>
+            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
           </div>
           @if (grns().length === 0) {
             <div class="p-5 text-center">
@@ -178,6 +179,13 @@ import {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="card-footer bg-white border-top">
+                <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
+                             [totalElements]="total()" [pageSize]="pageSize"
+                             (pageChange)="goTo($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -352,6 +360,10 @@ export class GrnsComponent implements OnInit {
   private readonly auth = inject(AuthService);
 
   protected readonly grns = signal<Grn[]>([]);
+  protected readonly pageNo = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly total = signal(0);
+  protected readonly pageSize = 20;
   protected readonly selected = signal<Grn | null>(null);
   protected readonly loadedLpo = signal<LpoOrder | null>(null);
   protected readonly busy = signal<boolean>(false);
@@ -376,10 +388,21 @@ export class GrnsComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.procurement.listGrns(this.branchId()).subscribe({
-      next: rows => this.grns.set(rows),
+    this.procurement.listGrns(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+      next: page => {
+        this.grns.set(page.content);
+        this.total.set(page.totalElements);
+        this.totalPages.set(page.totalPages);
+        this.pageNo.set(page.page);
+      },
       error: err => this.showError(err)
     });
+  }
+
+  goTo(p: number): void {
+    if (p < 0 || p >= this.totalPages()) return;
+    this.pageNo.set(p);
+    this.refresh();
   }
 
   select(grn: Grn): void { this.selected.set(grn); }

@@ -5,6 +5,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
 import com.orbix.engine.modules.sales.domain.entity.ReceiptAllocation;
@@ -56,6 +57,7 @@ class SalesReceiptServiceImplTest {
     @Mock private CashLedgerService cashLedger;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
 
     @InjectMocks private SalesReceiptServiceImpl service;
 

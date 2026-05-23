@@ -1,7 +1,9 @@
 package com.orbix.engine;
 
+import com.orbix.engine.modules.admin.service.BootstrapProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -41,6 +43,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
+@EnableConfigurationProperties(BootstrapProperties.class)
 public class OrbixEngineApplication {
 
     public static void main(String[] args) {

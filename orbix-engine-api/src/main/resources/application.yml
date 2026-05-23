@@ -55,11 +55,11 @@ management:
 orbix:
   jwt:
     issuer: orbix-engine
-    # 1h access trades a slightly wider leak-blast-radius for fewer
-    # mid-task refresh hiccups; 12h refresh aligns roughly with a
-    # single shift so a stolen laptop can't sit on a multi-week session.
-    access-ttl: PT1H
-    refresh-ttl: PT12H
+    # US-IAM-001: short access token (15 min) keeps the leak-blast-radius and
+    # the stale-permission window tight; the refresh token (30 days) is
+    # single-use and rotated on every use, so a stolen one is detected on reuse.
+    access-ttl: PT15M
+    refresh-ttl: P30D
     # Production: load RS256 keys from secret store. Local dev uses an in-memory key.
     signing-mode: ${JWT_SIGNING_MODE:dev-in-memory}
   search:

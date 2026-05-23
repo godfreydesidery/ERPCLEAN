@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
@@ -8,14 +9,15 @@ import com.orbix.engine.modules.party.domain.dto.UpdateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.domain.entity.Party;
 import com.orbix.engine.modules.party.domain.enums.PartyCategory;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.Function;
@@ -34,15 +36,16 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CustomerResponseDto> listCustomers() {
-        List<Customer> rows = customers.findByCompanyId(context.companyId());
+    public PageDto<CustomerResponseDto> listCustomers(String q, PartyStatus status, Pageable pageable) {
+        Page<Customer> page = customers.search(context.companyId(), blankToNull(q), status, pageable);
         Map<Long, Party> partyById = parties.findAllById(
-                rows.stream().map(Customer::getPartyId).toList())
+                page.getContent().stream().map(Customer::getPartyId).toList())
             .stream().collect(Collectors.toMap(Party::getId, Function.identity()));
-        return rows.stream()
-            .map(c -> CustomerResponseDto.from(c, partyById.get(c.getPartyId())))
-            .sorted(Comparator.comparing(dto -> dto.party().code()))
-            .toList();
+        return PageDto.of(page, c -> CustomerResponseDto.from(c, partyById.get(c.getPartyId())));
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     @Override

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -53,7 +53,7 @@ import { Route } from './route-admin.models';
               <div class="col-md-8">
                 <label class="form-label small fw-semibold text-secondary">Name</label>
                 <input class="form-control" name="name" [(ngModel)]="form.name" required
-                       placeholder="Central Kampala">
+                       placeholder="Central Dar es Salaam">
               </div>
               <div class="col-12">
                 <label class="form-label small fw-semibold text-secondary">

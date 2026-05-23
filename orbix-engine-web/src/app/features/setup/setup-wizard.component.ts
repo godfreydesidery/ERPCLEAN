@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -62,12 +62,12 @@ const STEPS: { key: StepKey; title: string; hint: string }[] = [
               <div class="row g-2">
                 <div class="col">
                   <label class="form-label">Currency *</label>
-                  <input class="form-control text-uppercase" formControlName="currencyCode" maxlength="3" placeholder="UGX">
+                  <input class="form-control text-uppercase" formControlName="currencyCode" maxlength="3" placeholder="TZS">
                   <small class="text-muted">ISO 4217 (3-letter)</small>
                 </div>
                 <div class="col">
                   <label class="form-label">Country *</label>
-                  <input class="form-control text-uppercase" formControlName="countryCode" maxlength="2" placeholder="UG">
+                  <input class="form-control text-uppercase" formControlName="countryCode" maxlength="2" placeholder="TZ">
                   <small class="text-muted">ISO 3166-1 alpha-2</small>
                 </div>
               </div>
@@ -86,7 +86,7 @@ const STEPS: { key: StepKey; title: string; hint: string }[] = [
               </div>
               <div class="mb-3">
                 <label class="form-label">Time zone</label>
-                <input class="form-control" formControlName="timeZone" placeholder="Africa/Kampala">
+                <input class="form-control" formControlName="timeZone" placeholder="Africa/Dar_es_Salaam">
               </div>
             </div>
 
@@ -102,7 +102,7 @@ const STEPS: { key: StepKey; title: string; hint: string }[] = [
               </div>
               <div class="mb-3">
                 <label class="form-label">Time zone</label>
-                <input class="form-control" formControlName="timeZone" placeholder="Africa/Kampala">
+                <input class="form-control" formControlName="timeZone" placeholder="Africa/Dar_es_Salaam">
               </div>
             </div>
 
@@ -159,18 +159,18 @@ export class SetupWizardComponent implements OnInit {
     organisation: this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(200)]],
       legalName: ['', [Validators.maxLength(200)]],
-      currencyCode: ['UGX', [Validators.required, Validators.pattern(/^[A-Z]{3}$/)]],
-      countryCode: ['UG', [Validators.required, Validators.pattern(/^[A-Z]{2}$/)]]
+      currencyCode: ['TZS', [Validators.required, Validators.pattern(/^[A-Z]{3}$/)]],
+      countryCode: ['TZ', [Validators.required, Validators.pattern(/^[A-Z]{2}$/)]]
     }),
     company: this.fb.group({
       code: ['', [Validators.required, Validators.maxLength(20)]],
       name: ['', [Validators.required, Validators.maxLength(200)]],
-      timeZone: ['Africa/Kampala', [Validators.maxLength(64)]]
+      timeZone: ['Africa/Dar_es_Salaam', [Validators.maxLength(64)]]
     }),
     branch: this.fb.group({
       code: ['HQ', [Validators.required, Validators.maxLength(20)]],
       name: ['Head Office', [Validators.required, Validators.maxLength(120)]],
-      timeZone: ['Africa/Kampala', [Validators.maxLength(64)]]
+      timeZone: ['Africa/Dar_es_Salaam', [Validators.maxLength(64)]]
     }),
     admin: this.fb.group({
       username: ['admin', [Validators.required, Validators.minLength(3), Validators.maxLength(80)]],

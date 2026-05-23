@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.domain.dto.CreateEmployeeRequestDto;
@@ -7,14 +8,15 @@ import com.orbix.engine.modules.party.domain.dto.EmployeeResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateEmployeeRequestDto;
 import com.orbix.engine.modules.party.domain.entity.Employee;
 import com.orbix.engine.modules.party.domain.entity.Party;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.repository.EmployeeRepository;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.function.Function;
@@ -33,15 +35,16 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<EmployeeResponseDto> listEmployees() {
-        List<Employee> rows = employees.findByCompanyId(context.companyId());
+    public PageDto<EmployeeResponseDto> listEmployees(String q, PartyStatus status, Pageable pageable) {
+        Page<Employee> page = employees.search(context.companyId(), blankToNull(q), status, pageable);
         Map<Long, Party> partyById = parties.findAllById(
-                rows.stream().map(Employee::getPartyId).toList())
+                page.getContent().stream().map(Employee::getPartyId).toList())
             .stream().collect(Collectors.toMap(Party::getId, Function.identity()));
-        return rows.stream()
-            .map(e -> EmployeeResponseDto.from(e, partyById.get(e.getPartyId())))
-            .sorted(Comparator.comparing(EmployeeResponseDto::employeeCode))
-            .toList();
+        return PageDto.of(page, e -> EmployeeResponseDto.from(e, partyById.get(e.getPartyId())));
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     @Override

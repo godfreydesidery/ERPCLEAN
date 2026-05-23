@@ -1,10 +1,10 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesInvoiceRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesInvoiceDto;
 import com.orbix.engine.modules.sales.domain.dto.VoidSalesInvoiceRequestDto;
-
-import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Back-office sales invoices (F4.2). DRAFT → POSTED writes the outbound
@@ -26,7 +26,7 @@ public interface SalesInvoiceService {
     /** DRAFT → CANCELLED. */
     SalesInvoiceDto cancel(Long invoiceId);
 
-    List<SalesInvoiceDto> list(Long branchId);
+    PageDto<SalesInvoiceDto> list(Long branchId, Pageable pageable);
 
     SalesInvoiceDto get(Long invoiceId);
 }

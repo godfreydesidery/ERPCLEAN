@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.auth.service;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -13,5 +14,6 @@ public interface JwtService {
 
     Claims parse(String token);
 
-    record Claims(Long userId, Long companyId, Long branchId, List<String> permissions) {}
+    record Claims(Long userId, Long companyId, Long branchId, List<String> permissions,
+                  String jti, Instant issuedAt) {}
 }

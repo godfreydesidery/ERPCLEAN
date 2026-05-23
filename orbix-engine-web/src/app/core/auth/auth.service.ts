@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { EMPTY, Observable, of, tap } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, of, tap, throwError } from 'rxjs';
+import { catchError, finalize, shareReplay } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../api/api-response';
 
@@ -62,13 +62,21 @@ export class AuthService {
   refresh(): Observable<LoginResponse> {
     if (this.inFlightRefresh) return this.inFlightRefresh;
     const refreshToken = sessionStorage.getItem(REFRESH_KEY);
-    if (!refreshToken) return EMPTY;
+    // No refresh token to spend — surface an error so callers (the interceptor)
+    // can bounce to /login instead of completing empty and hanging the request.
+    if (!refreshToken) return throwError(() => new Error('No refresh token available'));
     this.inFlightRefresh = unwrap(this.http.post<ApiResponse<LoginResponse>>(
       `${environment.apiUrl}/auth/refresh`,
       { refreshToken }
     )).pipe(
       tap(resp => this.storeSession(resp)),
-      tap({ complete: () => (this.inFlightRefresh = null), error: () => (this.inFlightRefresh = null) })
+      // Multicast so concurrent 401s share ONE network refresh. Without this the
+      // latch holds a *cold* observable and every subscriber re-fires the POST;
+      // the 2nd presents the just-rotated (now-revoked) token, which the backend
+      // reads as reuse and burns every session. shareReplay + finalize give a
+      // true single-flight that resets once the call settles.
+      shareReplay(1),
+      finalize(() => (this.inFlightRefresh = null))
     );
     return this.inFlightRefresh;
   }

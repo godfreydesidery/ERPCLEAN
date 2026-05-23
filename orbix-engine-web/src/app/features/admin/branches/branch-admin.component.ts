@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -57,7 +57,7 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
               </div>
               <div class="col-12">
                 <label class="form-label small fw-semibold text-secondary">Time zone</label>
-                <input class="form-control font-monospace" name="tz" [(ngModel)]="newBranch.timeZone" required placeholder="Africa/Kampala">
+                <input class="form-control font-monospace" name="tz" [(ngModel)]="newBranch.timeZone" required placeholder="Africa/Dar_es_Salaam">
               </div>
             </div>
             <div class="d-flex gap-2 pt-2 border-top">
@@ -474,7 +474,7 @@ export class BranchAdminComponent implements OnInit {
 }
 
 function blankBranchForm() {
-  return { code: '', name: '', type: 'RETAIL', phone: '', timeZone: 'Africa/Kampala', physicalAddress: '' };
+  return { code: '', name: '', type: 'RETAIL', phone: '', timeZone: 'Africa/Dar_es_Salaam', physicalAddress: '' };
 }
 
 function blankSectionForm() {

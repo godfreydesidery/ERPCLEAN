@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,11 +7,12 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { CatalogService } from '../catalog.service';
 import { ItemGroup } from '../catalog.models';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 
 @Component({
   selector: 'orbix-item-group',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -101,12 +102,8 @@ import { ItemGroup } from '../catalog.models';
               <form (ngSubmit)="create()" #cf="ngForm" class="d-flex flex-column gap-3">
                 <div>
                   <label class="form-label small fw-semibold text-secondary">Parent</label>
-                  <select class="form-select" name="parent" [(ngModel)]="newParentId">
-                    <option [ngValue]="null">(root)</option>
-                    @for (g of activeGroups(); track g.id) {
-                      <option [ngValue]="g.id">{{ '— '.repeat(g.level - 1) }}{{ g.name }}</option>
-                    }
-                  </select>
+                  <orbix-search-select [options]="groupOptions()" [(ngModel)]="newParentId"
+                                       name="parent" placeholder="(root)"/>
                 </div>
                 <div class="row g-2">
                   <div class="col-5">
@@ -287,6 +284,8 @@ export class ItemGroupComponent implements OnInit {
   // Note: id is now a string (JSON:API discipline) — use String keys in the
   // children-by-parent map and descendant set.
   protected readonly activeGroups = computed(() => this.orderedGroups().filter(g => g.status === 'ACTIVE'));
+  protected readonly groupOptions = computed<SearchSelectOption[]>(
+    () => this.activeGroups().map(g => ({ id: g.id, label: g.name })));
 
   ngOnInit(): void {
     this.load();

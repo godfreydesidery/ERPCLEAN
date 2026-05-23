@@ -32,7 +32,8 @@ import com.orbix.engine.modules.pos.repository.PosSaleRepository;
 import com.orbix.engine.modules.pos.repository.TillRepository;
 import com.orbix.engine.modules.pos.repository.TillSessionRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,9 +69,7 @@ public class TillSessionServiceImpl implements TillSessionService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    @Value("${orbix.pos.session-variance-threshold}")
-    private BigDecimal varianceThreshold;
+    private final SettingsService settings;
 
     @Override
     @Transactional
@@ -144,7 +143,7 @@ public class TillSessionServiceImpl implements TillSessionService {
         BigDecimal expectedCash = computeExpectedCash(session);
         BigDecimal variance = request.declaredCashAmount().subtract(expectedCash);
         Long actorId = context.userId();
-        if (variance.abs().compareTo(varianceThreshold) > 0) {
+        if (variance.abs().compareTo(settings.getDecimal(SettingKey.POS_SESSION_VARIANCE_THRESHOLD)) > 0) {
             validateSupervisor(request.supervisorId(), actorId);
         }
         session.close(expectedCash, request.declaredCashAmount(), actorId,

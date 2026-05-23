@@ -38,7 +38,8 @@ import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import com.orbix.engine.modules.stock.service.StockReservationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.SettingsService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,14 +75,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
-
-    /** Hard-reject above this multiple of planned (TC-PROD-011). */
-    @Value("${orbix.production.yield-hard-reject-multiple:2.0}")
-    private BigDecimal yieldHardRejectMultiple;
-
-    /** Soft-warn outside [1 ± this fraction] of planned (TC-PROD-010 — 4% under is allowed). */
-    @Value("${orbix.production.yield-soft-warn-fraction:0.5}")
-    private BigDecimal yieldSoftWarnFraction;
+    private final SettingsService settings;
 
     // ---------------------------------------------------------------------
     // Plan
@@ -406,6 +400,7 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
 
     private void validateYield(BigDecimal planned, BigDecimal actual) {
         if (planned == null || planned.signum() <= 0) return;
+        BigDecimal yieldHardRejectMultiple = settings.getDecimal(SettingKey.PRODUCTION_YIELD_HARD_REJECT);
         BigDecimal hardCap = planned.multiply(yieldHardRejectMultiple);
         if (actual.compareTo(hardCap) > 0) {
             throw new IllegalArgumentException(

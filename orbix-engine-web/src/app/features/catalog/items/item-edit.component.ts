@@ -1,6 +1,7 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
@@ -12,7 +13,7 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
 @Component({
   selector: 'orbix-item-edit',
   standalone: true,
-  imports: [DecimalPipe, FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent],
+  imports: [DecimalPipe, FormsModule, RouterLink, BarcodesPanelComponent, PriceHistoryPanelComponent, SearchSelectComponent],
   template: `
     <h2 class="h3 mb-4">{{ itemUid() ? 'Edit item' : 'New item' }}</h2>
 
@@ -42,30 +43,18 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
       </div>
       <div class="col-md-6">
         <label class="form-label">Item group</label>
-        <select class="form-select" name="group" [(ngModel)]="form.itemGroupId" required>
-          <option [ngValue]="null" disabled>Select a group…</option>
-          @for (g of groups(); track g.id) {
-            <option [ngValue]="g.id">{{ '— '.repeat(g.level - 1) }}{{ g.name }} ({{ g.code }})</option>
-          }
-        </select>
+        <orbix-search-select [options]="groupOptions()" [(ngModel)]="form.itemGroupId"
+                             name="group" required placeholder="Select a group…"/>
       </div>
       <div class="col-md-3">
         <label class="form-label">Unit of measure</label>
-        <select class="form-select" name="uom" [(ngModel)]="form.uomId" required>
-          <option [ngValue]="null" disabled>Select a UoM…</option>
-          @for (u of uoms(); track u.id) {
-            <option [ngValue]="u.id">{{ u.name }} ({{ u.code }})</option>
-          }
-        </select>
+        <orbix-search-select [options]="uomOptions()" [(ngModel)]="form.uomId"
+                             name="uom" required placeholder="Select a UoM…"/>
       </div>
       <div class="col-md-3">
         <label class="form-label">VAT group</label>
-        <select class="form-select" name="vat" [(ngModel)]="form.vatGroupId" required>
-          <option [ngValue]="null" disabled>Select a VAT group…</option>
-          @for (v of vatGroups(); track v.id) {
-            <option [ngValue]="v.id">{{ v.name }} ({{ v.code }} — {{ v.rate * 100 | number:'1.0-2' }}%)</option>
-          }
-        </select>
+        <orbix-search-select [options]="vatOptions()" [(ngModel)]="form.vatGroupId"
+                             name="vat" required placeholder="Select a VAT group…"/>
       </div>
       @if (itemUid()) {
         <div class="col-md-3">
@@ -110,7 +99,7 @@ import { PriceHistoryPanelComponent } from './price-history-panel.component';
         </div>
       }
       <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" [disabled]="saving() || f.invalid">
+        <button class="btn btn-primary" [disabled]="saving() || f.invalid || !form.itemGroupId || !form.uomId || !form.vatGroupId">
           {{ itemUid() ? 'Save changes' : 'Create item' }}
         </button>
         <a class="btn btn-outline-secondary" routerLink="/catalog/items">Cancel</a>
@@ -136,6 +125,13 @@ export class ItemEditComponent implements OnInit {
   readonly vatGroups = signal<VatGroup[]>([]);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
+
+  readonly groupOptions = computed<SearchSelectOption[]>(
+    () => this.groups().map(g => ({ id: g.id, label: `${g.name} (${g.code})` })));
+  readonly uomOptions = computed<SearchSelectOption[]>(
+    () => this.uoms().map(u => ({ id: u.id, label: `${u.name} (${u.code})` })));
+  readonly vatOptions = computed<SearchSelectOption[]>(
+    () => this.vatGroups().map(v => ({ id: v.id, label: `${v.name} (${v.code} — ${+(v.rate * 100).toFixed(2)}%)` })));
 
   form: {
     code: string;

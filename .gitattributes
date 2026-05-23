@@ -1,0 +1,10 @@
+# Shell scripts + container artifacts MUST be LF — they run on Linux in Docker.
+# A CRLF entrypoint.sh fails with "bad interpreter: bash^M".
+*.sh                                  text eol=lf
+orbix-engine-infra/qa/entrypoint.sh   text eol=lf
+orbix-engine-infra/qa/Dockerfile      text eol=lf
+*.cnf                                 text eol=lf
+*.conf                                text eol=lf
+
+# Windows-only helper stays CRLF.
+*.ps1                                 text eol=crlf

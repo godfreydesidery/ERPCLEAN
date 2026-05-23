@@ -1,15 +1,16 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.party.domain.dto.CreateSupplierRequestDto;
 import com.orbix.engine.modules.party.domain.dto.SupplierResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateSupplierRequestDto;
-
-import java.util.List;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
+import org.springframework.data.domain.Pageable;
 
 /** Supplier-role management (F1.7). Reuses an existing party by TIN where possible. */
 public interface SupplierService {
 
-    List<SupplierResponseDto> listSuppliers();
+    PageDto<SupplierResponseDto> listSuppliers(String q, PartyStatus status, Pageable pageable);
 
     SupplierResponseDto getSupplierByPartyUid(String partyUid);
 

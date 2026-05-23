@@ -10,6 +10,8 @@ import java.util.Set;
 
 public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
+    java.util.Optional<UserRole> findByUid(String uid);
+
     List<UserRole> findByUserIdAndCompanyIdAndRevokedAtIsNull(Long userId, Long companyId);
 
     List<UserRole> findByRoleIdAndRevokedAtIsNull(Long roleId);

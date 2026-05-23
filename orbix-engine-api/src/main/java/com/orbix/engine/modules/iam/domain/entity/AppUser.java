@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.iam.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -17,12 +18,15 @@ import java.time.Instant;
  * {@code role_permission}.
  */
 @Entity
-@Table(name = "app_user", uniqueConstraints = @UniqueConstraint(name = "uk_app_user_username", columnNames = "username"))
+@Table(name = "app_user", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_app_user_username", columnNames = "username"),
+    @UniqueConstraint(name = "uk_app_user_uid", columnNames = "uid")
+})
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
+@EqualsAndHashCode(of = "id", callSuper = false)
 @ToString(exclude = { "passwordHash" })
-public class AppUser {
+public class AppUser extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "app_user_seq")
@@ -61,6 +65,9 @@ public class AppUser {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    @Column(name = "last_failed_login_at")
+    private Instant lastFailedLoginAt;
 
     /**
      * Forces the user to set a new password on their next login. Flipped on
@@ -113,15 +120,36 @@ public class AppUser {
         this.lastLoginAt = at;
         this.failedLoginCount = 0;
         this.lockedUntil = null;
+        this.lastFailedLoginAt = null;
         this.updatedAt = at;
     }
 
-    public void recordFailedLogin(Instant at, int lockoutThreshold, Duration lockoutFor) {
+    public void recordFailedLogin(Instant at, int lockoutThreshold,
+                                  Duration baseLock, Duration maxLock, Duration failWindow) {
+        // Quiet-period decay: only a full window with no failures resets the
+        // streak. We deliberately do NOT reset merely because a prior lockout
+        // elapsed — that's what lets the penalty escalate on a sustained burst.
+        // (login() never calls this while still locked, so lockedUntil here is
+        // always null or already in the past.)
+        boolean windowExpired = lastFailedLoginAt == null || at.isAfter(lastFailedLoginAt.plus(failWindow));
+        if (windowExpired) {
+            this.failedLoginCount = 0;
+            this.lockedUntil = null;
+        }
         this.failedLoginCount++;
+        this.lastFailedLoginAt = at;
         if (failedLoginCount >= lockoutThreshold) {
-            this.lockedUntil = at.plus(lockoutFor);
+            // Exponential backoff: base, 2·base, 4·base … capped at maxLock.
+            this.lockedUntil = at.plus(exponentialBackoff(baseLock, maxLock, failedLoginCount - lockoutThreshold));
         }
         this.updatedAt = at;
+    }
+
+    /** {@code base * 2^step}, overflow-guarded and capped at {@code max}. */
+    private static Duration exponentialBackoff(Duration base, Duration max, int step) {
+        if (step >= 32) return max;
+        Duration scaled = base.multipliedBy(1L << step);
+        return scaled.compareTo(max) > 0 ? max : scaled;
     }
 
     /** Admin-issued password reset — flips the must-change flag. */
@@ -152,6 +180,7 @@ public class AppUser {
         if (next == AppUserStatus.ACTIVE) {
             this.lockedUntil = null;
             this.failedLoginCount = 0;
+            this.lastFailedLoginAt = null;
         }
         touch(actorId);
     }
@@ -159,6 +188,7 @@ public class AppUser {
     public void unlock(Long actorId) {
         this.lockedUntil = null;
         this.failedLoginCount = 0;
+        this.lastFailedLoginAt = null;
         touch(actorId);
     }
 

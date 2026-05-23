@@ -7,9 +7,7 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
-import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
-
-import java.util.List;
+import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 
 /**
  * Day-2 user administration (F0.4c). Companion to {@link RoleAdminService} —
@@ -18,27 +16,28 @@ import java.util.List;
  */
 public interface UserAdminService {
 
-    List<UserSummaryDto> listUsers();
+    /** Server-side paginated user list. {@code q} = search; {@code statusFilter} = all|active|disabled|locked|reset. */
+    UserPageDto listUsers(String q, String statusFilter, int page, int size);
 
-    UserDetailDto getUser(Long userId);
+    UserDetailDto getUserByUid(String uid);
 
     /** Admin-issued create. Returns the new user + any server-generated temp password. */
     CreateUserResponseDto createUser(CreateUserRequestDto request);
 
-    UserDetailDto updateUser(Long userId, UpdateUserRequestDto request);
+    UserDetailDto updateUserByUid(String uid, UpdateUserRequestDto request);
 
     /** Admin-issued password reset. Returns any server-generated temp password. */
-    ResetPasswordResponseDto resetPassword(Long userId, ResetPasswordRequestDto request);
+    ResetPasswordResponseDto resetPasswordByUid(String uid, ResetPasswordRequestDto request);
 
-    UserDetailDto disableUser(Long userId);
+    UserDetailDto disableUserByUid(String uid);
 
-    UserDetailDto enableUser(Long userId);
+    UserDetailDto enableUserByUid(String uid);
 
     /** Clears the lock-out timer without changing user status. */
-    UserDetailDto unlockUser(Long userId);
+    UserDetailDto unlockUserByUid(String uid);
 
     /** Revokes every active refresh token for the user — kills all sessions everywhere. */
-    void forceLogout(Long userId);
+    void forceLogoutByUid(String uid);
 
     /** Self-service password change — must supply current password. */
     void changeMyPassword(ChangePasswordRequestDto request);

@@ -18,6 +18,13 @@ public interface FirstRunSetupService {
     /** Returns true if any organisation exists — the wizard should redirect to /login. */
     boolean isBootstrapped();
 
+    /**
+     * Re-applies an (env-sourced) password to an existing bootstrap admin user.
+     * Used by the token-gated reset endpoint; the raw value is never accepted
+     * from a request body. Leaves {@code mustChangePassword=false}.
+     */
+    void resetAdminPassword(String username, String rawPassword);
+
     class AlreadyBootstrappedException extends RuntimeException {
         public AlreadyBootstrappedException(String message) { super(message); }
     }

@@ -1,7 +1,10 @@
 package com.orbix.engine.modules.procurement.service;
 
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.party.domain.entity.Supplier;
 import com.orbix.engine.modules.party.repository.SupplierRepository;
 import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequestDto;
@@ -19,7 +22,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -54,6 +56,8 @@ class SupplierInvoiceServiceImplTest {
     @Mock private SupplierRepository suppliers;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private SettingsService settings;
 
     @InjectMocks private SupplierInvoiceServiceImpl service;
 
@@ -63,7 +67,8 @@ class SupplierInvoiceServiceImplTest {
     void bind() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
-        ReflectionTestUtils.setField(service, "toleranceFraction", new BigDecimal("0.005"));
+        lenient().when(settings.getDecimal(SettingKey.PROCUREMENT_INVOICE_MATCH_TOLERANCE))
+            .thenReturn(new BigDecimal("0.005"));
 
         Supplier supplier = new Supplier(SUPPLIER_ID);
         supplier.setPaymentTermsDays(30);

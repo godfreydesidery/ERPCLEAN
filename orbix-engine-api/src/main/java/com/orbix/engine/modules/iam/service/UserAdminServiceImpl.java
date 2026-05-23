@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.auth.repository.RefreshTokenRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.TokenGuardService;
 import com.orbix.engine.modules.iam.domain.dto.ChangePasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.CreateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.CreateUserResponseDto;
@@ -13,7 +14,12 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.RoleGrantDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
+import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import com.orbix.engine.modules.iam.domain.RootAdmin;
 import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
 import com.orbix.engine.modules.iam.domain.enums.AppUserStatus;
@@ -49,28 +55,40 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final BranchRepository branches;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwords;
+    private final PasswordPolicyService passwordPolicy;
+    private final TokenGuardService tokenGuard;
+    private final RootAdminGuard rootAdminGuard;
     private final RequestContext context;
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserSummaryDto> listUsers() {
+    public UserPageDto listUsers(String q, String statusFilter, int page, int size) {
         Long callerId = context.userId();
         Long companyId = context.companyId();
         // Company-wide admins see every user. Branch-scoped admins see only
         // users with a grant covering their active branch — plus orphans
         // (users with no grants yet, awaiting role assignment).
-        List<AppUser> rows = userRoles.hasAnyCompanyWideGrant(callerId, companyId)
-            ? users.findByDefaultCompanyIdOrderByIdAsc(companyId)
-            : users.findVisibleInBranch(companyId, context.branchId());
-        return rows.stream()
-            .map(UserSummaryDto::from)
-            .toList();
+        boolean companyWide = userRoles.hasAnyCompanyWideGrant(callerId, companyId);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safePage = Math.max(page, 0);
+        String filter = (statusFilter == null || statusFilter.isBlank()) ? "all" : statusFilter.trim().toLowerCase();
+
+        Page<AppUser> result = users.search(
+            companyId, companyWide, context.branchId(),
+            emptyToNull(q), filter, Instant.now(),
+            PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "id")));
+
+        return new UserPageDto(
+            result.getContent().stream().map(UserSummaryDto::from).toList(),
+            result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public UserDetailDto getUser(Long userId) {
-        AppUser user = requireUser(userId);
+    public UserDetailDto getUserByUid(String uid) {
+        AppUser user = requireUserByUid(uid);
         return UserDetailDto.from(user, loadGrants(user));
     }
 
@@ -82,6 +100,9 @@ public class UserAdminServiceImpl implements UserAdminService {
         Long actorId = context.userId();
 
         String username = request.username().trim();
+        if (RootAdmin.is(username)) {
+            throw new IllegalArgumentException("Username '" + RootAdmin.USERNAME + "' is reserved");
+        }
         if (users.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists: " + username);
         }
@@ -91,6 +112,9 @@ public class UserAdminServiceImpl implements UserAdminService {
 
         boolean serverGenerated = request.password() == null || request.password().isBlank();
         String plain = serverGenerated ? generateTempPassword() : request.password();
+        if (!serverGenerated) {
+            passwordPolicy.validate(plain);
+        }
         boolean mustChange = request.mustChangePassword() == null
             ? serverGenerated : request.mustChangePassword();
 
@@ -116,8 +140,9 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = "AppUser")
-    public UserDetailDto updateUser(Long userId, UpdateUserRequestDto request) {
-        AppUser user = requireUser(userId);
+    public UserDetailDto updateUserByUid(String uid, UpdateUserRequestDto request) {
+        AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "modified");
         if (request.defaultBranchId() != null) {
             verifyBranchInCompany(request.defaultBranchId(), user.getDefaultCompanyId());
         }
@@ -134,20 +159,25 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional
     @Auditable(action = "RESET_PASSWORD", entityType = "AppUser")
-    public ResetPasswordResponseDto resetPassword(Long userId, ResetPasswordRequestDto request) {
-        AppUser user = requireUser(userId);
+    public ResetPasswordResponseDto resetPasswordByUid(String uid, ResetPasswordRequestDto request) {
+        AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "password-reset (it is managed via the bootstrap env)");
 
         boolean serverGenerated = request.newPassword() == null || request.newPassword().isBlank();
         String plain = serverGenerated ? generateTempPassword() : request.newPassword();
+        if (!serverGenerated) {
+            passwordPolicy.validate(plain);
+        }
         // Default to forcing the user to set their own password on next login.
         boolean mustChange = request.mustChangePassword() == null || request.mustChangePassword();
 
         user.resetPassword(passwords.encode(plain), mustChange, context.userId());
         AppUser saved = users.save(user);
 
-        // Kill every active session — the old password is gone, the JWT
-        // still works until expiry but the refresh chain is severed.
+        // Kill every active session — sever the refresh chain and invalidate
+        // any still-valid access tokens immediately (the old password is gone).
         refreshTokens.revokeAllForUser(user.getId(), Instant.now());
+        tokenGuard.invalidateUserTokens(user.getId());
 
         return new ResetPasswordResponseDto(
             UserDetailDto.from(saved, loadGrants(saved)),
@@ -158,21 +188,24 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional
     @Auditable(action = "DISABLE", entityType = "AppUser")
-    public UserDetailDto disableUser(Long userId) {
-        AppUser user = requireUser(userId);
+    public UserDetailDto disableUserByUid(String uid) {
+        AppUser user = requireUserByUid(uid);
+        rootAdminGuard.assertMutable(user, "disabled");
         guardSelfMutation(user, "disable yourself");
         user.setStatus(AppUserStatus.INACTIVE, context.userId());
         AppUser saved = users.save(user);
-        // Lock the user out of any active session.
+        // Lock the user out of any active session — refresh chain AND any
+        // still-valid access tokens (the latter via the per-user epoch).
         refreshTokens.revokeAllForUser(user.getId(), Instant.now());
+        tokenGuard.invalidateUserTokens(user.getId());
         return UserDetailDto.from(saved, loadGrants(saved));
     }
 
     @Override
     @Transactional
     @Auditable(action = "ENABLE", entityType = "AppUser")
-    public UserDetailDto enableUser(Long userId) {
-        AppUser user = requireUser(userId);
+    public UserDetailDto enableUserByUid(String uid) {
+        AppUser user = requireUserByUid(uid);
         user.setStatus(AppUserStatus.ACTIVE, context.userId());
         return UserDetailDto.from(users.save(user), loadGrants(user));
     }
@@ -180,8 +213,8 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional
     @Auditable(action = "UNLOCK", entityType = "AppUser")
-    public UserDetailDto unlockUser(Long userId) {
-        AppUser user = requireUser(userId);
+    public UserDetailDto unlockUserByUid(String uid) {
+        AppUser user = requireUserByUid(uid);
         user.unlock(context.userId());
         return UserDetailDto.from(users.save(user), loadGrants(user));
     }
@@ -189,9 +222,10 @@ public class UserAdminServiceImpl implements UserAdminService {
     @Override
     @Transactional
     @Auditable(action = "FORCE_LOGOUT", entityType = "AppUser")
-    public void forceLogout(Long userId) {
-        requireUser(userId);
-        refreshTokens.revokeAllForUser(userId, Instant.now());
+    public void forceLogoutByUid(String uid) {
+        AppUser user = requireUserByUid(uid);
+        refreshTokens.revokeAllForUser(user.getId(), Instant.now());
+        tokenGuard.invalidateUserTokens(user.getId());
     }
 
     @Override
@@ -202,35 +236,42 @@ public class UserAdminServiceImpl implements UserAdminService {
         if (userId == null) throw new AccessDeniedException("Not authenticated");
         AppUser user = users.findById(userId)
             .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+        rootAdminGuard.assertMutable(user, "changed here (rootadmin is managed via the bootstrap env)");
 
         if (!passwords.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new AccessDeniedException("Current password is incorrect");
         }
+        passwordPolicy.validate(request.newPassword());
         if (passwords.matches(request.newPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("New password must differ from the current one");
         }
         user.changePassword(passwords.encode(request.newPassword()), userId);
         users.save(user);
+
+        // US-IAM-005: a password change invalidates every existing session. The
+        // current client keeps its access token until it expires (≤15m), then
+        // re-authenticates; all other devices are cut at their next refresh.
+        refreshTokens.revokeAllForUser(userId, Instant.now());
     }
 
     // -----------------------------------------------------------------------
     // helpers
     // -----------------------------------------------------------------------
 
-    private AppUser requireUser(Long userId) {
+    private AppUser requireUserByUid(String uid) {
         Long callerId = context.userId();
         Long companyId = context.companyId();
-        AppUser user = users.findById(userId)
-            .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
+        AppUser user = users.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("User not found: " + uid));
         if (!Objects.equals(user.getDefaultCompanyId(), companyId)) {
-            throw new AccessDeniedException("User " + userId + " is not in your company");
+            throw new AccessDeniedException("User " + uid + " is not in your company");
         }
         // Branch-scoped admins can only act on users visible in their branch.
         // Company-wide admins bypass this.
         if (!userRoles.hasAnyCompanyWideGrant(callerId, companyId)
-            && !userRoles.isUserVisibleInBranch(userId, companyId, context.branchId())) {
+            && !userRoles.isUserVisibleInBranch(user.getId(), companyId, context.branchId())) {
             throw new AccessDeniedException(
-                "User " + userId + " is not in your branch scope");
+                "User " + uid + " is not in your branch scope");
         }
         return user;
     }

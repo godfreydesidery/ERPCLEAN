@@ -26,39 +26,39 @@ export class RoleAdminService {
     return unwrap(this.http.get<ApiResponse<RoleSummary[]>>(`${this.base}/roles`));
   }
 
-  getRole(id: string): Observable<RoleDetail> {
-    return unwrap(this.http.get<ApiResponse<RoleDetail>>(`${this.base}/roles/${id}`));
+  getRole(uid: string): Observable<RoleDetail> {
+    return unwrap(this.http.get<ApiResponse<RoleDetail>>(`${this.base}/roles/uid/${uid}`));
   }
 
   createRole(request: CreateRoleRequest): Observable<RoleDetail> {
     return unwrap(this.http.post<ApiResponse<RoleDetail>>(`${this.base}/roles`, request));
   }
 
-  updateRole(id: string, request: UpdateRoleRequest): Observable<RoleDetail> {
-    return unwrap(this.http.patch<ApiResponse<RoleDetail>>(`${this.base}/roles/${id}`, request));
+  updateRole(uid: string, request: UpdateRoleRequest): Observable<RoleDetail> {
+    return unwrap(this.http.patch<ApiResponse<RoleDetail>>(`${this.base}/roles/uid/${uid}`, request));
   }
 
-  setPermissions(id: string, permissionIds: string[]): Observable<RoleDetail> {
+  setPermissions(uid: string, permissionIds: string[]): Observable<RoleDetail> {
     return unwrap(this.http.put<ApiResponse<RoleDetail>>(
-      `${this.base}/roles/${id}/permissions`, { permissionIds }
+      `${this.base}/roles/uid/${uid}/permissions`, { permissionIds }
     ));
   }
 
-  deleteRole(id: string): Observable<void> {
-    return this.http.delete(`${this.base}/roles/${id}`).pipe(map(() => void 0));
+  deleteRole(uid: string): Observable<void> {
+    return this.http.delete(`${this.base}/roles/uid/${uid}`).pipe(map(() => void 0));
   }
 
-  listGrants(roleId: string): Observable<RoleGrant[]> {
-    return unwrap(this.http.get<ApiResponse<RoleGrant[]>>(`${this.base}/roles/${roleId}/grants`));
+  listGrants(roleUid: string): Observable<RoleGrant[]> {
+    return unwrap(this.http.get<ApiResponse<RoleGrant[]>>(`${this.base}/roles/uid/${roleUid}/grants`));
   }
 
-  grantRole(roleId: string, request: GrantRoleRequest): Observable<RoleGrant> {
+  grantRole(roleUid: string, request: GrantRoleRequest): Observable<RoleGrant> {
     return unwrap(this.http.post<ApiResponse<RoleGrant>>(
-      `${this.base}/roles/${roleId}/grants`, request
+      `${this.base}/roles/uid/${roleUid}/grants`, request
     ));
   }
 
-  revokeGrant(grantId: string): Observable<void> {
-    return this.http.delete(`${this.base}/grants/${grantId}`).pipe(map(() => void 0));
+  revokeGrant(grantUid: string): Observable<void> {
+    return this.http.delete(`${this.base}/grants/uid/${grantUid}`).pipe(map(() => void 0));
   }
 }

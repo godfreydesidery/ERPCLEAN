@@ -12,6 +12,7 @@ import java.util.List;
  */
 public record UserDetailDto(
     Long id,
+    String uid,
     String username,
     String displayName,
     String email,
@@ -31,6 +32,7 @@ public record UserDetailDto(
         boolean locked = u.getLockedUntil() != null && u.getLockedUntil().isAfter(now);
         return new UserDetailDto(
             u.getId(),
+            u.getUid(),
             u.getUsername(),
             u.getDisplayName(),
             u.getEmail(),
