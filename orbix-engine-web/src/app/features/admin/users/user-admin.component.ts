@@ -444,9 +444,13 @@ export class UserAdminComponent implements OnInit {
     return (first + last.charAt(0)).toUpperCase();
   }
 
-  /** Resolve a default-branch id to its name; falls back to "—" when null. */
-  branchLabel(branchId: string | null): string {
-    if (branchId === null) return '—';
+  /**
+   * Resolve a default-branch id to its name. Returns "—" when there is no
+   * default branch — note the API omits null fields (non_null inclusion), so
+   * the value arrives as undefined, not null.
+   */
+  branchLabel(branchId: string | null | undefined): string {
+    if (!branchId) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;
   }

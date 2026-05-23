@@ -429,8 +429,9 @@ export class UserDetailComponent implements OnInit {
     return grants.some(g => g.branchId === branchId);
   }
 
-  /** Resolve a branch id to its display name; falls back to {@code #id} if unknown. */
-  branchLabel(branchId: string): string {
+  /** Resolve a branch id to its display name; "—" when unset, {@code #id} if unknown. */
+  branchLabel(branchId: string | null | undefined): string {
+    if (!branchId) return '—';
     const b = this.branches().find(x => x.id === branchId);
     return b ? b.name : '#' + branchId;
   }
