@@ -79,6 +79,11 @@ public class Route extends UidEntity {
         touch(actorId);
     }
 
+    public void activate(Long actorId) {
+        this.status = AdminStatus.ACTIVE;
+        touch(actorId);
+    }
+
     private void touch(Long actorId) {
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;

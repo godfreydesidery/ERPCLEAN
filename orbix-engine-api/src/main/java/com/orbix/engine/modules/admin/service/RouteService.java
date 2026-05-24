@@ -17,6 +17,9 @@ public interface RouteService {
 
     RouteDto updateRouteByUid(String uid, UpdateRouteRequestDto request);
 
-    /** Marks the route INACTIVE. Idempotency: rejects an already-inactive route. */
-    void deactivateRouteByUid(String uid);
+    /** Marks the route INACTIVE. Rejects an already-inactive route. */
+    void deactivateRouteByUid(String uid, String reason);
+
+    /** Marks the route ACTIVE again. Rejects an already-active route. */
+    void activateRouteByUid(String uid, String reason);
 }

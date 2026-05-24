@@ -71,14 +71,27 @@ public class RouteServiceImpl implements RouteService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Route")
-    public void deactivateRouteByUid(String uid) {
+    public void deactivateRouteByUid(String uid, String reason) {
         Route route = requireRouteByUid(uid);
         if (route.getStatus() != AdminStatus.ACTIVE) {
             throw new IllegalArgumentException("Route is already inactive: " + uid);
         }
         route.deactivate(context.userId());
         events.publish("RouteDeactivated.v1", "Route", route.getUid(),
-            Map.of(ROUTE_UID_KEY, route.getUid()));
+            Map.of(ROUTE_UID_KEY, route.getUid(), "reason", reason));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "Route")
+    public void activateRouteByUid(String uid, String reason) {
+        Route route = requireRouteByUid(uid);
+        if (route.getStatus() == AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Route is already active: " + uid);
+        }
+        route.activate(context.userId());
+        events.publish("RouteActivated.v1", "Route", route.getUid(),
+            Map.of(ROUTE_UID_KEY, route.getUid(), "reason", reason));
     }
 
     private Route requireRouteByUid(String uid) {

@@ -1,5 +1,8 @@
 package com.orbix.engine.modules.party.service;
 
+import com.orbix.engine.modules.admin.domain.entity.Route;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.repository.RouteRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.domain.dto.CreateSalesAgentRequestDto;
@@ -29,6 +32,7 @@ public class SalesAgentServiceImpl implements SalesAgentService {
     private final SalesAgentRepository salesAgents;
     private final PartyRepository parties;
     private final PartyService partyService;
+    private final RouteRepository routes;
     private final RequestContext context;
 
     @Override
@@ -67,6 +71,7 @@ public class SalesAgentServiceImpl implements SalesAgentService {
             throw new IllegalArgumentException(
                 "Party " + party.getCode() + " already has a sales-agent role");
         }
+        validateRoute(request.routeId());
         SalesAgent agent = new SalesAgent(party.getId(), agentCode, request.branchId());
         agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
@@ -93,9 +98,28 @@ public class SalesAgentServiceImpl implements SalesAgentService {
         SalesAgent agent = salesAgents.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
         partyService.applyDetails(party, request.party(), context.userId());
+        validateRoute(request.routeId());
         agent.update(request.appUserId(), request.routeId(), request.commissionRate(),
             request.branchId());
         return SalesAgentResponseDto.from(agent, party);
+    }
+
+    /**
+     * A sales agent may only be tied to a route that exists in the caller's
+     * company and is currently active. Null means "no route" and is allowed.
+     */
+    private void validateRoute(Long routeId) {
+        if (routeId == null) {
+            return;
+        }
+        Route route = routes.findById(routeId)
+            .orElseThrow(() -> new IllegalArgumentException("Route not found: " + routeId));
+        if (!route.getCompanyId().equals(context.companyId())) {
+            throw new IllegalArgumentException("Route not found: " + routeId);
+        }
+        if (route.getStatus() != AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Route is not active: " + routeId);
+        }
     }
 
     @Override

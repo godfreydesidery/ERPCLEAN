@@ -22,7 +22,11 @@ export class RouteAdminService {
     return unwrap(this.http.patch<ApiResponse<Route>>(`${this.base}/routes/uid/${uid}`, request));
   }
 
-  deactivateRoute(uid: string): Observable<void> {
-    return this.http.post(`${this.base}/routes/uid/${uid}/deactivate`, {}).pipe(map(() => void 0));
+  deactivateRoute(uid: string, reason: string): Observable<void> {
+    return this.http.post(`${this.base}/routes/uid/${uid}/deactivate`, { reason }).pipe(map(() => void 0));
+  }
+
+  activateRoute(uid: string, reason: string): Observable<void> {
+    return this.http.post(`${this.base}/routes/uid/${uid}/activate`, { reason }).pipe(map(() => void 0));
   }
 }
