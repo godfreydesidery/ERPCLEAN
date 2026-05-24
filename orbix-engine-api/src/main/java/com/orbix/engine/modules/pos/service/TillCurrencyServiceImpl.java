@@ -2,6 +2,7 @@ package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.admin.domain.entity.Company;
 import com.orbix.engine.modules.admin.domain.entity.Currency;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -52,6 +53,9 @@ public class TillCurrencyServiceImpl implements TillCurrencyService {
         rejectFunctionalCurrency(till, code);
         Currency currency = currencies.findById(code)
             .orElseThrow(() -> new NoSuchElementException("Currency not found: " + code));
+        if (currency.getStatus() != AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Currency is not active: " + code);
+        }
         if (tillCurrencies.existsByIdTillIdAndIdCurrencyCode(tillId, currency.getCode())) {
             throw new IllegalArgumentException(
                 "Till " + tillId + " already accepts " + currency.getCode());

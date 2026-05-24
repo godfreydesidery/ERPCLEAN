@@ -1,10 +1,11 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { ConfirmService } from '../../../core/ui/confirm.service';
 import { CurrencyAdminService } from './currency-admin.service';
 import { Currency } from './currency-admin.models';
 
@@ -25,6 +26,12 @@ import { Currency } from './currency-admin.models';
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
         <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (info()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -51,7 +58,7 @@ import { Currency } from './currency-admin.models';
                 </thead>
                 <tbody>
                   @for (currency of currencies(); track currency.code) {
-                    <tr>
+                    <tr [class.table-active]="editingCode() === currency.code">
                       <td><span class="badge text-bg-light border text-secondary font-monospace">{{ currency.code }}</span></td>
                       <td class="fw-semibold text-dark">{{ currency.name }}</td>
                       <td class="font-monospace text-secondary">{{ currency.symbol || '—' }}</td>
@@ -62,6 +69,10 @@ import { Currency } from './currency-admin.models';
                         </span>
                       </td>
                       <td class="text-end actions-col">
+                        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 me-1"
+                                (click)="startEdit(currency)" [disabled]="saving()">
+                          <i class="bi bi-pencil"></i><span class="d-none d-md-inline">Edit</span>
+                        </button>
                         @if (currency.status === 'ACTIVE') {
                           <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
                                   (click)="setStatus(currency, false)" [disabled]="saving()">
@@ -86,14 +97,17 @@ import { Currency } from './currency-admin.models';
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm">
           <div class="card-header bg-white border-bottom p-3">
-            <h2 class="h6 fw-bold mb-0 text-dark">Add currency</h2>
+            <h2 class="h6 fw-bold mb-0 text-dark">{{ editingCode() ? 'Edit ' + editingCode() : 'Add currency' }}</h2>
           </div>
           <div class="card-body p-3">
-            <form (ngSubmit)="create()" #cf="ngForm" class="d-flex flex-column gap-3">
+            <form (ngSubmit)="save()" #cf="ngForm" class="d-flex flex-column gap-3">
               <div>
                 <label class="form-label small fw-semibold text-secondary">ISO code</label>
                 <input class="form-control text-uppercase font-monospace" name="code" [(ngModel)]="form.code"
-                       required pattern="[A-Za-z]{3}" maxlength="3" placeholder="USD">
+                       required pattern="[A-Za-z]{3}" maxlength="3" placeholder="USD" [disabled]="!!editingCode()">
+                @if (editingCode()) {
+                  <div class="form-text small">The ISO code can't be changed.</div>
+                }
               </div>
               <div>
                 <label class="form-label small fw-semibold text-secondary">Name</label>
@@ -111,11 +125,16 @@ import { Currency } from './currency-admin.models';
                 </div>
               </div>
               <div class="d-flex gap-2 pt-2 border-top">
+                @if (editingCode()) {
+                  <button type="button" class="btn btn-outline-secondary" (click)="cancelEdit()" [disabled]="saving()">
+                    Cancel
+                  </button>
+                }
                 <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
                         [disabled]="saving() || cf.invalid">
                   @if (saving()) { <span class="spinner-border spinner-border-sm"></span> }
-                  @else { <i class="bi bi-plus-lg"></i> }
-                  Add currency
+                  @else { <i class="bi" [ngClass]="editingCode() ? 'bi-check-lg' : 'bi-plus-lg'"></i> }
+                  {{ editingCode() ? 'Save changes' : 'Add currency' }}
                 </button>
               </div>
             </form>
@@ -160,34 +179,74 @@ import { Currency } from './currency-admin.models';
     }
   `]
 })
-export class CurrencyAdminComponent implements OnInit {
+export class CurrencyAdminComponent implements OnInit, OnDestroy {
   private readonly api = inject(CurrencyAdminService);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly currencies = signal<Currency[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly info = signal<string | null>(null);
+  protected readonly editingCode = signal<string | null>(null);
 
   protected form = { code: '', name: '', symbol: '', minorUnitDigits: 2 };
 
+  private infoTimer: ReturnType<typeof setTimeout> | undefined;
+
   ngOnInit(): void { this.load(); }
 
-  create(): void {
-    this.run(this.api.createCurrency({
-      code: this.form.code.trim().toUpperCase(),
-      name: this.form.name.trim(),
-      symbol: this.form.symbol.trim() || null,
-      minorUnitDigits: this.form.minorUnitDigits
-    }), () => {
-      this.form = { code: '', name: '', symbol: '', minorUnitDigits: 2 };
-      this.load();
-    });
+  ngOnDestroy(): void { clearTimeout(this.infoTimer); }
+
+  save(): void {
+    const editing = this.editingCode();
+    if (editing) {
+      this.run(this.api.updateCurrency(editing, {
+        name: this.form.name.trim(),
+        symbol: this.form.symbol.trim() || null,
+        minorUnitDigits: this.form.minorUnitDigits
+      }), () => { this.resetForm(); this.load(); }, 'Currency updated.');
+    } else {
+      this.run(this.api.createCurrency({
+        code: this.form.code.trim().toUpperCase(),
+        name: this.form.name.trim(),
+        symbol: this.form.symbol.trim() || null,
+        minorUnitDigits: this.form.minorUnitDigits
+      }), () => { this.resetForm(); this.load(); }, 'Currency added.');
+    }
   }
 
-  setStatus(currency: Currency, enable: boolean): void {
+  startEdit(currency: Currency): void {
+    this.editingCode.set(currency.code);
+    this.form = {
+      code: currency.code,
+      name: currency.name,
+      symbol: currency.symbol ?? '',
+      minorUnitDigits: currency.minorUnitDigits
+    };
+    this.error.set(null);
+  }
+
+  cancelEdit(): void { this.resetForm(); }
+
+  async setStatus(currency: Currency, enable: boolean): Promise<void> {
+    if (!enable) {
+      const { ok } = await this.confirm.ask({
+        title: 'Disable currency',
+        message: `Disable ${currency.code} — ${currency.name}? It will be hidden from currency pickers until re-enabled.`,
+        confirmText: 'Disable',
+        variant: 'warning'
+      });
+      if (!ok) return;
+    }
     const call = enable
       ? this.api.enableCurrency(currency.code)
       : this.api.disableCurrency(currency.code);
-    this.run(call, () => this.load());
+    this.run(call, () => this.load(), enable ? 'Currency enabled.' : 'Currency disabled.');
+  }
+
+  private resetForm(): void {
+    this.editingCode.set(null);
+    this.form = { code: '', name: '', symbol: '', minorUnitDigits: 2 };
   }
 
   private load(): void {
@@ -197,13 +256,23 @@ export class CurrencyAdminComponent implements OnInit {
     });
   }
 
-  private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
+  private run<T>(source: Observable<T>, onSuccess: (value: T) => void, successMsg?: string): void {
     this.saving.set(true);
     this.error.set(null);
     source.subscribe({
-      next: value => { this.saving.set(false); onSuccess(value); },
+      next: value => {
+        this.saving.set(false);
+        onSuccess(value);
+        if (successMsg) this.flashInfo(successMsg);
+      },
       error: err => { this.saving.set(false); this.showError(err); }
     });
+  }
+
+  private flashInfo(message: string): void {
+    this.info.set(message);
+    clearTimeout(this.infoTimer);
+    this.infoTimer = setTimeout(() => this.info.set(null), 4000);
   }
 
   private showError(err: unknown): void {

@@ -122,8 +122,11 @@ export class CompanyProfileComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.reload();
     this.currencyApi.listCurrencies().subscribe({
+      // Only enabled currencies are selectable as the functional currency
+      // (the backend rejects inactive ones on save).
       next: list => this.currencyOptions.set(
-        list.map(c => ({ id: c.code, label: `${c.code} — ${c.name}` }))),
+        list.filter(c => c.status === 'ACTIVE')
+            .map(c => ({ id: c.code, label: `${c.code} — ${c.name}` }))),
       error: () => this.currencyOptions.set([])
     });
   }

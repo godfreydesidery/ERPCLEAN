@@ -3,6 +3,8 @@ package com.orbix.engine.modules.admin.service;
 import com.orbix.engine.modules.admin.domain.dto.CompanyDto;
 import com.orbix.engine.modules.admin.domain.dto.UpdateCompanyRequestDto;
 import com.orbix.engine.modules.admin.domain.entity.Company;
+import com.orbix.engine.modules.admin.domain.entity.Currency;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -48,6 +50,12 @@ class CompanyServiceImplTest {
         return c;
     }
 
+    private static Currency currency(String code, AdminStatus status) {
+        Currency c = new Currency(code, code + " name", null, 2);
+        c.setStatus(status);
+        return c;
+    }
+
     private static UpdateCompanyRequestDto req(String currency, String country, String timeZone) {
         return new UpdateCompanyRequestDto("Acme Ltd", null, null, null, null, null, null,
             null, null, currency, country, timeZone, null, null);
@@ -55,7 +63,7 @@ class CompanyServiceImplTest {
 
     @Test
     void updateCurrent_validInputs_persists() {
-        when(currencies.existsById("TZS")).thenReturn(true);
+        when(currencies.findById("TZS")).thenReturn(Optional.of(currency("TZS", AdminStatus.ACTIVE)));
         when(companies.save(any(Company.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CompanyDto dto = service.updateCurrent(req("TZS", "TZ", "Africa/Dar_es_Salaam"));
@@ -67,7 +75,7 @@ class CompanyServiceImplTest {
 
     @Test
     void updateCurrent_unknownCurrency_rejected() {
-        when(currencies.existsById("XXX")).thenReturn(false);
+        when(currencies.findById("XXX")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateCurrent(req("XXX", "TZ", "Africa/Dar_es_Salaam")))
             .isInstanceOf(IllegalArgumentException.class)
@@ -76,8 +84,18 @@ class CompanyServiceImplTest {
     }
 
     @Test
+    void updateCurrent_inactiveCurrency_rejected() {
+        when(currencies.findById("KES")).thenReturn(Optional.of(currency("KES", AdminStatus.INACTIVE)));
+
+        assertThatThrownBy(() -> service.updateCurrent(req("KES", "TZ", "Africa/Dar_es_Salaam")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not active");
+        verify(companies, never()).save(any());
+    }
+
+    @Test
     void updateCurrent_unknownCountry_rejected() {
-        when(currencies.existsById("TZS")).thenReturn(true);
+        when(currencies.findById("TZS")).thenReturn(Optional.of(currency("TZS", AdminStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.updateCurrent(req("TZS", "ZZ", "Africa/Dar_es_Salaam")))
             .isInstanceOf(IllegalArgumentException.class)
@@ -87,7 +105,7 @@ class CompanyServiceImplTest {
 
     @Test
     void updateCurrent_invalidTimeZone_rejected() {
-        when(currencies.existsById("TZS")).thenReturn(true);
+        when(currencies.findById("TZS")).thenReturn(Optional.of(currency("TZS", AdminStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.updateCurrent(req("TZS", "TZ", "Not/AZone")))
             .isInstanceOf(IllegalArgumentException.class)

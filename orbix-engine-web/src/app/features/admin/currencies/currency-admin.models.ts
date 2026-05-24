@@ -15,8 +15,15 @@ export interface CreateCurrencyRequest {
   minorUnitDigits: number;
 }
 
+export interface UpdateCurrencyRequest {
+  name: string;
+  symbol: string | null;
+  minorUnitDigits: number;
+}
+
 export interface FxRate {
-  id: number;
+  // Long ids serialise as JSON strings on the wire (JSON:API global modifier).
+  id: string;
   fromCurrency: string;
   toCurrency: string;
   rate: number;

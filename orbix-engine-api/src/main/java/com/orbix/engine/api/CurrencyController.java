@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.admin.domain.dto.CreateCurrencyRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.CurrencyDto;
+import com.orbix.engine.modules.admin.domain.dto.UpdateCurrencyRequestDto;
 import com.orbix.engine.modules.admin.service.CurrencyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,13 @@ public class CurrencyController {
             @Valid @RequestBody CreateCurrencyRequestDto request) {
         CurrencyDto currency = service.createCurrency(request);
         return ResponseEntity.created(URI.create("/api/v1/currencies/" + currency.code())).body(currency);
+    }
+
+    @PatchMapping("/{code}")
+    public CurrencyDto updateCurrency(
+            @PathVariable String code,
+            @Valid @RequestBody UpdateCurrencyRequestDto request) {
+        return service.updateCurrency(code, request);
     }
 
     @PostMapping("/{code}/enable")

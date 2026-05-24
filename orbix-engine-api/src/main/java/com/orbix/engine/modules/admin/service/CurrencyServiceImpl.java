@@ -2,8 +2,10 @@ package com.orbix.engine.modules.admin.service;
 
 import com.orbix.engine.modules.admin.domain.dto.CreateCurrencyRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.CurrencyDto;
+import com.orbix.engine.modules.admin.domain.dto.UpdateCurrencyRequestDto;
 import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.NoSuchElementException;
 public class CurrencyServiceImpl implements CurrencyService {
 
     private final CurrencyRepository currencies;
+    private final CompanyRepository companies;
 
     @Override
     @Transactional(readOnly = true)
@@ -44,22 +47,41 @@ public class CurrencyServiceImpl implements CurrencyService {
 
     @Override
     @Transactional
+    @Auditable(action = "UPDATE", entityType = "Currency")
+    public CurrencyDto updateCurrency(String code, UpdateCurrencyRequestDto request) {
+        Currency currency = require(code);
+        currency.updateDetails(request.name().trim(),
+            request.symbol() == null ? null : request.symbol().trim(),
+            request.minorUnitDigits());
+        return CurrencyDto.from(currencies.save(currency));
+    }
+
+    @Override
+    @Transactional
     @Auditable(action = "ENABLE", entityType = "Currency")
     public CurrencyDto enableCurrency(String code) {
-        return setStatus(code, AdminStatus.ACTIVE);
+        Currency currency = require(code);
+        currency.setStatus(AdminStatus.ACTIVE);
+        return CurrencyDto.from(currencies.save(currency));
     }
 
     @Override
     @Transactional
     @Auditable(action = "DISABLE", entityType = "Currency")
     public CurrencyDto disableCurrency(String code) {
-        return setStatus(code, AdminStatus.INACTIVE);
+        Currency currency = require(code);
+        // A functional currency (any company transacts in it) must stay enabled —
+        // disabling it would strip it from the pickers that depend on it.
+        if (companies.existsByCurrencyCode(currency.getCode())) {
+            throw new IllegalArgumentException(
+                "Cannot disable the functional currency: " + currency.getCode());
+        }
+        currency.setStatus(AdminStatus.INACTIVE);
+        return CurrencyDto.from(currencies.save(currency));
     }
 
-    private CurrencyDto setStatus(String code, AdminStatus status) {
-        Currency currency = currencies.findById(code.trim().toUpperCase())
+    private Currency require(String code) {
+        return currencies.findById(code.trim().toUpperCase())
             .orElseThrow(() -> new NoSuchElementException("Currency not found: " + code));
-        currency.setStatus(status);
-        return CurrencyDto.from(currencies.save(currency));
     }
 }

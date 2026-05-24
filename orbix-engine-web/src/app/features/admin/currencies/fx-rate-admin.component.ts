@@ -8,11 +8,12 @@ import { ApiResponse } from '../../../core/api/api-response';
 import { CurrencyAdminService } from './currency-admin.service';
 import { Currency, FxRate } from './currency-admin.models';
 import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { PagerComponent } from '../../../core/ui/pager.component';
 
 @Component({
   selector: 'orbix-fx-rate-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SearchSelectComponent, PagerComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
@@ -90,7 +91,7 @@ import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/sear
                   <tr><th>Pair</th><th class="text-end">Rate</th><th>Effective from</th></tr>
                 </thead>
                 <tbody>
-                  @for (rate of rates(); track rate.id) {
+                  @for (rate of pagedRates(); track rate.id) {
                     <tr>
                       <td>
                         <span class="badge text-bg-light border text-secondary font-monospace">{{ rate.fromCurrency }}</span>
@@ -104,6 +105,13 @@ import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/sear
                 </tbody>
               </table>
             </div>
+            @if (totalRatePages() > 1) {
+              <div class="card-footer bg-white border-top p-3">
+                <orbix-pager [page]="ratesPage()" [totalPages]="totalRatePages()"
+                             [totalElements]="rates().length" [pageSize]="ratesPageSize"
+                             (pageChange)="ratesPage.set($event)"/>
+              </div>
+            }
           }
         </div>
       </div>
@@ -141,6 +149,16 @@ export class FxRateAdminComponent implements OnInit {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
 
+  protected readonly ratesPageSize = 15;
+  protected readonly ratesPage = signal(0);
+  protected readonly totalRatePages = computed(() =>
+    Math.max(1, Math.ceil(this.rates().length / this.ratesPageSize)));
+  protected readonly pagedRates = computed<FxRate[]>(() => {
+    const page = Math.min(this.ratesPage(), this.totalRatePages() - 1);
+    const start = page * this.ratesPageSize;
+    return this.rates().slice(start, start + this.ratesPageSize);
+  });
+
   protected form = { fromCurrency: '', toCurrency: '', rate: null as number | null, effectiveAt: '' };
 
   ngOnInit(): void {
@@ -166,7 +184,7 @@ export class FxRateAdminComponent implements OnInit {
 
   private loadRates(): void {
     this.api.listRates().subscribe({
-      next: rates => this.rates.set(rates),
+      next: rates => { this.rates.set(rates); this.ratesPage.set(0); },
       error: err => this.showError(err)
     });
   }

@@ -10,4 +10,7 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
     Optional<Company> findByOrganisationIdAndCode(Long organisationId, String code);
 
     boolean existsByOrganisationIdAndCode(Long organisationId, String code);
+
+    /** True when any company transacts in this currency (i.e. it is a functional currency). */
+    boolean existsByCurrencyCode(String currencyCode);
 }

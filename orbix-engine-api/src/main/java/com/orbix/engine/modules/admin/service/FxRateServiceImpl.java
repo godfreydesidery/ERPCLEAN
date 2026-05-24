@@ -2,7 +2,9 @@ package com.orbix.engine.modules.admin.service;
 
 import com.orbix.engine.modules.admin.domain.dto.FxRateDto;
 import com.orbix.engine.modules.admin.domain.dto.QuoteFxRateRequestDto;
+import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.domain.entity.FxRate;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -27,7 +29,7 @@ public class FxRateServiceImpl implements FxRateService {
     @Override
     @Transactional(readOnly = true)
     public List<FxRateDto> listRates() {
-        return rates.findAllByOrderByEffectiveAtDesc().stream()
+        return rates.findAllByOrderByEffectiveAtDescIdDesc().stream()
             .map(FxRateDto::from)
             .toList();
     }
@@ -45,16 +47,21 @@ public class FxRateServiceImpl implements FxRateService {
         if (request.rate().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("FX rate must be greater than zero");
         }
-        if (!currencies.existsById(from)) {
-            throw new IllegalArgumentException("Unknown currency: " + from);
-        }
-        if (!currencies.existsById(to)) {
-            throw new IllegalArgumentException("Unknown currency: " + to);
-        }
+        requireActive(from);
+        requireActive(to);
 
         FxRate rate = rates.save(new FxRate(from, to, request.rate(),
             request.effectiveAt(), context.userId()));
         return FxRateDto.from(rate);
+    }
+
+    /** A rate may only be quoted between currencies that are registered and enabled. */
+    private void requireActive(String code) {
+        Currency currency = currencies.findById(code)
+            .orElseThrow(() -> new IllegalArgumentException("Unknown currency: " + code));
+        if (currency.getStatus() != AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Currency is not active: " + code);
+        }
     }
 
     @Override
