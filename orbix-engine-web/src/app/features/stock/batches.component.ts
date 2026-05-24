@@ -156,7 +156,7 @@ type Mode = 'all' | 'expiring';
           </table>
         </div>
       }
-      @if (mode() === 'all' && totalPages() > 1) {
+      @if (mode() === 'all' && totalPages() >= 1) {
         <div class="card-footer bg-white border-top">
           <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
                        [totalElements]="total()" [pageSize]="pageSize"

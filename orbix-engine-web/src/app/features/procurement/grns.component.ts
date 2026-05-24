@@ -179,7 +179,7 @@ import {
                 </li>
               }
             </ul>
-            @if (totalPages() > 1) {
+            @if (totalPages() >= 1) {
               <div class="card-footer bg-white border-top">
                 <orbix-pager [page]="pageNo()" [totalPages]="totalPages()"
                              [totalElements]="total()" [pageSize]="pageSize"

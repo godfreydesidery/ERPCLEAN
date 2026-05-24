@@ -18,7 +18,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (totalPages() > 1) {
+    @if (totalPages() >= 1) {
       <nav class="pager d-flex flex-wrap align-items-center justify-content-between gap-2"
            aria-label="Pagination">
         <span class="small text-secondary">{{ rangeLabel() }}</span>

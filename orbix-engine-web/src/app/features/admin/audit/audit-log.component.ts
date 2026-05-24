@@ -91,7 +91,7 @@ import { PagerComponent } from '../../../core/ui/pager.component';
           </tbody>
         </table>
       </div>
-      @if (totalPages() > 1) {
+      @if (totalPages() >= 1) {
         <div class="card-footer">
           <orbix-pager [page]="page()" [totalPages]="totalPages()"
                        [totalElements]="total()" [pageSize]="size"
