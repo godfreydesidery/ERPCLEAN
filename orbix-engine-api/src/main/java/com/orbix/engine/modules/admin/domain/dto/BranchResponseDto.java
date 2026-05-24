@@ -2,6 +2,7 @@ package com.orbix.engine.modules.admin.domain.dto;
 
 import com.orbix.engine.modules.admin.domain.entity.Branch;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 
 /** Branch as returned by the admin branch-management endpoints. */
 public record BranchResponseDto(
@@ -10,7 +11,7 @@ public record BranchResponseDto(
     Long companyId,
     String code,
     String name,
-    String type,
+    BranchType type,
     String physicalAddress,
     String phone,
     String timeZone,

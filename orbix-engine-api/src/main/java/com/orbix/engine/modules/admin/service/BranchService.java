@@ -20,6 +20,9 @@ public interface BranchService {
 
     BranchResponseDto updateBranchByUid(String uid, UpdateBranchRequestDto request);
 
-    /** Marks the branch INACTIVE. Idempotency: rejects an already-inactive branch. */
-    void deactivateBranchByUid(String uid);
+    /** Marks the branch INACTIVE. Rejects an already-inactive branch and the default branch. */
+    void deactivateBranchByUid(String uid, String reason);
+
+    /** Marks the branch ACTIVE again. Rejects an already-active branch. */
+    void activateBranchByUid(String uid, String reason);
 }

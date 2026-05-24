@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.admin.domain.dto.BranchResponseDto;
+import com.orbix.engine.modules.admin.domain.dto.BranchStatusChangeRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.CreateBranchRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.UpdateBranchRequestDto;
 import com.orbix.engine.modules.admin.service.BranchService;
@@ -49,8 +50,16 @@ public class BranchController {
     }
 
     @PostMapping("/uid/{uid}/deactivate")
-    public ResponseEntity<Void> deactivateBranch(@PathVariable @ValidUlid String uid) {
-        service.deactivateBranchByUid(uid);
+    public ResponseEntity<Void> deactivateBranch(@PathVariable @ValidUlid String uid,
+                                                 @Valid @RequestBody BranchStatusChangeRequestDto request) {
+        service.deactivateBranchByUid(uid, request.reason());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/uid/{uid}/activate")
+    public ResponseEntity<Void> activateBranch(@PathVariable @ValidUlid String uid,
+                                               @Valid @RequestBody BranchStatusChangeRequestDto request) {
+        service.activateBranchByUid(uid, request.reason());
         return ResponseEntity.noContent().build();
     }
 }

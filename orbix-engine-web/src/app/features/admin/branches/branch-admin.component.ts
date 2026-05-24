@@ -5,13 +5,16 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { ConfirmService } from '../../../core/ui/confirm.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { timeZoneOptions } from '../../../shared/reference-data';
 import { BranchAdminService } from './branch-admin.service';
-import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
+import { BRANCH_TYPES, Branch, SECTION_TYPES, Section } from './branch-admin.models';
 
 @Component({
   selector: 'orbix-branch-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -53,11 +56,14 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
               </div>
               <div class="col-md-4">
                 <label class="form-label small fw-semibold text-secondary">Type</label>
-                <input class="form-control" name="type" [(ngModel)]="newBranch.type" required>
+                <select class="form-select" name="type" [(ngModel)]="newBranch.type" required>
+                  @for (t of branchTypes; track t) { <option [value]="t">{{ t }}</option> }
+                </select>
               </div>
               <div class="col-12">
                 <label class="form-label small fw-semibold text-secondary">Time zone</label>
-                <input class="form-control font-monospace" name="tz" [(ngModel)]="newBranch.timeZone" required placeholder="Africa/Dar_es_Salaam">
+                <orbix-search-select [options]="tzOptions()" [(ngModel)]="newBranch.timeZone"
+                                     name="tz" placeholder="Search time zone…"/>
               </div>
             </div>
             <div class="d-flex gap-2 pt-2 border-top">
@@ -131,11 +137,20 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     <span class="status-badge__dot"></span>{{ branch.status }}
                   </span>
                 </div>
-                @if (branch.status === 'ACTIVE') {
+                @if (branch.status !== 'ACTIVE') {
+                  <button class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1"
+                          (click)="activateBranch(branch)" [disabled]="saving()">
+                    <i class="bi bi-play-circle"></i> Activate
+                  </button>
+                } @else if (!branch.isDefault) {
                   <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
                           (click)="deactivateBranch(branch)" [disabled]="saving()">
                     <i class="bi bi-pause-circle"></i> Deactivate
                   </button>
+                } @else {
+                  <span class="badge text-bg-primary-subtle text-primary align-self-center">
+                    <i class="bi bi-star-fill me-1"></i>Default — always active
+                  </span>
                 }
               </div>
 
@@ -149,7 +164,9 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Type</label>
-                      <input class="form-control" name="etype" [(ngModel)]="editBranch.type" required>
+                      <select class="form-select" name="etype" [(ngModel)]="editBranch.type" required>
+                        @for (t of branchTypes; track t) { <option [value]="t">{{ t }}</option> }
+                      </select>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Phone</label>
@@ -157,7 +174,8 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Time zone</label>
-                      <input class="form-control font-monospace" name="etz" [(ngModel)]="editBranch.timeZone" required>
+                      <orbix-search-select [options]="tzOptions()" [(ngModel)]="editBranch.timeZone"
+                                           name="etz" placeholder="Search time zone…"/>
                     </div>
                     <div class="col-12">
                       <label class="form-label small fw-semibold text-secondary">Physical address</label>
@@ -192,7 +210,7 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                 </thead>
                 <tbody>
                   @for (section of sections(); track section.id) {
-                    <tr [class.table-active]="editingSectionId() === section.id">
+                    <tr [class.table-active]="editingSectionId() === section.uid">
                       <td><span class="badge text-bg-light border text-secondary font-monospace">{{ section.code }}</span></td>
                       <td class="fw-semibold text-dark">{{ section.name }}</td>
                       <td class="small text-secondary">{{ section.type }}</td>
@@ -333,8 +351,11 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
 })
 export class BranchAdminComponent implements OnInit {
   private readonly api = inject(BranchAdminService);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly sectionTypes = SECTION_TYPES;
+  protected readonly branchTypes = BRANCH_TYPES;
+  protected readonly tzOptions = signal<SearchSelectOption[]>(timeZoneOptions());
 
   protected readonly branches = signal<Branch[]>([]);
   protected readonly selected = signal<Branch | null>(null);
@@ -366,7 +387,7 @@ export class BranchAdminComponent implements OnInit {
       physicalAddress: branch.physicalAddress ?? ''
     };
     this.cancelSectionEdit();
-    this.loadSections(branch.id);
+    this.loadSections(branch.uid);
   }
 
   createBranch(): void {
@@ -386,7 +407,7 @@ export class BranchAdminComponent implements OnInit {
   }
 
   saveBranch(branch: Branch): void {
-    this.run(this.api.updateBranch(branch.id, {
+    this.run(this.api.updateBranch(branch.uid, {
       name: this.editBranch.name.trim(),
       type: this.editBranch.type.trim(),
       phone: emptyToNull(this.editBranch.phone),
@@ -398,15 +419,38 @@ export class BranchAdminComponent implements OnInit {
     });
   }
 
-  deactivateBranch(branch: Branch): void {
-    this.run(this.api.deactivateBranch(branch.id), () => {
+  async deactivateBranch(branch: Branch): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Deactivate branch',
+      message: `Deactivate "${branch.name}" (${branch.code})? It will stop trading until reactivated.`,
+      confirmText: 'Deactivate',
+      variant: 'danger',
+      reason: { label: 'Reason', placeholder: 'Why is this branch being deactivated?', required: true }
+    });
+    if (!res.ok) return;
+    this.run(this.api.deactivateBranch(branch.uid, res.reason), () => {
       this.loadBranches();
       this.selected.set({ ...branch, status: 'INACTIVE' });
     });
   }
 
+  async activateBranch(branch: Branch): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Activate branch',
+      message: `Reactivate "${branch.name}" (${branch.code})?`,
+      confirmText: 'Activate',
+      variant: 'primary',
+      reason: { label: 'Reason', placeholder: 'Why is this branch being reactivated?', required: true }
+    });
+    if (!res.ok) return;
+    this.run(this.api.activateBranch(branch.uid, res.reason), () => {
+      this.loadBranches();
+      this.selected.set({ ...branch, status: 'ACTIVE' });
+    });
+  }
+
   editSection(section: Section): void {
-    this.editingSectionId.set(section.id);
+    this.editingSectionId.set(section.uid);
     this.sectionForm = { code: section.code, name: section.name, type: section.type };
   }
 
@@ -419,10 +463,10 @@ export class BranchAdminComponent implements OnInit {
     const editingId = this.editingSectionId();
     const onDone = () => {
       this.cancelSectionEdit();
-      this.loadSections(branch.id);
+      this.loadSections(branch.uid);
     };
     const call = editingId === null
-      ? this.api.createSection(branch.id, {
+      ? this.api.createSection(branch.uid, {
           code: this.sectionForm.code.trim(),
           name: this.sectionForm.name.trim(),
           type: this.sectionForm.type,
@@ -436,8 +480,15 @@ export class BranchAdminComponent implements OnInit {
     this.run(call, onDone);
   }
 
-  deactivateSection(section: Section): void {
-    this.run(this.api.deactivateSection(section.id), () => this.loadSections(section.branchId));
+  async deactivateSection(section: Section): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Deactivate section',
+      message: `Deactivate section "${section.name}" (${section.code})?`,
+      confirmText: 'Deactivate',
+      variant: 'danger'
+    });
+    if (!res.ok) return;
+    this.run(this.api.deactivateSection(section.uid), () => this.loadSections(this.selected()!.uid));
   }
 
   private loadBranches(): void {
@@ -474,7 +525,7 @@ export class BranchAdminComponent implements OnInit {
 }
 
 function blankBranchForm() {
-  return { code: '', name: '', type: 'RETAIL', phone: '', timeZone: 'Africa/Dar_es_Salaam', physicalAddress: '' };
+  return { code: '', name: '', type: 'GENERAL', phone: '', timeZone: 'Africa/Dar_es_Salaam', physicalAddress: '' };
 }
 
 function blankSectionForm() {

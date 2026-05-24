@@ -8,6 +8,7 @@ import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.domain.entity.Organisation;
 import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.domain.enums.SectionType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
@@ -98,7 +99,7 @@ public class FirstRunSetupServiceImpl implements FirstRunSetupService {
             company.getId(),
             branchInfo.code(),
             branchInfo.name(),
-            "RETAIL",
+            BranchType.RETAIL,
             branchInfo.timeZone() != null ? branchInfo.timeZone() : company.getTimeZone(),
             true,
             SYSTEM_ACTOR

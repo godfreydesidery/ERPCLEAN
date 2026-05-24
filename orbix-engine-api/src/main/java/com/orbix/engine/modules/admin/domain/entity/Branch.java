@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.admin.domain.entity;
 
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -38,8 +39,9 @@ public class Branch extends UidEntity {
     @Column(nullable = false, length = 120)
     private String name;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private String type;
+    private BranchType type;
 
     @Column(name = "physical_address", columnDefinition = "TEXT")
     private String physicalAddress;
@@ -65,7 +67,7 @@ public class Branch extends UidEntity {
     @Column(name = "created_by", nullable = false) private Long createdBy;
     @Column(name = "updated_by", nullable = false) private Long updatedBy;
 
-    public Branch(Long companyId, String code, String name, String type,
+    public Branch(Long companyId, String code, String name, BranchType type,
                   String timeZone, boolean isDefault, Long actorId) {
         this.companyId = companyId;
         this.code = code;
@@ -80,7 +82,7 @@ public class Branch extends UidEntity {
         this.updatedBy = actorId;
     }
 
-    public void updateDetails(String name, String type, String physicalAddress,
+    public void updateDetails(String name, BranchType type, String physicalAddress,
                               String phone, String timeZone, Long actorId) {
         this.name = name;
         this.type = type;
@@ -92,6 +94,11 @@ public class Branch extends UidEntity {
 
     public void deactivate(Long actorId) {
         this.status = AdminStatus.INACTIVE;
+        touch(actorId);
+    }
+
+    public void activate(Long actorId) {
+        this.status = AdminStatus.ACTIVE;
         touch(actorId);
     }
 
