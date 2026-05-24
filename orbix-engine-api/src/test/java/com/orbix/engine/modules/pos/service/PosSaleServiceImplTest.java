@@ -83,6 +83,7 @@ class PosSaleServiceImplTest {
     @Mock private VatGroupRepository vatGroups;
     @Mock private CustomerRepository customers;
     @Mock private com.orbix.engine.modules.admin.repository.CompanyRepository companies;
+    @Mock private com.orbix.engine.modules.admin.repository.CurrencyRepository currencies;
     @Mock private com.orbix.engine.modules.admin.repository.FxRateRepository fxRates;
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
@@ -763,7 +764,7 @@ class PosSaleServiceImplTest {
         com.orbix.engine.modules.admin.domain.entity.FxRate fx =
             new com.orbix.engine.modules.admin.domain.entity.FxRate(
                 "USD", "TZS", rate, Instant.parse("2026-05-13T08:00:00Z"), ACTOR_ID);
-        fx.setId(9001L);
+        org.springframework.test.util.ReflectionTestUtils.setField(fx, "id", 9001L);
         return fx;
     }
 
@@ -801,6 +802,27 @@ class PosSaleServiceImplTest {
         assertThat(pay.tenderAmount()).isEqualByComparingTo("47.20");
         assertThat(pay.fxRateSnapshot()).isEqualByComparingTo("2500");
         assertThat(pay.amount()).isEqualByComparingTo("118000");
+    }
+
+    @Test
+    void post_fxTender_roundsConvertedAmountToFunctionalMinorUnits() {
+        // TZS is configured as a whole-number currency (0 minor units), so a
+        // conversion that lands on a fraction must round to whole shillings.
+        when(currencies.findById("TZS")).thenReturn(Optional.of(
+            new com.orbix.engine.modules.admin.domain.entity.Currency(
+                "TZS", "Tanzanian Shilling", "TSh", 0)));
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+        when(tillCurrencies.existsByIdTillIdAndIdCurrencyCode(TILL_ID, "USD")).thenReturn(true);
+        when(fxRates.findMostRecent(eq("USD"), eq("TZS"), any(Instant.class)))
+            .thenReturn(Optional.of(fxRateUsdToTzs(new BigDecimal("2500.02"))));
+
+        // Total TZS 118000. 47.20 USD * 2500.02 = 118000.944 -> rounds to 118001.
+        PosSaleDto dto = service.post(fxSaleRequest("TILL-1-FX-RND", "op-fx-rnd",
+            new BigDecimal("1"), new BigDecimal("100000"), new BigDecimal("47.20"), "USD"));
+
+        assertThat(dto.payments().get(0).amount()).isEqualByComparingTo("118001");
+        assertThat(dto.changeAmount()).isEqualByComparingTo("1");
     }
 
     @Test

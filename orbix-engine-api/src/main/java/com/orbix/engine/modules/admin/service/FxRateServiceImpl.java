@@ -47,6 +47,9 @@ public class FxRateServiceImpl implements FxRateService {
         if (request.rate().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("FX rate must be greater than zero");
         }
+        // Rates are quoted between any two registered, active currencies — a
+        // general currency-to-currency pair, not anchored to one functional
+        // currency. POS picks the foreign -> functional pair it needs at tender.
         requireActive(from);
         requireActive(to);
 

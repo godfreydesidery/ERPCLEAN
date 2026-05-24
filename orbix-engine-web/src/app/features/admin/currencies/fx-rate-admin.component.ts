@@ -51,7 +51,9 @@ import { PagerComponent } from '../../../core/ui/pager.component';
                 </div>
               </div>
               <div>
-                <label class="form-label small fw-semibold text-secondary">Rate</label>
+                <label class="form-label small fw-semibold text-secondary">
+                  Rate <span class="text-muted fw-normal">— 1 {{ form.fromCurrency || 'unit' }} = ? {{ form.toCurrency || 'unit' }}</span>
+                </label>
                 <input class="form-control text-end" type="number" step="0.00000001" min="0"
                        name="rate" [(ngModel)]="form.rate" required placeholder="1.0000">
               </div>
