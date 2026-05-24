@@ -100,6 +100,14 @@ export class CatalogService {
     return unwrap(this.http.patch<ApiResponse<Uom>>(`${this.base}/uoms/uid/${uid}`, request));
   }
 
+  archiveUom(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/uoms/uid/${uid}/archive`, {}).pipe(map(() => void 0));
+  }
+
+  activateUom(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/uoms/uid/${uid}/activate`, {}).pipe(map(() => void 0));
+  }
+
   // ---- VAT groups -----------------------------------------------------------
 
   listVatGroups(): Observable<VatGroup[]> {

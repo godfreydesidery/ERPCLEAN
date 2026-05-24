@@ -91,6 +91,7 @@ export interface Uom {
   name: string;
   dimension: UomDimension;
   base: boolean;
+  status: ItemStatus;
 }
 
 export interface CreateUomRequest {

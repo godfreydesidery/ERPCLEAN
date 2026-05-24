@@ -93,7 +93,7 @@ Base path `/api/v1` (per ARCHITECTURE.md §2.8). All endpoints are company-scope
 | `/api/items/bulk-import` | `POST` (CSV upload → returns job id), `GET /{jobId}` (status + per-row results) |
 | `/api/item-groups` | `GET` (tree or flat), `POST`, `PUT /{id}`, `POST /{id}/move`, `POST /{id}/archive` |
 | `/api/barcodes` | `GET`, `POST`, `DELETE /{id}` (scoped to an item) |
-| `/api/uoms` | `GET`, `POST`, `PUT /{id}` |
+| `/api/uoms` | `GET`, `GET /uid/{uid}`, `POST`, `PATCH /uid/{uid}`, `POST /uid/{uid}/archive` — global registry, gated by `UOM.MANAGE`; default units seeded in `V2`, one `is_base` per dimension enforced |
 | `/api/uom-conversions` | `GET`, `POST`, `DELETE /{id}` |
 | `/api/vat-groups` | `GET`, `POST`, `PUT /{id}` |
 | `/api/price-lists` | `GET`, `GET /{id}`, `POST`, `PUT /{id}` |
