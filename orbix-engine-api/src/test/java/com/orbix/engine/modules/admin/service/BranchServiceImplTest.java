@@ -146,7 +146,7 @@ class BranchServiceImplTest {
         Branch existing = branch(50L, COMPANY_ID, "DT");
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        service.deactivateBranchByUid(existing.getUid());
+        service.deactivateBranchByUid(existing.getUid(), "closing down");
 
         assertThat(existing.getStatus()).isEqualTo(AdminStatus.INACTIVE);
         verify(events).publish(eq("BranchDeactivated.v1"), any(), any(), any());
@@ -158,8 +158,44 @@ class BranchServiceImplTest {
         existing.setStatus(AdminStatus.INACTIVE);
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.deactivateBranchByUid(existing.getUid()))
+        assertThatThrownBy(() -> service.deactivateBranchByUid(existing.getUid(), "x"))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already inactive");
+    }
+
+    @Test
+    void deactivateBranch_rejectsDefaultBranch() {
+        Branch dflt = new Branch(COMPANY_ID, "HQ", "Head Office", "RETAIL",
+            "Africa/Kampala", true, ACTOR_ID);
+        dflt.setId(50L);
+        ReflectionTestUtils.setField(dflt, "uid", UidGenerator.next());
+        when(branches.findByUid(dflt.getUid())).thenReturn(Optional.of(dflt));
+
+        assertThatThrownBy(() -> service.deactivateBranchByUid(dflt.getUid(), "x"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("default branch");
+        assertThat(dflt.getStatus()).isEqualTo(AdminStatus.ACTIVE);
+    }
+
+    @Test
+    void activateBranch_reactivatesInactiveBranch() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        existing.setStatus(AdminStatus.INACTIVE);
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        service.activateBranchByUid(existing.getUid(), "reopening");
+
+        assertThat(existing.getStatus()).isEqualTo(AdminStatus.ACTIVE);
+        verify(events).publish(eq("BranchActivated.v1"), any(), any(), any());
+    }
+
+    @Test
+    void activateBranch_rejectsAlreadyActiveBranch() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.activateBranchByUid(existing.getUid(), "x"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("already active");
     }
 }

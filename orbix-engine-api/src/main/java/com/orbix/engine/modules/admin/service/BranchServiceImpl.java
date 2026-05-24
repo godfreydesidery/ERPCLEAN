@@ -96,15 +96,31 @@ public class BranchServiceImpl implements BranchService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = "Branch")
-    public void deactivateBranchByUid(String uid) {
+    public void deactivateBranchByUid(String uid, String reason) {
         Branch branch = requireBranchByUid(uid);
         if (branch.getStatus() != AdminStatus.ACTIVE) {
             throw new IllegalArgumentException("Branch is already inactive: " + uid);
         }
+        if (branch.isDefault()) {
+            throw new IllegalArgumentException("Cannot deactivate the default branch");
+        }
         // TODO (F5.1): block deactivation while the branch has an open till.
         branch.deactivate(context.userId());
         events.publish("BranchDeactivated.v1", "Branch", branch.getUid(),
-            Map.of(BRANCH_UID_KEY, branch.getUid()));
+            Map.of(BRANCH_UID_KEY, branch.getUid(), "reason", reason));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "Branch")
+    public void activateBranchByUid(String uid, String reason) {
+        Branch branch = requireBranchByUid(uid);
+        if (branch.getStatus() == AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Branch is already active: " + uid);
+        }
+        branch.activate(context.userId());
+        events.publish("BranchActivated.v1", "Branch", branch.getUid(),
+            Map.of(BRANCH_UID_KEY, branch.getUid(), "reason", reason));
     }
 
     private static void validateZone(String timeZone) {

@@ -5,13 +5,16 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { ConfirmService } from '../../../core/ui/confirm.service';
+import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { timeZoneOptions } from '../../../shared/reference-data';
 import { BranchAdminService } from './branch-admin.service';
 import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
 
 @Component({
   selector: 'orbix-branch-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SearchSelectComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -57,7 +60,8 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
               </div>
               <div class="col-12">
                 <label class="form-label small fw-semibold text-secondary">Time zone</label>
-                <input class="form-control font-monospace" name="tz" [(ngModel)]="newBranch.timeZone" required placeholder="Africa/Dar_es_Salaam">
+                <orbix-search-select [options]="tzOptions()" [(ngModel)]="newBranch.timeZone"
+                                     name="tz" placeholder="Search time zone…"/>
               </div>
             </div>
             <div class="d-flex gap-2 pt-2 border-top">
@@ -131,11 +135,20 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     <span class="status-badge__dot"></span>{{ branch.status }}
                   </span>
                 </div>
-                @if (branch.status === 'ACTIVE') {
+                @if (branch.status !== 'ACTIVE') {
+                  <button class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1"
+                          (click)="activateBranch(branch)" [disabled]="saving()">
+                    <i class="bi bi-play-circle"></i> Activate
+                  </button>
+                } @else if (!branch.isDefault) {
                   <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
                           (click)="deactivateBranch(branch)" [disabled]="saving()">
                     <i class="bi bi-pause-circle"></i> Deactivate
                   </button>
+                } @else {
+                  <span class="badge text-bg-primary-subtle text-primary align-self-center">
+                    <i class="bi bi-star-fill me-1"></i>Default — always active
+                  </span>
                 }
               </div>
 
@@ -157,7 +170,8 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Time zone</label>
-                      <input class="form-control font-monospace" name="etz" [(ngModel)]="editBranch.timeZone" required>
+                      <orbix-search-select [options]="tzOptions()" [(ngModel)]="editBranch.timeZone"
+                                           name="etz" placeholder="Search time zone…"/>
                     </div>
                     <div class="col-12">
                       <label class="form-label small fw-semibold text-secondary">Physical address</label>
@@ -333,8 +347,10 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
 })
 export class BranchAdminComponent implements OnInit {
   private readonly api = inject(BranchAdminService);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly sectionTypes = SECTION_TYPES;
+  protected readonly tzOptions = signal<SearchSelectOption[]>(timeZoneOptions());
 
   protected readonly branches = signal<Branch[]>([]);
   protected readonly selected = signal<Branch | null>(null);
@@ -398,10 +414,33 @@ export class BranchAdminComponent implements OnInit {
     });
   }
 
-  deactivateBranch(branch: Branch): void {
-    this.run(this.api.deactivateBranch(branch.uid), () => {
+  async deactivateBranch(branch: Branch): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Deactivate branch',
+      message: `Deactivate "${branch.name}" (${branch.code})? It will stop trading until reactivated.`,
+      confirmText: 'Deactivate',
+      variant: 'danger',
+      reason: { label: 'Reason', placeholder: 'Why is this branch being deactivated?', required: true }
+    });
+    if (!res.ok) return;
+    this.run(this.api.deactivateBranch(branch.uid, res.reason), () => {
       this.loadBranches();
       this.selected.set({ ...branch, status: 'INACTIVE' });
+    });
+  }
+
+  async activateBranch(branch: Branch): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Activate branch',
+      message: `Reactivate "${branch.name}" (${branch.code})?`,
+      confirmText: 'Activate',
+      variant: 'primary',
+      reason: { label: 'Reason', placeholder: 'Why is this branch being reactivated?', required: true }
+    });
+    if (!res.ok) return;
+    this.run(this.api.activateBranch(branch.uid, res.reason), () => {
+      this.loadBranches();
+      this.selected.set({ ...branch, status: 'ACTIVE' });
     });
   }
 
@@ -436,7 +475,14 @@ export class BranchAdminComponent implements OnInit {
     this.run(call, onDone);
   }
 
-  deactivateSection(section: Section): void {
+  async deactivateSection(section: Section): Promise<void> {
+    const res = await this.confirm.ask({
+      title: 'Deactivate section',
+      message: `Deactivate section "${section.name}" (${section.code})?`,
+      confirmText: 'Deactivate',
+      variant: 'danger'
+    });
+    if (!res.ok) return;
     this.run(this.api.deactivateSection(section.uid), () => this.loadSections(this.selected()!.uid));
   }
 

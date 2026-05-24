@@ -29,8 +29,12 @@ export class BranchAdminService {
     return unwrap(this.http.patch<ApiResponse<Branch>>(`${this.base}/branches/uid/${uid}`, request));
   }
 
-  deactivateBranch(uid: string): Observable<void> {
-    return this.http.post(`${this.base}/branches/uid/${uid}/deactivate`, {}).pipe(map(() => void 0));
+  deactivateBranch(uid: string, reason: string): Observable<void> {
+    return this.http.post(`${this.base}/branches/uid/${uid}/deactivate`, { reason }).pipe(map(() => void 0));
+  }
+
+  activateBranch(uid: string, reason: string): Observable<void> {
+    return this.http.post(`${this.base}/branches/uid/${uid}/activate`, { reason }).pipe(map(() => void 0));
   }
 
   listSections(branchUid: string): Observable<Section[]> {
