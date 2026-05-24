@@ -6,6 +6,7 @@ import com.orbix.engine.modules.admin.domain.dto.UpdateBranchRequestDto;
 import com.orbix.engine.modules.admin.domain.entity.Branch;
 import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.domain.enums.SectionType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
@@ -54,7 +55,7 @@ class BranchServiceImplTest {
     }
 
     private static Branch branch(Long id, Long companyId, String code) {
-        Branch branch = new Branch(companyId, code, "Name " + code, "RETAIL",
+        Branch branch = new Branch(companyId, code, "Name " + code, BranchType.RETAIL,
             "Africa/Kampala", false, ACTOR_ID);
         branch.setId(id);
         ReflectionTestUtils.setField(branch, "uid", UidGenerator.next());
@@ -72,7 +73,7 @@ class BranchServiceImplTest {
         });
 
         BranchResponseDto result = service.createBranch(new CreateBranchRequestDto(
-            " dt ", "Downtown", "RETAIL", "1 Main St", "0700", "Africa/Kampala"));
+            " dt ", "Downtown", BranchType.RETAIL, "1 Main St", "0700", "Africa/Kampala"));
 
         assertThat(result.code()).isEqualTo("DT");
         assertThat(result.companyId()).isEqualTo(COMPANY_ID);
@@ -90,7 +91,7 @@ class BranchServiceImplTest {
         when(branches.existsByCompanyIdAndCode(COMPANY_ID, "DT")).thenReturn(true);
 
         assertThatThrownBy(() -> service.createBranch(new CreateBranchRequestDto(
-            "DT", "Downtown", "RETAIL", null, null, "Africa/Kampala")))
+            "DT", "Downtown", BranchType.RETAIL, null, null, "Africa/Kampala")))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
         verify(branches, never()).save(any());
@@ -102,11 +103,28 @@ class BranchServiceImplTest {
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
         BranchResponseDto result = service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
-            "Downtown Mall", "WAREHOUSE", "2 New St", "0711", "Africa/Nairobi"));
+            "Downtown Mall", BranchType.WAREHOUSE, "2 New St", "0711", "Africa/Nairobi"));
 
         assertThat(result.name()).isEqualTo("Downtown Mall");
-        assertThat(existing.getType()).isEqualTo("WAREHOUSE");
+        assertThat(existing.getType()).isEqualTo(BranchType.WAREHOUSE);
         assertThat(existing.getTimeZone()).isEqualTo("Africa/Nairobi");
+    }
+
+    @Test
+    void createBranch_warehouse_skipsSectionAndWalkInCustomer() {
+        when(branches.existsByCompanyIdAndCode(COMPANY_ID, "WH")).thenReturn(false);
+        when(branches.save(any(Branch.class))).thenAnswer(inv -> {
+            Branch b = inv.getArgument(0);
+            b.setId(60L);
+            ReflectionTestUtils.setField(b, "uid", UidGenerator.next());
+            return b;
+        });
+
+        service.createBranch(new CreateBranchRequestDto(
+            "WH", "Central Warehouse", BranchType.WAREHOUSE, null, null, "Africa/Dar_es_Salaam"));
+
+        verify(sections, never()).save(any());
+        verify(customerService, never()).createWalkInCustomer(any());
     }
 
     @Test
@@ -114,7 +132,7 @@ class BranchServiceImplTest {
         when(branches.existsByCompanyIdAndCode(COMPANY_ID, "DT")).thenReturn(false);
 
         assertThatThrownBy(() -> service.createBranch(new CreateBranchRequestDto(
-            "DT", "Downtown", "RETAIL", null, null, "Not/AZone")))
+            "DT", "Downtown", BranchType.RETAIL, null, null, "Not/AZone")))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Invalid time zone");
         verify(branches, never()).save(any());
@@ -126,7 +144,7 @@ class BranchServiceImplTest {
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
-            "Downtown", "RETAIL", null, null, "Not/AZone")))
+            "Downtown", BranchType.RETAIL, null, null, "Not/AZone")))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Invalid time zone");
         assertThat(existing.getTimeZone()).isEqualTo("Africa/Kampala");
@@ -165,7 +183,7 @@ class BranchServiceImplTest {
 
     @Test
     void deactivateBranch_rejectsDefaultBranch() {
-        Branch dflt = new Branch(COMPANY_ID, "HQ", "Head Office", "RETAIL",
+        Branch dflt = new Branch(COMPANY_ID, "HQ", "Head Office", BranchType.RETAIL,
             "Africa/Kampala", true, ACTOR_ID);
         dflt.setId(50L);
         ReflectionTestUtils.setField(dflt, "uid", UidGenerator.next());

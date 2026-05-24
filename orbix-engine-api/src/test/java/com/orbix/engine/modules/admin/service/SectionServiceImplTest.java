@@ -6,6 +6,7 @@ import com.orbix.engine.modules.admin.domain.dto.UpdateSectionRequestDto;
 import com.orbix.engine.modules.admin.domain.entity.Branch;
 import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.domain.enums.SectionType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
@@ -53,7 +54,7 @@ class SectionServiceImplTest {
     }
 
     private Branch activeBranch() {
-        Branch branch = new Branch(COMPANY_ID, "DT", "Downtown", "RETAIL",
+        Branch branch = new Branch(COMPANY_ID, "DT", "Downtown", BranchType.RETAIL,
             "Africa/Kampala", false, ACTOR_ID);
         branch.setId(BRANCH_ID);
         ReflectionTestUtils.setField(branch, "uid", UidGenerator.next());

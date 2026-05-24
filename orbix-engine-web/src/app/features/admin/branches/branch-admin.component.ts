@@ -9,7 +9,7 @@ import { ConfirmService } from '../../../core/ui/confirm.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { timeZoneOptions } from '../../../shared/reference-data';
 import { BranchAdminService } from './branch-admin.service';
-import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
+import { BRANCH_TYPES, Branch, SECTION_TYPES, Section } from './branch-admin.models';
 
 @Component({
   selector: 'orbix-branch-admin',
@@ -56,7 +56,9 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
               </div>
               <div class="col-md-4">
                 <label class="form-label small fw-semibold text-secondary">Type</label>
-                <input class="form-control" name="type" [(ngModel)]="newBranch.type" required>
+                <select class="form-select" name="type" [(ngModel)]="newBranch.type" required>
+                  @for (t of branchTypes; track t) { <option [value]="t">{{ t }}</option> }
+                </select>
               </div>
               <div class="col-12">
                 <label class="form-label small fw-semibold text-secondary">Time zone</label>
@@ -162,7 +164,9 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Type</label>
-                      <input class="form-control" name="etype" [(ngModel)]="editBranch.type" required>
+                      <select class="form-select" name="etype" [(ngModel)]="editBranch.type" required>
+                        @for (t of branchTypes; track t) { <option [value]="t">{{ t }}</option> }
+                      </select>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label small fw-semibold text-secondary">Phone</label>
@@ -350,6 +354,7 @@ export class BranchAdminComponent implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   protected readonly sectionTypes = SECTION_TYPES;
+  protected readonly branchTypes = BRANCH_TYPES;
   protected readonly tzOptions = signal<SearchSelectOption[]>(timeZoneOptions());
 
   protected readonly branches = signal<Branch[]>([]);
@@ -520,7 +525,7 @@ export class BranchAdminComponent implements OnInit {
 }
 
 function blankBranchForm() {
-  return { code: '', name: '', type: 'RETAIL', phone: '', timeZone: 'Africa/Dar_es_Salaam', physicalAddress: '' };
+  return { code: '', name: '', type: 'GENERAL', phone: '', timeZone: 'Africa/Dar_es_Salaam', physicalAddress: '' };
 }
 
 function blankSectionForm() {

@@ -68,12 +68,15 @@ public class BranchServiceImpl implements BranchService {
         branch.setPhysicalAddress(request.physicalAddress());
         branch.setPhone(request.phone());
 
-        // Every branch needs at least one RETAIL_FLOOR section to trade from.
-        sections.save(new Section(branch.getId(), "MAIN", "Main Floor",
-            SectionType.RETAIL_FLOOR, actorId));
-
-        // ...and a synthetic walk-in customer for POS (F1.7 hook).
-        customerService.createWalkInCustomer(branch.getId());
+        // Branches that trade with customers get a default sales floor to trade
+        // from plus a synthetic walk-in customer for POS (F1.7 hook). Storage /
+        // office branches (warehouse, head office) get neither — they only hold
+        // and transfer stock.
+        if (request.type().sellsToCustomers()) {
+            sections.save(new Section(branch.getId(), "MAIN", "Main Floor",
+                SectionType.RETAIL_FLOOR, actorId));
+            customerService.createWalkInCustomer(branch.getId());
+        }
 
         events.publish("BranchCreated.v1", "Branch", branch.getUid(),
             Map.of(BRANCH_UID_KEY, branch.getUid(), "companyId", companyId, "code", code));

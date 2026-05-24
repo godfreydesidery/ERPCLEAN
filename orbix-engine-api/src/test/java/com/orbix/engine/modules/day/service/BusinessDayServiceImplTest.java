@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.day.service;
 
 import com.orbix.engine.modules.admin.domain.entity.Branch;
+import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -59,7 +60,7 @@ class BusinessDayServiceImplTest {
     }
 
     private static Branch branch(Long companyId) {
-        Branch branch = new Branch(companyId, "HQ", "Head Office", "RETAIL",
+        Branch branch = new Branch(companyId, "HQ", "Head Office", BranchType.RETAIL,
             "Africa/Kampala", true, ACTOR_ID);
         branch.setId(BRANCH_ID);
         return branch;

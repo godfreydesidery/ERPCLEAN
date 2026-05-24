@@ -14,7 +14,7 @@ public record AccessibleBranchDto(
             branch.getId(),
             branch.getCode(),
             branch.getName(),
-            branch.getType()
+            branch.getType().name()
         );
     }
 }
