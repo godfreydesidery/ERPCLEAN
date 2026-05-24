@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.stock.domain.enums.StockTransferStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -12,12 +13,15 @@ import java.time.Instant;
 /** Inter-branch transfer. DRAFT -> ISSUED -> RECEIVED -> CLOSED. DATA-MODEL.md §4.5. */
 @Entity
 @Table(name = "stock_transfer",
-    uniqueConstraints = @UniqueConstraint(name = "uk_stock_transfer_company_number",
-        columnNames = {"company_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_stock_transfer_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_stock_transfer_company_number",
+            columnNames = {"company_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class StockTransfer {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class StockTransfer extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "stock_transfer_seq")

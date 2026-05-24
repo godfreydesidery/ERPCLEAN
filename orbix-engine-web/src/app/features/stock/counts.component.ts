@@ -316,14 +316,14 @@ export class CountsComponent implements OnInit {
     const counts = count.lines
       .filter(l => this.countedDraft[l.id] != null)
       .map(l => ({ lineId: l.id, countedQty: Number(this.countedDraft[l.id]), note: l.note }));
-    this.run(this.stock.recordCounts(count.id, { counts }), updated => this.refresh(updated));
+    this.run(this.stock.recordCounts(count.uid, { counts }), updated => this.refresh(updated));
   }
 
   act(count: StockCount, action: 'start' | 'close' | 'post'): void {
     const calls = {
-      start: () => this.stock.startCount(count.id),
-      close: () => this.stock.closeCount(count.id),
-      post:  () => this.stock.postCount(count.id),
+      start: () => this.stock.startCount(count.uid),
+      close: () => this.stock.closeCount(count.uid),
+      post:  () => this.stock.postCount(count.uid),
     };
     this.run(calls[action](), updated => this.refresh(updated));
   }

@@ -4,8 +4,11 @@ import com.orbix.engine.modules.stock.domain.entity.StockCount;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface StockCountRepository extends JpaRepository<StockCount, Long> {
+
+    Optional<StockCount> findByUid(String uid);
 
     List<StockCount> findByCompanyIdOrderByCountDateDesc(Long companyId);
 

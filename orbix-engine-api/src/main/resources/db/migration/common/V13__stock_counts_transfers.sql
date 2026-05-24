@@ -4,6 +4,7 @@
 
 CREATE TABLE stock_count (
     id          BIGINT      NOT NULL PRIMARY KEY,
+    uid         CHAR(26)    NOT NULL,
     number      VARCHAR(40) NOT NULL,
     branch_id   BIGINT      NOT NULL,
     company_id  BIGINT      NOT NULL,
@@ -13,6 +14,7 @@ CREATE TABLE stock_count (
     started_by  BIGINT      NOT NULL,
     closed_by   BIGINT,
     posted_at   TIMESTAMP,
+    CONSTRAINT uk_stock_count_uid           UNIQUE (uid),
     CONSTRAINT uk_stock_count_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_stock_count_branch  FOREIGN KEY (branch_id)  REFERENCES branch (id),
     CONSTRAINT fk_stock_count_company FOREIGN KEY (company_id) REFERENCES company (id)
@@ -33,6 +35,7 @@ CREATE INDEX ix_stock_count_line_count ON stock_count_line (stock_count_id);
 
 CREATE TABLE stock_transfer (
     id             BIGINT      NOT NULL PRIMARY KEY,
+    uid            CHAR(26)    NOT NULL,
     number         VARCHAR(40) NOT NULL,
     company_id     BIGINT      NOT NULL,
     from_branch_id BIGINT      NOT NULL,
@@ -40,6 +43,7 @@ CREATE TABLE stock_transfer (
     issued_at      TIMESTAMP,
     received_at    TIMESTAMP,
     status         VARCHAR(32) NOT NULL,
+    CONSTRAINT uk_stock_transfer_uid            UNIQUE (uid),
     CONSTRAINT uk_stock_transfer_company_number UNIQUE (company_id, number),
     CONSTRAINT fk_stock_transfer_company FOREIGN KEY (company_id)     REFERENCES company (id),
     CONSTRAINT fk_stock_transfer_from    FOREIGN KEY (from_branch_id) REFERENCES branch (id),

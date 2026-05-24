@@ -15,15 +15,15 @@ public interface StockTransferService {
 
     List<StockTransferDto> listTransfers();
 
-    StockTransferDto getTransfer(Long transferId);
+    StockTransferDto getTransfer(String uid);
 
     StockTransferDto createTransfer(CreateStockTransferRequestDto request);
 
     /** DRAFT -> ISSUED: posts TRANSFER_OUT moves, freezing each line's cost. */
-    StockTransferDto issueTransfer(Long transferId);
+    StockTransferDto issueTransfer(String uid);
 
     /** ISSUED -> RECEIVED: posts TRANSFER_IN moves for the received quantities. */
-    StockTransferDto receiveTransfer(Long transferId, ReceiveTransferRequestDto request);
+    StockTransferDto receiveTransfer(String uid, ReceiveTransferRequestDto request);
 
-    StockTransferDto closeTransfer(Long transferId);
+    StockTransferDto closeTransfer(String uid);
 }

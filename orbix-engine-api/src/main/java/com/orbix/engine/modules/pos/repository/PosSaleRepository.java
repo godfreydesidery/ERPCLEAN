@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface PosSaleRepository extends JpaRepository<PosSale, Long> {
 
+    Optional<PosSale> findByUid(String uid);
+
     /** Idempotency lookup: the same client_op_id pushed twice must return the original. */
     Optional<PosSale> findByCompanyIdAndClientOpId(Long companyId, String clientOpId);
 

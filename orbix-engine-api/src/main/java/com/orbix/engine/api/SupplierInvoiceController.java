@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.SupplierInvoiceDto;
 import com.orbix.engine.modules.procurement.service.SupplierInvoiceService;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/v1/supplier-invoices")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('PROCUREMENT.MANAGE_INVOICE')")
 public class SupplierInvoiceController {
 
@@ -29,26 +32,26 @@ public class SupplierInvoiceController {
         return service.list(branchId, PageRequest.of(page, size));
     }
 
-    @GetMapping("/{id}")
-    public SupplierInvoiceDto get(@PathVariable Long id) {
-        return service.get(id);
+    @GetMapping("/uid/{uid}")
+    public SupplierInvoiceDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
     @PostMapping
     public ResponseEntity<SupplierInvoiceDto> create(
             @Valid @RequestBody CreateSupplierInvoiceRequestDto request) {
         SupplierInvoiceDto invoice = service.createDraft(request);
-        return ResponseEntity.created(URI.create("/api/v1/supplier-invoices/" + invoice.id()))
+        return ResponseEntity.created(URI.create("/api/v1/supplier-invoices/uid/" + invoice.uid()))
             .body(invoice);
     }
 
-    @PostMapping("/{id}/post")
-    public SupplierInvoiceDto post(@PathVariable Long id) {
-        return service.post(id);
+    @PostMapping("/uid/{uid}/post")
+    public SupplierInvoiceDto post(@PathVariable @ValidUlid String uid) {
+        return service.post(uid);
     }
 
-    @PostMapping("/{id}/cancel")
-    public SupplierInvoiceDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    @PostMapping("/uid/{uid}/cancel")
+    public SupplierInvoiceDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 }

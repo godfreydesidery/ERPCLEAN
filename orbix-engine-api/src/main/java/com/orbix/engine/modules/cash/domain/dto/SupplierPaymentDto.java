@@ -12,6 +12,7 @@ import java.util.List;
 
 public record SupplierPaymentDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -31,6 +32,7 @@ public record SupplierPaymentDto(
     public static SupplierPaymentDto from(SupplierPayment p, List<SupplierPaymentAllocation> allocs) {
         return new SupplierPaymentDto(
             p.getId(),
+            p.getUid(),
             p.getNumber(),
             p.getCompanyId(),
             p.getBranchId(),

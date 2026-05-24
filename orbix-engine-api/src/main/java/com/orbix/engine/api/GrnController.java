@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
 import com.orbix.engine.modules.procurement.service.GrnService;
@@ -13,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -21,6 +23,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/v1/grns")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('GRN.POST')")
 public class GrnController {
 
@@ -35,9 +38,9 @@ public class GrnController {
         return service.list(branchId, PageRequest.of(page, size));
     }
 
-    @GetMapping("/{id}")
-    public GrnDto get(@PathVariable Long id) {
-        return service.get(id);
+    @GetMapping("/uid/{uid}")
+    public GrnDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
     @PostMapping
@@ -46,17 +49,17 @@ public class GrnController {
             throw new AccessDeniedException("Direct (no-LPO) GRN requires " + DIRECT_PERMISSION);
         }
         GrnDto grn = service.createDraft(request);
-        return ResponseEntity.created(URI.create("/api/v1/grns/" + grn.id())).body(grn);
+        return ResponseEntity.created(URI.create("/api/v1/grns/uid/" + grn.uid())).body(grn);
     }
 
-    @PostMapping("/{id}/post")
-    public GrnDto post(@PathVariable Long id) {
-        return service.post(id);
+    @PostMapping("/uid/{uid}/post")
+    public GrnDto post(@PathVariable @ValidUlid String uid) {
+        return service.post(uid);
     }
 
-    @PostMapping("/{id}/cancel")
-    public GrnDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    @PostMapping("/uid/{uid}/cancel")
+    public GrnDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 
     private boolean callerHasAuthority(String authority) {

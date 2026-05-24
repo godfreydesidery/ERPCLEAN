@@ -17,12 +17,12 @@ public interface SupplierInvoiceService {
     SupplierInvoiceDto createDraft(CreateSupplierInvoiceRequestDto request);
 
     /** DRAFT → POSTED — runs the match validation (already exercised on create, re-checked here). */
-    SupplierInvoiceDto post(Long invoiceId);
+    SupplierInvoiceDto post(String uid);
 
     /** DRAFT or POSTED → CANCELLED. Allocations stay on the row for audit. */
-    SupplierInvoiceDto cancel(Long invoiceId);
+    SupplierInvoiceDto cancel(String uid);
 
     PageDto<SupplierInvoiceDto> list(Long branchId, Pageable pageable);
 
-    SupplierInvoiceDto get(Long invoiceId);
+    SupplierInvoiceDto get(String uid);
 }

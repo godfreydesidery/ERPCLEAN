@@ -5,6 +5,7 @@ export type TillSessionStatus = 'OPEN' | 'CLOSED' | 'RECONCILED';
 
 export interface Till {
   id: string;
+  uid: string;
   companyId: string;
   branchId: string;
   code: string;
@@ -30,6 +31,7 @@ export interface UpdateTillRequest {
 
 export interface TillSession {
   id: string;
+  uid: string;
   tillId: string;
   branchId: string;
   companyId: string;

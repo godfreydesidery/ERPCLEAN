@@ -26,6 +26,7 @@
 
 CREATE TABLE production_batch (
     id                BIGINT         NOT NULL PRIMARY KEY,
+    uid               CHAR(26)       NOT NULL,
     number            VARCHAR(40)    NOT NULL,
     company_id        BIGINT         NOT NULL,
     branch_id         BIGINT         NOT NULL,
@@ -50,6 +51,7 @@ CREATE TABLE production_batch (
     updated_at        TIMESTAMP      NOT NULL,
     created_by        BIGINT         NOT NULL,
     updated_by        BIGINT         NOT NULL,
+    CONSTRAINT uk_production_batch_uid           UNIQUE (uid),
     CONSTRAINT uk_production_batch_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_production_batch_company FOREIGN KEY (company_id) REFERENCES company (id),
     CONSTRAINT fk_production_batch_branch  FOREIGN KEY (branch_id)  REFERENCES branch  (id),

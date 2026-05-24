@@ -14,13 +14,13 @@ public interface PackingListService {
 
     PackingListDto createDraft(CreatePackingListRequestDto request);
 
-    PackingListDto dispatch(Long packingListId);
+    PackingListDto dispatch(String uid);
 
-    PackingListDto markDelivered(Long packingListId);
+    PackingListDto markDelivered(String uid);
 
-    PackingListDto cancel(Long packingListId);
+    PackingListDto cancel(String uid);
 
     List<PackingListDto> list(Long branchId);
 
-    PackingListDto get(Long packingListId);
+    PackingListDto get(String uid);
 }

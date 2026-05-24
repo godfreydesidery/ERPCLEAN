@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.production.domain.dto.ConversionDto;
 import com.orbix.engine.modules.production.domain.dto.CreateConversionRequestDto;
 import com.orbix.engine.modules.production.domain.enums.ConversionStatus;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -21,6 +23,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/conversions")
 @RequiredArgsConstructor
+@Validated
 public class ConversionController {
 
     private final ConversionService service;
@@ -29,7 +32,7 @@ public class ConversionController {
     @PreAuthorize("hasAuthority('PROD.CONVERT')")
     public ResponseEntity<ConversionDto> create(@Valid @RequestBody CreateConversionRequestDto request) {
         ConversionDto created = service.createDraft(request);
-        return ResponseEntity.created(URI.create("/api/v1/conversions/" + created.id())).body(created);
+        return ResponseEntity.created(URI.create("/api/v1/conversions/uid/" + created.uid())).body(created);
     }
 
     @GetMapping
@@ -39,21 +42,21 @@ public class ConversionController {
         return service.list(branchId, status);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('PROD.CONVERT') or hasAuthority('PROD.READ_REPORT')")
-    public ConversionDto get(@PathVariable Long id) {
-        return service.get(id);
+    public ConversionDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
-    @PostMapping("/{id}/post")
+    @PostMapping("/uid/{uid}/post")
     @PreAuthorize("hasAuthority('PROD.CONVERT')")
-    public ConversionDto post(@PathVariable Long id) {
-        return service.post(id);
+    public ConversionDto post(@PathVariable @ValidUlid String uid) {
+        return service.post(uid);
     }
 
-    @PostMapping("/{id}/cancel")
+    @PostMapping("/uid/{uid}/cancel")
     @PreAuthorize("hasAuthority('PROD.CONVERT')")
-    public ConversionDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    public ConversionDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 }

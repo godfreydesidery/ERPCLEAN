@@ -58,7 +58,7 @@ public class BomServiceImpl implements BomService {
         Item outputItem = requireItem(request.outputItemId(), companyId);
         requireSection(request.sectionId());
         if (request.parentBomId() != null) {
-            requireBom(request.parentBomId());
+            requireBomById(request.parentBomId());
         }
 
         int nextVersion = boms.findTopByOutputItemIdOrderByVersionDesc(outputItem.getId())
@@ -89,8 +89,8 @@ public class BomServiceImpl implements BomService {
     @Override
     @Transactional
     @Auditable(action = "PATCH", entityType = AGG)
-    public BomDto patch(Long bomId, PatchBomRequestDto request) {
-        Bom bom = requireBom(bomId);
+    public BomDto patch(String uid, PatchBomRequestDto request) {
+        Bom bom = requireBomByUid(uid);
         if (bom.getStatus() != BomStatus.DRAFT) {
             throw new IllegalStateException(
                 "BOM is only editable while DRAFT (was " + bom.getStatus() + ")");
@@ -114,8 +114,8 @@ public class BomServiceImpl implements BomService {
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = AGG)
-    public BomDto activate(Long bomId) {
-        Bom bom = requireBom(bomId);
+    public BomDto activate(String uid) {
+        Bom bom = requireBomByUid(uid);
         List<BomLine> lines = bomLines.findByBomIdOrderByLineNoAsc(bom.getId());
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("Cannot activate a BOM with no lines");
@@ -142,8 +142,8 @@ public class BomServiceImpl implements BomService {
     @Override
     @Transactional
     @Auditable(action = "RETIRE", entityType = AGG)
-    public BomDto retire(Long bomId) {
-        Bom bom = requireBom(bomId);
+    public BomDto retire(String uid) {
+        Bom bom = requireBomByUid(uid);
         bom.retire(LocalDate.now(), context.userId());
         events.publish("BomRetired.v1", AGG, String.valueOf(bom.getId()),
             Map.of("bomId", bom.getId(),
@@ -155,8 +155,8 @@ public class BomServiceImpl implements BomService {
     @Override
     @Transactional
     @Auditable(action = "VERSION", entityType = AGG)
-    public BomDto version(Long bomId) {
-        Bom source = requireBom(bomId);
+    public BomDto version(String uid) {
+        Bom source = requireBomByUid(uid);
         if (source.getStatus() != BomStatus.ACTIVE) {
             throw new IllegalStateException(
                 "Only ACTIVE BOMs can be versioned (was " + source.getStatus() + ")");
@@ -193,8 +193,8 @@ public class BomServiceImpl implements BomService {
 
     @Override
     @Transactional(readOnly = true)
-    public BomDto get(Long bomId) {
-        Bom bom = requireBom(bomId);
+    public BomDto get(String uid) {
+        Bom bom = requireBomByUid(uid);
         return BomDto.from(bom, bomLines.findByBomIdOrderByLineNoAsc(bom.getId()));
     }
 
@@ -232,7 +232,7 @@ public class BomServiceImpl implements BomService {
                 Item item = requireItem(in.inputItemId(), companyId);
                 if (uomId == null) uomId = item.getUomId();
             } else if (in.subBomId() != null) {
-                Bom sub = requireBom(in.subBomId());
+                Bom sub = requireBomById(in.subBomId());
                 if (uomId == null) uomId = sub.getOutputUomId();
             } else {
                 throw new IllegalArgumentException(
@@ -274,7 +274,18 @@ public class BomServiceImpl implements BomService {
         }
     }
 
-    private Bom requireBom(Long id) {
+    /** External entry-point lookup by {@code uid} (URL identifier). */
+    private Bom requireBomByUid(String uid) {
+        Bom bom = boms.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("BOM not found: " + uid));
+        if (!Objects.equals(bom.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("BOM not found: " + uid);
+        }
+        return bom;
+    }
+
+    /** Internal lookup by numeric id — for body-level joins (parentBomId, subBomId). */
+    private Bom requireBomById(Long id) {
         Bom bom = boms.findById(id)
             .orElseThrow(() -> new NoSuchElementException("BOM not found: " + id));
         if (!Objects.equals(bom.getCompanyId(), context.companyId())) {

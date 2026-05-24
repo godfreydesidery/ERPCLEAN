@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.sales.domain.enums.PaymentTerms;
 import com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus;
 import jakarta.persistence.*;
@@ -15,12 +16,15 @@ import java.time.LocalDate;
 /** Sales invoice — header. DATA-MODEL.md §6.3. */
 @Entity
 @Table(name = "sales_invoice",
-    uniqueConstraints = @UniqueConstraint(name = "uk_sales_invoice_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_sales_invoice_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_sales_invoice_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class SalesInvoice {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class SalesInvoice extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sales_invoice_seq")

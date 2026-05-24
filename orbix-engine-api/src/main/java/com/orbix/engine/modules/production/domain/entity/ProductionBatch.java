@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.production.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.production.domain.enums.ProductionBatchStatus;
 import com.orbix.engine.modules.production.domain.enums.ProductionLifecycleState;
 import jakarta.persistence.*;
@@ -21,12 +22,15 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "production_batch",
-    uniqueConstraints = @UniqueConstraint(name = "uk_production_batch_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_production_batch_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_production_batch_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class ProductionBatch {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class ProductionBatch extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "production_batch_seq")

@@ -10,6 +10,7 @@ import com.orbix.engine.modules.cash.repository.SupplierPaymentAllocationReposit
 import com.orbix.engine.modules.cash.repository.SupplierPaymentRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -185,13 +187,13 @@ class SupplierPaymentServiceImplTest {
     @Test
     void post_advancesInvoicePaidAmount_andEmitsPosted() {
         SupplierPayment payment = createdPayment("SP-P", new BigDecimal("400"));
-        when(payments.findById(payment.getId())).thenReturn(Optional.of(payment));
+        when(payments.findByUid(payment.getUid())).thenReturn(Optional.of(payment));
         SupplierInvoice invoice = postedInvoice(INVOICE_A_ID, new BigDecimal("1000"), BigDecimal.ZERO);
         when(invoices.findById(INVOICE_A_ID)).thenReturn(Optional.of(invoice));
         when(allocations.findBySupplierPaymentId(payment.getId())).thenReturn(List.of(
             new SupplierPaymentAllocation(payment.getId(), INVOICE_A_ID, new BigDecimal("400"))));
 
-        SupplierPaymentDto dto = service.post(payment.getId());
+        SupplierPaymentDto dto = service.post(payment.getUid());
 
         assertThat(dto.status()).isEqualTo(SupplierPaymentStatus.POSTED);
         assertThat(invoice.getPaidAmount()).isEqualByComparingTo("400");
@@ -203,13 +205,13 @@ class SupplierPaymentServiceImplTest {
     @Test
     void post_fullSettlement_flipsInvoiceToPaid() {
         SupplierPayment payment = createdPayment("SP-FULL", new BigDecimal("1000"));
-        when(payments.findById(payment.getId())).thenReturn(Optional.of(payment));
+        when(payments.findByUid(payment.getUid())).thenReturn(Optional.of(payment));
         SupplierInvoice invoice = postedInvoice(INVOICE_A_ID, new BigDecimal("1000"), BigDecimal.ZERO);
         when(invoices.findById(INVOICE_A_ID)).thenReturn(Optional.of(invoice));
         when(allocations.findBySupplierPaymentId(payment.getId())).thenReturn(List.of(
             new SupplierPaymentAllocation(payment.getId(), INVOICE_A_ID, new BigDecimal("1000"))));
 
-        service.post(payment.getId());
+        service.post(payment.getUid());
 
         assertThat(invoice.getPaidAmount()).isEqualByComparingTo("1000");
         assertThat(invoice.getStatus()).isEqualTo(SupplierInvoiceStatus.PAID);
@@ -218,12 +220,12 @@ class SupplierPaymentServiceImplTest {
     @Test
     void post_dayClosed_isRejected() {
         SupplierPayment payment = createdPayment("SP-DAY", new BigDecimal("100"));
-        when(payments.findById(payment.getId())).thenReturn(Optional.of(payment));
+        when(payments.findByUid(payment.getUid())).thenReturn(Optional.of(payment));
         when(dayGuard.requireOpenDay(BRANCH_ID))
             .thenThrow(new IllegalStateException("No open business day"));
 
-        Long id = payment.getId();
-        assertThatThrownBy(() -> service.post(id))
+        String uid = payment.getUid();
+        assertThatThrownBy(() -> service.post(uid))
             .isInstanceOf(IllegalStateException.class);
         verify(events, never()).publish(eq("SupplierPaymentPosted.v1"), any(), any(), any());
     }
@@ -231,9 +233,9 @@ class SupplierPaymentServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         SupplierPayment payment = createdPayment("SP-C", new BigDecimal("100"));
-        when(payments.findById(payment.getId())).thenReturn(Optional.of(payment));
+        when(payments.findByUid(payment.getUid())).thenReturn(Optional.of(payment));
 
-        SupplierPaymentDto dto = service.cancel(payment.getId());
+        SupplierPaymentDto dto = service.cancel(payment.getUid());
 
         assertThat(dto.status()).isEqualTo(SupplierPaymentStatus.CANCELLED);
         verify(events).publish(eq("SupplierPaymentCancelled.v1"), any(), any(), any());
@@ -256,6 +258,7 @@ class SupplierPaymentServiceImplTest {
             LocalDate.of(2026, 5, 20), PaymentMethod.BANK_TRANSFER, "TT-1",
             "TZS", total, null, ACTOR_ID);
         payment.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(payment, "uid", UidGenerator.next());
         return payment;
     }
 }

@@ -18,6 +18,7 @@ export interface LpoOrderLine {
 
 export interface LpoOrder {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -83,6 +84,7 @@ export interface GrnLine {
 
 export interface Grn {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -134,6 +136,7 @@ export interface SupplierInvoiceAllocation {
 
 export interface SupplierInvoice {
   id: string;
+  uid: string;
   number: string;
   supplierInvoiceNo: string;
   companyId: string;
@@ -183,6 +186,7 @@ export interface SupplierPaymentAllocation {
 
 export interface SupplierPayment {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;

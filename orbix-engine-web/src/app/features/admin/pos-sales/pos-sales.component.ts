@@ -306,7 +306,7 @@ export class PosSalesComponent implements OnInit {
     this.error.set(null);
     this.info.set(null);
     unwrap(this.http.post<ApiResponse<PosSale>>(
-      `${this.base}/pos-sales/${s.id}/void`, { reason: reason.trim() }
+      `${this.base}/pos-sales/uid/${s.uid}/void`, { reason: reason.trim() }
     )).subscribe({
       next: voided => {
         this.busy.set(false);

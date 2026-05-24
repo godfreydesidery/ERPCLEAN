@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.stock.domain.enums.StockCountStatus;
 import com.orbix.engine.modules.stock.domain.enums.StockCountType;
 import jakarta.persistence.*;
@@ -14,12 +15,15 @@ import java.time.LocalDate;
 /** A physical count session. DRAFT -> IN_PROGRESS -> CLOSED -> POSTED. DATA-MODEL.md §4.3. */
 @Entity
 @Table(name = "stock_count",
-    uniqueConstraints = @UniqueConstraint(name = "uk_stock_count_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_stock_count_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_stock_count_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class StockCount {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class StockCount extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "stock_count_seq")

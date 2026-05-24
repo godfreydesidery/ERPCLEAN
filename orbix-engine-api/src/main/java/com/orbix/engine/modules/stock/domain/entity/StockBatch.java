@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -18,12 +19,15 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "stock_batch",
-    uniqueConstraints = @UniqueConstraint(name = "uk_stock_batch_branch_item_no",
-        columnNames = {"branch_id", "item_id", "batch_no"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_stock_batch_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_stock_batch_branch_item_no",
+            columnNames = {"branch_id", "item_id", "batch_no"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class StockBatch {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class StockBatch extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "stock_batch_seq")

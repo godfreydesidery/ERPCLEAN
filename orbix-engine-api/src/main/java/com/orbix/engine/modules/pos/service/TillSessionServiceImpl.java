@@ -134,8 +134,8 @@ public class TillSessionServiceImpl implements TillSessionService {
     @Override
     @Transactional
     @Auditable(action = "CLOSE", entityType = AGG)
-    public TillSessionDto close(Long sessionId, CloseTillSessionRequestDto request) {
-        TillSession session = requireSession(sessionId);
+    public TillSessionDto close(String uid, CloseTillSessionRequestDto request) {
+        TillSession session = requireSessionByUid(uid);
         if (session.getStatus() != TillSessionStatus.OPEN) {
             throw new IllegalStateException(
                 "Only OPEN sessions can be closed (was " + session.getStatus() + ")");
@@ -186,8 +186,8 @@ public class TillSessionServiceImpl implements TillSessionService {
     @Override
     @Transactional
     @Auditable(action = "RECONCILE", entityType = AGG)
-    public TillSessionDto reconcile(Long sessionId) {
-        TillSession session = requireSession(sessionId);
+    public TillSessionDto reconcile(String uid) {
+        TillSession session = requireSessionByUid(uid);
         session.reconcile(context.userId());
         events.publish("TillSessionReconciled.v1", AGG, String.valueOf(session.getId()),
             Map.of(F_ID, session.getId(),
@@ -215,8 +215,8 @@ public class TillSessionServiceImpl implements TillSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public TillSessionDto get(Long sessionId) {
-        return TillSessionDto.from(requireSession(sessionId));
+    public TillSessionDto get(String uid) {
+        return TillSessionDto.from(requireSessionByUid(uid));
     }
 
     /**
@@ -276,11 +276,11 @@ public class TillSessionServiceImpl implements TillSessionService {
         }
     }
 
-    private TillSession requireSession(Long id) {
-        TillSession session = sessions.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Till session not found: " + id));
+    private TillSession requireSessionByUid(String uid) {
+        TillSession session = sessions.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Till session not found: " + uid));
         if (!Objects.equals(session.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Till session not found: " + id);
+            throw new NoSuchElementException("Till session not found: " + uid);
         }
         branchScope.requireAccess(session.getBranchId());
         return session;

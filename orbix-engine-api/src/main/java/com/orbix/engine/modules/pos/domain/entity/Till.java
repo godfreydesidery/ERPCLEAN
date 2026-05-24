@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.pos.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.pos.domain.enums.TillStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -12,12 +13,14 @@ import java.time.Instant;
 /** A physical till / cashier workstation. DATA-MODEL.md §7.1. */
 @Entity
 @Table(name = "till",
-    uniqueConstraints = @UniqueConstraint(name = "uk_till_branch_code",
-        columnNames = {"branch_id", "code"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_till_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_till_branch_code", columnNames = {"branch_id", "code"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Till {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Till extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "till_seq")

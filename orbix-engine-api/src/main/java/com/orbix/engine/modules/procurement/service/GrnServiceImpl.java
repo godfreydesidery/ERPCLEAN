@@ -191,8 +191,8 @@ public class GrnServiceImpl implements GrnService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public GrnDto post(Long grnId) {
-        Grn grn = requireGrn(grnId);
+    public GrnDto post(String uid) {
+        Grn grn = requireGrnByUid(uid);
         Long actorId = context.userId();
         Long companyId = context.companyId();
         List<GrnLine> lines = grnLines.findByGrnIdOrderByIdAsc(grn.getId());
@@ -247,8 +247,8 @@ public class GrnServiceImpl implements GrnService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public GrnDto cancel(Long grnId) {
-        Grn grn = requireGrn(grnId);
+    public GrnDto cancel(String uid) {
+        Grn grn = requireGrnByUid(uid);
         grn.cancel(context.userId());
         events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()),
             Map.of(F_ID, grn.getId(), F_NUMBER, grn.getNumber()));
@@ -268,16 +268,16 @@ public class GrnServiceImpl implements GrnService {
 
     @Override
     @Transactional(readOnly = true)
-    public GrnDto get(Long grnId) {
-        Grn grn = requireGrn(grnId);
+    public GrnDto get(String uid) {
+        Grn grn = requireGrnByUid(uid);
         return GrnDto.from(grn, grnLines.findByGrnIdOrderByIdAsc(grn.getId()));
     }
 
-    private Grn requireGrn(Long id) {
-        Grn grn = grns.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("GRN not found: " + id));
+    private Grn requireGrnByUid(String uid) {
+        Grn grn = grns.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("GRN not found: " + uid));
         if (!Objects.equals(grn.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("GRN not found: " + id);
+            throw new NoSuchElementException("GRN not found: " + uid);
         }
         branchScope.requireAccess(grn.getBranchId());
         return grn;

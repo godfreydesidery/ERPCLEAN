@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.sales.domain.enums.ReceiptMethod;
 import com.orbix.engine.modules.sales.domain.enums.SalesReceiptStatus;
 import jakarta.persistence.*;
@@ -15,12 +16,15 @@ import java.time.LocalDate;
 /** Sales receipt — header. DATA-MODEL.md §6.5. */
 @Entity
 @Table(name = "sales_receipt",
-    uniqueConstraints = @UniqueConstraint(name = "uk_sales_receipt_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_sales_receipt_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_sales_receipt_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class SalesReceipt {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class SalesReceipt extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sales_receipt_seq")

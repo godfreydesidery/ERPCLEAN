@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.stock.domain.dto.RecallStockBatchRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
@@ -9,14 +10,20 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/** Stock batches + FEFO admin views (F2.4). Gated by {@code STOCK.BATCH}. */
+/**
+ * Stock batches + FEFO admin views (F2.4). Gated by {@code STOCK.BATCH}.
+ * Batches are addressed externally by their {@code uid} (a ULID) via the
+ * literal {@code /uid/{uid}} segment; the numeric {@code id} stays in the body.
+ */
 @RestController
 @RequestMapping("/api/v1/stock-batches")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('STOCK.BATCH')")
 public class StockBatchController {
 
@@ -39,14 +46,14 @@ public class StockBatchController {
         return service.listExpiringSoon(branchId, daysAhead);
     }
 
-    @GetMapping("/{id}")
-    public StockBatchDto getBatch(@PathVariable Long id) {
-        return service.getBatch(id);
+    @GetMapping("/uid/{uid}")
+    public StockBatchDto getBatch(@PathVariable @ValidUlid String uid) {
+        return service.getBatchByUid(uid);
     }
 
-    @PostMapping("/{id}/recall")
-    public StockBatchDto recallBatch(@PathVariable Long id,
+    @PostMapping("/uid/{uid}/recall")
+    public StockBatchDto recallBatch(@PathVariable @ValidUlid String uid,
                                      @Valid @RequestBody RecallStockBatchRequestDto request) {
-        return service.recallBatch(id, request);
+        return service.recallBatchByUid(uid, request);
     }
 }

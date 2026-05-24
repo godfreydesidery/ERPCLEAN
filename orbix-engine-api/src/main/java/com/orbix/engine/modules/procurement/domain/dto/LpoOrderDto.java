@@ -11,6 +11,7 @@ import java.util.List;
 
 public record LpoOrderDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -30,6 +31,7 @@ public record LpoOrderDto(
     public static LpoOrderDto from(LpoOrder order, List<LpoOrderLine> lines) {
         return new LpoOrderDto(
             order.getId(),
+            order.getUid(),
             order.getNumber(),
             order.getCompanyId(),
             order.getBranchId(),

@@ -10,6 +10,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
@@ -40,6 +41,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -362,6 +364,7 @@ class PosSaleServiceImplTest {
             new BigDecimal("118"), BigDecimal.ZERO, null
         );
         s.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(s, "uid", UidGenerator.next());
         return s;
     }
 
@@ -488,7 +491,7 @@ class PosSaleServiceImplTest {
     @Test
     void voidSale_sameDay_writesCompensatingMovesAndFlipsToVoided() {
         PosSale sale = persistedSale("TILL-1-V", "op-void");
-        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        when(sales.findByUid(sale.getUid())).thenReturn(Optional.of(sale));
         PosSaleLine line = new PosSaleLine(sale.getId(), 1, ITEM_ID, UOM_ID,
             new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
             VAT_GROUP_ID, new BigDecimal("36"), new BigDecimal("236"));
@@ -500,7 +503,7 @@ class PosSaleServiceImplTest {
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        PosSaleDto dto = service.voidSale(sale.getId(),
+        PosSaleDto dto = service.voidSale(sale.getUid(),
             new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("operator error"));
 
         assertThat(dto.status()).isEqualTo(com.orbix.engine.modules.pos.domain.enums.PosSaleStatus.VOIDED);
@@ -517,13 +520,13 @@ class PosSaleServiceImplTest {
     @Test
     void voidSale_differentBusinessDay_isRejected() {
         PosSale sale = persistedSale("TILL-1-VD", "op-vd");
-        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        when(sales.findByUid(sale.getUid())).thenReturn(Optional.of(sale));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 14), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        Long id = sale.getId();
+        String uid = sale.getUid();
         var req = new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("late");
-        assertThatThrownBy(() -> service.voidSale(id, req))
+        assertThatThrownBy(() -> service.voidSale(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("same business day");
         verify(stockMoveService, never()).post(any());
@@ -737,7 +740,7 @@ class PosSaleServiceImplTest {
         when(items.findById(ITEM_ID)).thenReturn(Optional.of(batched));
 
         PosSale sale = persistedSale("TILL-1-VB", "op-vb");
-        when(sales.findById(sale.getId())).thenReturn(Optional.of(sale));
+        when(sales.findByUid(sale.getUid())).thenReturn(Optional.of(sale));
         PosSaleLine line = new PosSaleLine(sale.getId(), 1, ITEM_ID, UOM_ID,
             new BigDecimal("1"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
             VAT_GROUP_ID, BigDecimal.ZERO, new BigDecimal("100"));
@@ -747,9 +750,9 @@ class PosSaleServiceImplTest {
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        Long id = sale.getId();
+        String uid = sale.getUid();
         var req = new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("damaged");
-        assertThatThrownBy(() -> service.voidSale(id, req))
+        assertThatThrownBy(() -> service.voidSale(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("batch-tracked");
     }
@@ -964,6 +967,7 @@ class PosSaleServiceImplTest {
             new BigDecimal("200"), BigDecimal.ZERO, BigDecimal.ZERO,
             new BigDecimal("236"), new BigDecimal("236"), BigDecimal.ZERO, null);
         sale.setId(7777L);
+        ReflectionTestUtils.setField(sale, "uid", UidGenerator.next());
         PosSaleLine line = new PosSaleLine(7777L, 1, ITEM_ID, UOM_ID,
             new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
             VAT_GROUP_ID, new BigDecimal("36"), new BigDecimal("236"));
@@ -973,14 +977,14 @@ class PosSaleServiceImplTest {
             "GC-CODE-V", null, null);
         gcPayment.setId(7780L);
 
-        when(sales.findById(7777L)).thenReturn(Optional.of(sale));
+        when(sales.findByUid(sale.getUid())).thenReturn(Optional.of(sale));
         when(lines.findByPosSaleIdOrderByLineNoAsc(7777L)).thenReturn(List.of(line));
         when(payments.findByPosSaleIdOrderByIdAsc(7777L)).thenReturn(List.of(gcPayment));
         when(dayGuard.requireOpenDay(BRANCH_ID))
             .thenReturn(new com.orbix.engine.modules.day.domain.entity.BusinessDay(
                 BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
 
-        service.voidSale(7777L,
+        service.voidSale(sale.getUid(),
             new com.orbix.engine.modules.pos.domain.dto.VoidPosSaleRequestDto("Customer changed mind"));
 
         verify(giftCards).refundCredit(eq("GC-CODE-V"),

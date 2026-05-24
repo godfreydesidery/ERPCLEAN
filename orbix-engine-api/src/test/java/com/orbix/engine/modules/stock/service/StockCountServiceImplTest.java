@@ -11,6 +11,7 @@ import com.orbix.engine.modules.stock.domain.entity.StockCountLine;
 import com.orbix.engine.modules.stock.domain.enums.StockCountStatus;
 import com.orbix.engine.modules.stock.domain.enums.StockCountType;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.repository.StockCountLineRepository;
 import com.orbix.engine.modules.stock.repository.StockCountRepository;
@@ -21,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -68,6 +70,7 @@ class StockCountServiceImplTest {
         StockCount c = new StockCount("SC-1", BRANCH_ID, COMPANY_ID, LocalDate.of(2026, 5, 14),
             StockCountType.CYCLE, ACTOR_ID);
         c.setId(1L);
+        ReflectionTestUtils.setField(c, "uid", UidGenerator.next());
         c.setStatus(status);
         return c;
     }
@@ -104,10 +107,10 @@ class StockCountServiceImplTest {
         StockCountLine l = new StockCountLine(1L, 8801L, new BigDecimal("25"));
         l.setId(10L);
         l.recordCount(new BigDecimal("22"), "short");
-        when(counts.findById(1L)).thenReturn(Optional.of(c));
+        when(counts.findByUid(c.getUid())).thenReturn(Optional.of(c));
         when(countLines.findByStockCountId(1L)).thenReturn(List.of(l));
 
-        service.closeCount(1L);
+        service.closeCount(c.getUid());
 
         assertThat(c.getStatus()).isEqualTo(StockCountStatus.CLOSED);
         assertThat(l.getVarianceQty()).isEqualByComparingTo("-3");
@@ -122,11 +125,11 @@ class StockCountServiceImplTest {
         StockCountLine flat = new StockCountLine(1L, 8802L, new BigDecimal("10"));
         flat.setId(11L);
         flat.setVarianceQty(BigDecimal.ZERO);
-        when(counts.findById(1L)).thenReturn(Optional.of(c));
+        when(counts.findByUid(c.getUid())).thenReturn(Optional.of(c));
         when(countLines.findByStockCountId(1L)).thenReturn(List.of(varied, flat));
         when(balances.findById(any())).thenReturn(Optional.empty());
 
-        service.postCount(1L);
+        service.postCount(c.getUid());
 
         assertThat(c.getStatus()).isEqualTo(StockCountStatus.POSTED);
         ArgumentCaptor<PostStockMoveRequestDto> move = ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
@@ -141,9 +144,10 @@ class StockCountServiceImplTest {
         StockCount foreign = new StockCount("SC-9", BRANCH_ID, 999L, LocalDate.of(2026, 5, 14),
             StockCountType.SPOT, ACTOR_ID);
         foreign.setId(9L);
-        when(counts.findById(9L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(counts.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.getCount(9L)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.getCount(foreign.getUid())).isInstanceOf(NoSuchElementException.class);
         verify(stockMoveService, never()).post(any());
     }
 }

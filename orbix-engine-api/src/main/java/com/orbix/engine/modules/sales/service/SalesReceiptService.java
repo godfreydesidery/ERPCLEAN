@@ -15,11 +15,11 @@ public interface SalesReceiptService {
 
     SalesReceiptDto createDraft(CreateSalesReceiptRequestDto request);
 
-    SalesReceiptDto post(Long receiptId);
+    SalesReceiptDto post(String uid);
 
-    SalesReceiptDto cancel(Long receiptId);
+    SalesReceiptDto cancel(String uid);
 
     PageDto<SalesReceiptDto> list(Long branchId, Pageable pageable);
 
-    SalesReceiptDto get(Long receiptId);
+    SalesReceiptDto get(String uid);
 }

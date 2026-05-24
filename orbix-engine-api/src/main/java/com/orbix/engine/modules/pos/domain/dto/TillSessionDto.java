@@ -9,6 +9,7 @@ import java.time.LocalDate;
 
 public record TillSessionDto(
     Long id,
+    String uid,
     Long tillId,
     Long branchId,
     Long companyId,
@@ -26,7 +27,7 @@ public record TillSessionDto(
     String notes
 ) {
     public static TillSessionDto from(TillSession s) {
-        return new TillSessionDto(s.getId(), s.getTillId(), s.getBranchId(), s.getCompanyId(),
+        return new TillSessionDto(s.getId(), s.getUid(), s.getTillId(), s.getBranchId(), s.getCompanyId(),
             s.getBusinessDate(), s.getOpenedBy(), s.getOpenedAt(), s.getOpeningFloatAmount(),
             s.getClosedBy(), s.getClosedAt(), s.getExpectedCashAmount(),
             s.getDeclaredCashAmount(), s.getVarianceAmount(), s.getSupervisorId(),

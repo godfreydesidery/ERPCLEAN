@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.sales.domain.enums.CustomerReturnStatus;
 import com.orbix.engine.modules.sales.domain.enums.ReturnReason;
 import jakarta.persistence.*;
@@ -15,12 +16,15 @@ import java.time.LocalDate;
 /** Customer return — header. DATA-MODEL.md §6.7. */
 @Entity
 @Table(name = "customer_return",
-    uniqueConstraints = @UniqueConstraint(name = "uk_customer_return_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_customer_return_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_customer_return_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CustomerReturn {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CustomerReturn extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "customer_return_seq")

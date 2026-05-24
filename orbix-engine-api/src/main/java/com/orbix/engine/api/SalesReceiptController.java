@@ -1,6 +1,7 @@
 package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesReceiptRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesReceiptDto;
 import com.orbix.engine.modules.sales.service.SalesReceiptService;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/v1/sales-receipts")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('SALES.MANAGE_RECEIPT')")
 public class SalesReceiptController {
 
@@ -29,26 +32,26 @@ public class SalesReceiptController {
         return service.list(branchId, PageRequest.of(page, size));
     }
 
-    @GetMapping("/{id}")
-    public SalesReceiptDto get(@PathVariable Long id) {
-        return service.get(id);
+    @GetMapping("/uid/{uid}")
+    public SalesReceiptDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
     @PostMapping
     public ResponseEntity<SalesReceiptDto> create(
             @Valid @RequestBody CreateSalesReceiptRequestDto request) {
         SalesReceiptDto receipt = service.createDraft(request);
-        return ResponseEntity.created(URI.create("/api/v1/sales-receipts/" + receipt.id()))
+        return ResponseEntity.created(URI.create("/api/v1/sales-receipts/uid/" + receipt.uid()))
             .body(receipt);
     }
 
-    @PostMapping("/{id}/post")
-    public SalesReceiptDto post(@PathVariable Long id) {
-        return service.post(id);
+    @PostMapping("/uid/{uid}/post")
+    public SalesReceiptDto post(@PathVariable @ValidUlid String uid) {
+        return service.post(uid);
     }
 
-    @PostMapping("/{id}/cancel")
-    public SalesReceiptDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    @PostMapping("/uid/{uid}/cancel")
+    public SalesReceiptDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 }

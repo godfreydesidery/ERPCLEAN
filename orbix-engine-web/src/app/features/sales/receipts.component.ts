@@ -512,12 +512,12 @@ export class ReceiptsComponent implements OnInit {
   }
 
   post(r: SalesReceipt): void {
-    this.run(this.sales.postReceipt(r.id), `Receipt posted.`);
+    this.run(this.sales.postReceipt(r.uid), `Receipt posted.`);
   }
 
   cancel(r: SalesReceipt): void {
     if (!window.confirm(`Cancel ${r.number}?`)) return;
-    this.run(this.sales.cancelReceipt(r.id), `Receipt cancelled.`);
+    this.run(this.sales.cancelReceipt(r.uid), `Receipt cancelled.`);
   }
 
   private run(op: Observable<SalesReceipt>, msg: string): void {

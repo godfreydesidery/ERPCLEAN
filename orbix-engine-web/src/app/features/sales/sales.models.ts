@@ -23,6 +23,7 @@ export interface SalesInvoiceLine {
 
 export interface SalesInvoice {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -98,6 +99,7 @@ export interface ReceiptAllocation {
 
 export interface SalesReceipt {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -157,6 +159,7 @@ export interface CustomerReturnLine {
 
 export interface CustomerReturn {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -201,6 +204,7 @@ export interface IssueCreditNoteRequest {
 
 export interface CustomerCreditNote {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;
@@ -226,6 +230,7 @@ export interface PackingListLine {
 
 export interface PackingList {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   branchId: string;

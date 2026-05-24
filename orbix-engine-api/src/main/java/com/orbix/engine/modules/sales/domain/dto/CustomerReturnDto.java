@@ -12,6 +12,7 @@ import java.util.List;
 
 public record CustomerReturnDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -28,7 +29,7 @@ public record CustomerReturnDto(
     List<CustomerReturnLineDto> lines
 ) {
     public static CustomerReturnDto from(CustomerReturn r, List<CustomerReturnLine> lines) {
-        return new CustomerReturnDto(r.getId(), r.getNumber(), r.getCompanyId(), r.getBranchId(),
+        return new CustomerReturnDto(r.getId(), r.getUid(), r.getNumber(), r.getCompanyId(), r.getBranchId(),
             r.getCustomerId(), r.getOriginalInvoiceId(), r.getReturnDate(), r.getReason(),
             r.getTotalAmount(), r.getStatus(), r.isRestock(),
             r.getPostedAt(), r.getPostedBy(), r.getNotes(),

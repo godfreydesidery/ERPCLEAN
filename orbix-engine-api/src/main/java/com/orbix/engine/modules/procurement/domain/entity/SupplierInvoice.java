@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.procurement.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -15,6 +16,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "supplier_invoice",
     uniqueConstraints = {
+        @UniqueConstraint(name = "uk_supplier_invoice_uid",
+            columnNames = {"uid"}),
         @UniqueConstraint(name = "uk_supplier_invoice_branch_number",
             columnNames = {"branch_id", "number"}),
         @UniqueConstraint(name = "uk_supplier_invoice_supplier_no",
@@ -22,8 +25,8 @@ import java.time.LocalDate;
     })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class SupplierInvoice {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class SupplierInvoice extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "supplier_invoice_seq")

@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.orders.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.orders.domain.enums.CustomerOrderStatus;
 import com.orbix.engine.modules.orders.domain.enums.CustomerOrderType;
 import jakarta.persistence.*;
@@ -23,12 +24,15 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "customer_order",
-    uniqueConstraints = @UniqueConstraint(name = "uk_customer_order_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_customer_order_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_customer_order_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CustomerOrder {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CustomerOrder extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "customer_order_seq")

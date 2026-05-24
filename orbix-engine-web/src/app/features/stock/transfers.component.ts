@@ -313,18 +313,18 @@ export class TransfersComponent implements OnInit {
   }
 
   issue(transfer: StockTransfer): void {
-    this.run(this.stock.issueTransfer(transfer.id), updated => this.refresh(updated));
+    this.run(this.stock.issueTransfer(transfer.uid), updated => this.refresh(updated));
   }
 
   receive(transfer: StockTransfer): void {
     const lines = transfer.lines
       .filter(l => this.receiveDraft[l.id] != null)
       .map(l => ({ lineId: l.id, receivedQty: Number(this.receiveDraft[l.id]) }));
-    this.run(this.stock.receiveTransfer(transfer.id, { lines }), updated => this.refresh(updated));
+    this.run(this.stock.receiveTransfer(transfer.uid, { lines }), updated => this.refresh(updated));
   }
 
   close(transfer: StockTransfer): void {
-    this.run(this.stock.closeTransfer(transfer.id), updated => this.refresh(updated));
+    this.run(this.stock.closeTransfer(transfer.uid), updated => this.refresh(updated));
   }
 
   private refresh(updated: StockTransfer): void {

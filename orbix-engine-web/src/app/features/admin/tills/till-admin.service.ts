@@ -27,16 +27,16 @@ export class TillAdminService {
     return unwrap(this.http.post<ApiResponse<Till>>(`${this.base}/tills`, request));
   }
 
-  updateTill(id: string, request: UpdateTillRequest): Observable<Till> {
-    return unwrap(this.http.patch<ApiResponse<Till>>(`${this.base}/tills/${id}`, request));
+  updateTill(uid: string, request: UpdateTillRequest): Observable<Till> {
+    return unwrap(this.http.patch<ApiResponse<Till>>(`${this.base}/tills/uid/${uid}`, request));
   }
 
-  deactivateTill(id: string): Observable<Till> {
-    return unwrap(this.http.post<ApiResponse<Till>>(`${this.base}/tills/${id}/deactivate`, {}));
+  deactivateTill(uid: string): Observable<Till> {
+    return unwrap(this.http.post<ApiResponse<Till>>(`${this.base}/tills/uid/${uid}/deactivate`, {}));
   }
 
-  activateTill(id: string): Observable<Till> {
-    return unwrap(this.http.post<ApiResponse<Till>>(`${this.base}/tills/${id}/activate`, {}));
+  activateTill(uid: string): Observable<Till> {
+    return unwrap(this.http.post<ApiResponse<Till>>(`${this.base}/tills/uid/${uid}/activate`, {}));
   }
 
   listSessions(branchId: string | null, tillId: string | null = null): Observable<TillSession[]> {
@@ -52,15 +52,15 @@ export class TillAdminService {
     ));
   }
 
-  closeSession(id: string, request: CloseTillSessionRequest): Observable<TillSession> {
+  closeSession(uid: string, request: CloseTillSessionRequest): Observable<TillSession> {
     return unwrap(this.http.post<ApiResponse<TillSession>>(
-      `${this.base}/till-sessions/${id}/close`, request
+      `${this.base}/till-sessions/uid/${uid}/close`, request
     ));
   }
 
-  reconcileSession(id: string): Observable<TillSession> {
+  reconcileSession(uid: string): Observable<TillSession> {
     return unwrap(this.http.post<ApiResponse<TillSession>>(
-      `${this.base}/till-sessions/${id}/reconcile`, {}
+      `${this.base}/till-sessions/uid/${uid}/reconcile`, {}
     ));
   }
 }

@@ -6,10 +6,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<CustomerOrder> findByUid(String uid);
 
     List<CustomerOrder> findByCompanyIdOrderByIdDesc(Long companyId);
 

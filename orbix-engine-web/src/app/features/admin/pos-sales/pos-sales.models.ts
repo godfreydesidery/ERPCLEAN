@@ -31,6 +31,7 @@ export interface PosPayment {
 
 export interface PosSale {
   id: string;
+  uid: string;
   number: string;
   clientOpId: string;
   tillSessionId: string;

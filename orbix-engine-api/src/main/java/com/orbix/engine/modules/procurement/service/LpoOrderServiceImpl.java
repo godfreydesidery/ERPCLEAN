@@ -80,8 +80,8 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = AGG)
-    public LpoOrderDto updateDraft(Long lpoId, UpdateLpoOrderRequestDto request) {
-        LpoOrder order = requireOrder(lpoId);
+    public LpoOrderDto updateDraft(String uid, UpdateLpoOrderRequestDto request) {
+        LpoOrder order = requireOrderByUid(uid);
         order.editHeader(request.supplierId(), request.orderDate(), request.expectedDeliveryDate(),
             request.currencyCode(), request.notes(), context.userId());
         lines.deleteByLpoOrderId(order.getId());
@@ -92,8 +92,8 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Override
     @Transactional
     @Auditable(action = "SUBMIT", entityType = AGG)
-    public LpoOrderDto submit(Long lpoId) {
-        LpoOrder order = requireOrder(lpoId);
+    public LpoOrderDto submit(String uid) {
+        LpoOrder order = requireOrderByUid(uid);
         BigDecimal autoApprovalThreshold = settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL);
         boolean autoApprove = autoApprovalThreshold.signum() > 0
             && order.getTotalAmount().compareTo(autoApprovalThreshold) <= 0;
@@ -111,8 +111,8 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Override
     @Transactional
     @Auditable(action = "APPROVE", entityType = AGG)
-    public LpoOrderDto approve(Long lpoId) {
-        LpoOrder order = requireOrder(lpoId);
+    public LpoOrderDto approve(String uid) {
+        LpoOrder order = requireOrderByUid(uid);
         if (order.getStatus() != LpoOrderStatus.PENDING_APPROVAL) {
             throw new IllegalStateException(
                 "Only PENDING_APPROVAL can be approved here (was " + order.getStatus() + ")");
@@ -125,8 +125,8 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public LpoOrderDto cancel(Long lpoId) {
-        LpoOrder order = requireOrder(lpoId);
+    public LpoOrderDto cancel(String uid) {
+        LpoOrder order = requireOrderByUid(uid);
         order.cancel(context.userId());
         events.publish("LpoOrderCancelled.v1", AGG, String.valueOf(order.getId()),
             Map.of(F_ID, order.getId(), F_NUMBER, order.getNumber()));
@@ -146,8 +146,8 @@ public class LpoOrderServiceImpl implements LpoOrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public LpoOrderDto get(Long lpoId) {
-        LpoOrder order = requireOrder(lpoId);
+    public LpoOrderDto get(String uid) {
+        LpoOrder order = requireOrderByUid(uid);
         return LpoOrderDto.from(order, lines.findByLpoOrderIdOrderByLineNoAsc(order.getId()));
     }
 
@@ -189,11 +189,11 @@ public class LpoOrderServiceImpl implements LpoOrderService {
                 "autoApproved", autoApproved));
     }
 
-    private LpoOrder requireOrder(Long id) {
-        LpoOrder order = orders.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("LPO not found: " + id));
+    private LpoOrder requireOrderByUid(String uid) {
+        LpoOrder order = orders.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("LPO not found: " + uid));
         if (!Objects.equals(order.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("LPO not found: " + id);
+            throw new NoSuchElementException("LPO not found: " + uid);
         }
         branchScope.requireAccess(order.getBranchId());
         return order;

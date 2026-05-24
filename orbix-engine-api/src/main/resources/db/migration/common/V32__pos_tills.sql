@@ -4,6 +4,7 @@
 
 CREATE TABLE till (
     id                       BIGINT      NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)    NOT NULL,
     company_id               BIGINT      NOT NULL,
     branch_id                BIGINT      NOT NULL,
     code                     VARCHAR(20) NOT NULL,
@@ -16,6 +17,7 @@ CREATE TABLE till (
     updated_at               TIMESTAMP   NOT NULL,
     created_by               BIGINT      NOT NULL,
     updated_by               BIGINT      NOT NULL,
+    CONSTRAINT uk_till_uid         UNIQUE (uid),
     CONSTRAINT uk_till_branch_code UNIQUE (branch_id, code),
     CONSTRAINT fk_till_company    FOREIGN KEY (company_id)            REFERENCES company    (id),
     CONSTRAINT fk_till_branch     FOREIGN KEY (branch_id)             REFERENCES branch     (id),
@@ -25,6 +27,7 @@ CREATE INDEX ix_till_branch ON till (branch_id);
 
 CREATE TABLE till_session (
     id                       BIGINT         NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)       NOT NULL,
     till_id                  BIGINT         NOT NULL,
     branch_id                BIGINT         NOT NULL,
     company_id               BIGINT         NOT NULL,
@@ -42,6 +45,7 @@ CREATE TABLE till_session (
     z_report_object_key      VARCHAR(200),
     notes                    VARCHAR(2000),
     version                  INT            NOT NULL DEFAULT 0,
+    CONSTRAINT uk_till_session_uid     UNIQUE (uid),
     CONSTRAINT fk_till_session_till    FOREIGN KEY (till_id)    REFERENCES till    (id),
     CONSTRAINT fk_till_session_branch  FOREIGN KEY (branch_id)  REFERENCES branch  (id),
     CONSTRAINT fk_till_session_company FOREIGN KEY (company_id) REFERENCES company (id)

@@ -20,41 +20,41 @@ public interface CustomerOrderService {
 
     CustomerOrderDto create(CreateCustomerOrderRequestDto request);
 
-    CustomerOrderDto patch(Long orderId, PatchCustomerOrderRequestDto request);
+    CustomerOrderDto patch(String uid, PatchCustomerOrderRequestDto request);
 
     /**
      * Lock stock against the order (LAYBY only — PRE_ORDER is produce-to-order
      * and skips reservation). Transitions DRAFT -> RESERVED.
      */
-    CustomerOrderDto reserve(Long orderId);
+    CustomerOrderDto reserve(String uid);
 
     /**
      * Record a deposit / instalment / final payment. Advances the status per
      * {@link com.orbix.engine.modules.orders.domain.entity.CustomerOrder#applyPayment}
      * rules. Idempotent on {@code (orderId, idempotencyKey)}.
      */
-    CustomerOrderDto pay(Long orderId, PayCustomerOrderRequestDto request);
+    CustomerOrderDto pay(String uid, PayCustomerOrderRequestDto request);
 
     /**
      * Cancel an open order. Releases any reservation, refunds prior payments
      * per the configured cancel-window policy, sets status CANCELLED.
      */
-    CustomerOrderDto cancel(Long orderId, CancelCustomerOrderRequestDto request);
+    CustomerOrderDto cancel(String uid, CancelCustomerOrderRequestDto request);
 
     /**
      * Manual READY transition for PRE_ORDER — replaces the (deferred)
      * {@code ProductionOutputPosted.v1} consumer once production lands in F7.3.
      */
-    CustomerOrderDto markReady(Long orderId);
+    CustomerOrderDto markReady(String uid);
 
     /**
      * Final collection — converts LAYBY reservation to a SALE stock_move (or
      * for PRE_ORDER simply posts the SALE move against the produced goods),
      * sets status COLLECTED. Requires balance_due = 0.
      */
-    CustomerOrderDto collect(Long orderId);
+    CustomerOrderDto collect(String uid);
 
-    CustomerOrderDto get(Long orderId);
+    CustomerOrderDto get(String uid);
 
     List<CustomerOrderDto> list(Long branchId, Long customerId, CustomerOrderStatus status,
                                 CustomerOrderType type);

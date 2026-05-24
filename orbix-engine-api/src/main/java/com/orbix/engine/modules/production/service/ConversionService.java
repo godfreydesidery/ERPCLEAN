@@ -16,12 +16,12 @@ public interface ConversionService {
     ConversionDto createDraft(CreateConversionRequestDto request);
 
     /** DRAFT -> POSTED. Writes the paired stock_moves; terminal. */
-    ConversionDto post(Long conversionId);
+    ConversionDto post(String uid);
 
     /** DRAFT -> CANCELLED. */
-    ConversionDto cancel(Long conversionId);
+    ConversionDto cancel(String uid);
 
-    ConversionDto get(Long conversionId);
+    ConversionDto get(String uid);
 
     List<ConversionDto> list(Long branchId, ConversionStatus status);
 }

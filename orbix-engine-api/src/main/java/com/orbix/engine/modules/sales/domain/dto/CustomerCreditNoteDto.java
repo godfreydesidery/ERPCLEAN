@@ -8,6 +8,7 @@ import java.time.LocalDate;
 
 public record CustomerCreditNoteDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -21,7 +22,7 @@ public record CustomerCreditNoteDto(
     String notes
 ) {
     public static CustomerCreditNoteDto from(CustomerCreditNote c) {
-        return new CustomerCreditNoteDto(c.getId(), c.getNumber(), c.getCompanyId(), c.getBranchId(),
+        return new CustomerCreditNoteDto(c.getId(), c.getUid(), c.getNumber(), c.getCompanyId(), c.getBranchId(),
             c.getCustomerId(), c.getCustomerReturnId(), c.getCnDate(), c.getCurrencyCode(),
             c.getTotalAmount(), c.getAllocatedAmount(), c.getStatus(), c.getNotes());
     }

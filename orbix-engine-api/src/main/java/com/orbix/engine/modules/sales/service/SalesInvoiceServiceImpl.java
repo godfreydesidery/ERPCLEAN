@@ -114,8 +114,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public SalesInvoiceDto post(Long invoiceId) {
-        SalesInvoice invoice = requireInvoice(invoiceId);
+    public SalesInvoiceDto post(String uid) {
+        SalesInvoice invoice = requireInvoiceByUid(uid);
         Long actorId = context.userId();
         BusinessDay day = dayGuard.requireOpenDay(invoice.getBranchId());
 
@@ -144,8 +144,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "VOID", entityType = AGG)
-    public SalesInvoiceDto voidInvoice(Long invoiceId, VoidSalesInvoiceRequestDto request) {
-        SalesInvoice invoice = requireInvoice(invoiceId);
+    public SalesInvoiceDto voidInvoice(String uid, VoidSalesInvoiceRequestDto request) {
+        SalesInvoice invoice = requireInvoiceByUid(uid);
         if (invoice.getStatus() != SalesInvoiceStatus.POSTED) {
             throw new IllegalStateException(
                 "Only POSTED invoices can be voided (was " + invoice.getStatus() + ")");
@@ -190,8 +190,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public SalesInvoiceDto cancel(Long invoiceId) {
-        SalesInvoice invoice = requireInvoice(invoiceId);
+    public SalesInvoiceDto cancel(String uid) {
+        SalesInvoice invoice = requireInvoiceByUid(uid);
         invoice.cancel(context.userId());
         events.publish("SalesInvoiceCancelled.v1", AGG, String.valueOf(invoice.getId()),
             Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber()));
@@ -211,8 +211,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public SalesInvoiceDto get(Long invoiceId) {
-        SalesInvoice invoice = requireInvoice(invoiceId);
+    public SalesInvoiceDto get(String uid) {
+        SalesInvoice invoice = requireInvoiceByUid(uid);
         return SalesInvoiceDto.from(invoice, lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId()));
     }
 
@@ -353,11 +353,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
     }
 
-    private SalesInvoice requireInvoice(Long id) {
-        SalesInvoice invoice = invoices.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Sales invoice not found: " + id));
+    private SalesInvoice requireInvoiceByUid(String uid) {
+        SalesInvoice invoice = invoices.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Sales invoice not found: " + uid));
         if (!Objects.equals(invoice.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Sales invoice not found: " + id);
+            throw new NoSuchElementException("Sales invoice not found: " + uid);
         }
         branchScope.requireAccess(invoice.getBranchId());
         return invoice;

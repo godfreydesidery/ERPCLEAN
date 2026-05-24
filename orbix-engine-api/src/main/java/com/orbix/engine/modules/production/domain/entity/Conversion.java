@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.production.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.production.domain.enums.ConversionStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -22,12 +23,15 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "conversion",
-    uniqueConstraints = @UniqueConstraint(name = "uk_conversion_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_conversion_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_conversion_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Conversion {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Conversion extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "conversion_seq")

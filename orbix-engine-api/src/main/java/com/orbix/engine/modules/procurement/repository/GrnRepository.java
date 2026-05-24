@@ -8,10 +8,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface GrnRepository extends JpaRepository<Grn, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<Grn> findByUid(String uid);
 
     List<Grn> findByCompanyIdOrderByIdDesc(Long companyId);
 

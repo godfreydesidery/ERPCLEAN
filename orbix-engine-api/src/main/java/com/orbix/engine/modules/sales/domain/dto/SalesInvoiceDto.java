@@ -12,6 +12,7 @@ import java.util.List;
 
 public record SalesInvoiceDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -40,7 +41,7 @@ public record SalesInvoiceDto(
 ) {
     public static SalesInvoiceDto from(SalesInvoice s, List<SalesInvoiceLine> lines) {
         return new SalesInvoiceDto(
-            s.getId(), s.getNumber(), s.getCompanyId(), s.getBranchId(),
+            s.getId(), s.getUid(), s.getNumber(), s.getCompanyId(), s.getBranchId(),
             s.getCustomerId(), s.getSalesAgentId(), s.getInvoiceDate(), s.getDueDate(),
             s.getPaymentTerms(), s.getCurrencyCode(), s.getPriceListId(),
             s.getSubtotalAmount(), s.getDiscountAmount(), s.getTaxAmount(),

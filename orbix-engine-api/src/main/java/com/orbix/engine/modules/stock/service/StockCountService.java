@@ -14,18 +14,18 @@ public interface StockCountService {
 
     List<StockCountDto> listCounts(Long branchId);
 
-    StockCountDto getCount(Long countId);
+    StockCountDto getCount(String uid);
 
     /** Drafts a count and freezes each item's system quantity from its current balance. */
     StockCountDto createCount(CreateStockCountRequestDto request);
 
-    StockCountDto startCount(Long countId);
+    StockCountDto startCount(String uid);
 
-    StockCountDto recordCounts(Long countId, RecordCountsRequestDto request);
+    StockCountDto recordCounts(String uid, RecordCountsRequestDto request);
 
     /** IN_PROGRESS -> CLOSED, computing per-line variances. */
-    StockCountDto closeCount(Long countId);
+    StockCountDto closeCount(String uid);
 
     /** CLOSED -> POSTED, posting an ADJUSTMENT move for each non-zero variance. */
-    StockCountDto postCount(Long countId);
+    StockCountDto postCount(String uid);
 }

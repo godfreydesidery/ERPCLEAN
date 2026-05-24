@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.production.domain.dto.AdvanceLifecycleRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PlanProductionBatchRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PostProductionOutputRequestDto;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -24,6 +26,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/production-batches")
 @RequiredArgsConstructor
+@Validated
 public class ProductionBatchController {
 
     private final ProductionBatchService service;
@@ -33,7 +36,7 @@ public class ProductionBatchController {
     public ResponseEntity<ProductionBatchDto> plan(
             @Valid @RequestBody PlanProductionBatchRequestDto request) {
         ProductionBatchDto batch = service.plan(request);
-        return ResponseEntity.created(URI.create("/api/v1/production-batches/" + batch.id()))
+        return ResponseEntity.created(URI.create("/api/v1/production-batches/uid/" + batch.uid()))
             .body(batch);
     }
 
@@ -45,41 +48,41 @@ public class ProductionBatchController {
         return service.list(branchId, sectionId, status);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('PROD.READ_BATCH') or hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto get(@PathVariable Long id) {
-        return service.get(id);
+    public ProductionBatchDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
-    @PostMapping("/{id}/start")
+    @PostMapping("/uid/{uid}/start")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto start(@PathVariable Long id) {
-        return service.start(id);
+    public ProductionBatchDto start(@PathVariable @ValidUlid String uid) {
+        return service.start(uid);
     }
 
-    @PostMapping("/{id}/post-output")
+    @PostMapping("/uid/{uid}/post-output")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto postOutput(@PathVariable Long id,
+    public ProductionBatchDto postOutput(@PathVariable @ValidUlid String uid,
                                          @Valid @RequestBody PostProductionOutputRequestDto request) {
-        return service.postOutput(id, request);
+        return service.postOutput(uid, request);
     }
 
-    @PostMapping("/{id}/cancel")
+    @PostMapping("/uid/{uid}/cancel")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    public ProductionBatchDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 
-    @PostMapping("/{id}/advance-lifecycle")
+    @PostMapping("/uid/{uid}/advance-lifecycle")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto advanceLifecycle(@PathVariable Long id,
+    public ProductionBatchDto advanceLifecycle(@PathVariable @ValidUlid String uid,
                                                @Valid @RequestBody AdvanceLifecycleRequestDto request) {
-        return service.advanceLifecycle(id, request);
+        return service.advanceLifecycle(uid, request);
     }
 
-    @PostMapping("/{id}/close")
+    @PostMapping("/uid/{uid}/close")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BATCH')")
-    public ProductionBatchDto close(@PathVariable Long id) {
-        return service.close(id);
+    public ProductionBatchDto close(@PathVariable @ValidUlid String uid) {
+        return service.close(uid);
     }
 }

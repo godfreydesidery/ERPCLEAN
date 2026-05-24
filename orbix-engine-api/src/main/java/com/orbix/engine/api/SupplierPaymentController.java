@@ -4,11 +4,13 @@ import com.orbix.engine.modules.cash.domain.dto.CreateSupplierPaymentRequestDto;
 import com.orbix.engine.modules.cash.domain.dto.SupplierPaymentDto;
 import com.orbix.engine.modules.cash.service.SupplierPaymentService;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/v1/supplier-payments")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('CASH.MANAGE_SUPPLIER_PAYMENT')")
 public class SupplierPaymentController {
 
@@ -29,26 +32,26 @@ public class SupplierPaymentController {
         return service.list(branchId, PageRequest.of(page, size));
     }
 
-    @GetMapping("/{id}")
-    public SupplierPaymentDto get(@PathVariable Long id) {
-        return service.get(id);
+    @GetMapping("/uid/{uid}")
+    public SupplierPaymentDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
     @PostMapping
     public ResponseEntity<SupplierPaymentDto> create(
             @Valid @RequestBody CreateSupplierPaymentRequestDto request) {
         SupplierPaymentDto payment = service.createDraft(request);
-        return ResponseEntity.created(URI.create("/api/v1/supplier-payments/" + payment.id()))
+        return ResponseEntity.created(URI.create("/api/v1/supplier-payments/uid/" + payment.uid()))
             .body(payment);
     }
 
-    @PostMapping("/{id}/post")
-    public SupplierPaymentDto post(@PathVariable Long id) {
-        return service.post(id);
+    @PostMapping("/uid/{uid}/post")
+    public SupplierPaymentDto post(@PathVariable @ValidUlid String uid) {
+        return service.post(uid);
     }
 
-    @PostMapping("/{id}/cancel")
-    public SupplierPaymentDto cancel(@PathVariable Long id) {
-        return service.cancel(id);
+    @PostMapping("/uid/{uid}/cancel")
+    public SupplierPaymentDto cancel(@PathVariable @ValidUlid String uid) {
+        return service.cancel(uid);
     }
 }

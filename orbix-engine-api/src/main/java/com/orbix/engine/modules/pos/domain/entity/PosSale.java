@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.pos.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import jakarta.persistence.*;
@@ -16,13 +17,14 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "pos_sale",
     uniqueConstraints = {
+        @UniqueConstraint(name = "uk_pos_sale_uid",            columnNames = {"uid"}),
         @UniqueConstraint(name = "uk_pos_sale_company_number", columnNames = {"company_id", "number"}),
         @UniqueConstraint(name = "uk_pos_sale_client_op",       columnNames = {"company_id", "client_op_id"})
     })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class PosSale {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class PosSale extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pos_sale_seq")

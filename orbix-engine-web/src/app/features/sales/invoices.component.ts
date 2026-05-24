@@ -593,18 +593,18 @@ export class InvoicesComponent implements OnInit {
   }
 
   post(inv: SalesInvoice): void {
-    this.run(this.sales.postInvoice(inv.id), `Invoice posted.`);
+    this.run(this.sales.postInvoice(inv.uid), `Invoice posted.`);
   }
 
   voidIt(inv: SalesInvoice): void {
     const reason = window.prompt(`Void ${inv.number} — reason?`);
     if (!reason || !reason.trim()) return;
-    this.run(this.sales.voidInvoice(inv.id, { reason: reason.trim() }), `Invoice voided.`);
+    this.run(this.sales.voidInvoice(inv.uid, { reason: reason.trim() }), `Invoice voided.`);
   }
 
   cancel(inv: SalesInvoice): void {
     if (!window.confirm(`Cancel ${inv.number}?`)) return;
-    this.run(this.sales.cancelInvoice(inv.id), `Invoice cancelled.`);
+    this.run(this.sales.cancelInvoice(inv.uid), `Invoice cancelled.`);
   }
 
   private run(op: Observable<SalesInvoice>, msg: string): void {

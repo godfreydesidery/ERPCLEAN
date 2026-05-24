@@ -62,8 +62,8 @@ public class TillServiceImpl implements TillService {
     @Override
     @Transactional
     @Auditable(action = "UPDATE", entityType = AGG)
-    public TillDto update(Long tillId, UpdateTillRequestDto request) {
-        Till till = requireTill(tillId);
+    public TillDto update(String uid, UpdateTillRequestDto request) {
+        Till till = requireTillByUid(uid);
         till.update(request.name(), request.defaultPriceListId(),
             request.installId() != null ? request.installId().trim() : null, context.userId());
         return TillDto.from(till);
@@ -72,8 +72,8 @@ public class TillServiceImpl implements TillService {
     @Override
     @Transactional
     @Auditable(action = "DEACTIVATE", entityType = AGG)
-    public TillDto deactivate(Long tillId) {
-        Till till = requireTill(tillId);
+    public TillDto deactivate(String uid) {
+        Till till = requireTillByUid(uid);
         Optional<TillSession> open = tillSessions.findFirstByTillIdAndStatus(
             till.getId(), TillSessionStatus.OPEN);
         if (open.isPresent()) {
@@ -89,8 +89,8 @@ public class TillServiceImpl implements TillService {
     @Override
     @Transactional
     @Auditable(action = "ACTIVATE", entityType = AGG)
-    public TillDto activate(Long tillId) {
-        Till till = requireTill(tillId);
+    public TillDto activate(String uid) {
+        Till till = requireTillByUid(uid);
         till.activate(context.userId());
         events.publish("TillActivated.v1", AGG, String.valueOf(till.getId()),
             Map.of(F_ID, till.getId(), F_CODE, till.getCode()));
@@ -110,15 +110,15 @@ public class TillServiceImpl implements TillService {
 
     @Override
     @Transactional(readOnly = true)
-    public TillDto get(Long tillId) {
-        return TillDto.from(requireTill(tillId));
+    public TillDto get(String uid) {
+        return TillDto.from(requireTillByUid(uid));
     }
 
-    private Till requireTill(Long tillId) {
-        Till till = tills.findById(tillId)
-            .orElseThrow(() -> new NoSuchElementException("Till not found: " + tillId));
+    private Till requireTillByUid(String uid) {
+        Till till = tills.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Till not found: " + uid));
         if (!Objects.equals(till.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Till not found: " + tillId);
+            throw new NoSuchElementException("Till not found: " + uid);
         }
         branchScope.requireAccess(till.getBranchId());
         return till;

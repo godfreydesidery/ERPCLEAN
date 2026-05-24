@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.procurement.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -14,12 +15,15 @@ import java.time.LocalDate;
 /** Local Purchase Order — header. DATA-MODEL.md §5.3. */
 @Entity
 @Table(name = "lpo_order",
-    uniqueConstraints = @UniqueConstraint(name = "uk_lpo_order_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_lpo_order_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_lpo_order_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class LpoOrder {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class LpoOrder extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "lpo_order_seq")

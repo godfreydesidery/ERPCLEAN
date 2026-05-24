@@ -15,6 +15,7 @@
 
 CREATE TABLE bom (
     id                    BIGINT         NOT NULL PRIMARY KEY,
+    uid                   CHAR(26)       NOT NULL,
     company_id            BIGINT         NOT NULL,
     section_id            BIGINT         NOT NULL,
     parent_bom_id         BIGINT,
@@ -32,6 +33,7 @@ CREATE TABLE bom (
     updated_at            TIMESTAMP      NOT NULL,
     created_by            BIGINT         NOT NULL,
     updated_by            BIGINT         NOT NULL,
+    CONSTRAINT uk_bom_uid            UNIQUE (uid),
     CONSTRAINT uk_bom_output_version UNIQUE (output_item_id, version),
     CONSTRAINT fk_bom_company        FOREIGN KEY (company_id)     REFERENCES company  (id),
     CONSTRAINT fk_bom_section        FOREIGN KEY (section_id)     REFERENCES section  (id),

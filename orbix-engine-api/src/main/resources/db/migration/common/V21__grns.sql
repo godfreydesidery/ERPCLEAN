@@ -5,6 +5,7 @@
 
 CREATE TABLE grn (
     id                       BIGINT         NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)       NOT NULL,
     number                   VARCHAR(40)    NOT NULL,
     company_id               BIGINT         NOT NULL,
     branch_id                BIGINT         NOT NULL,
@@ -24,6 +25,7 @@ CREATE TABLE grn (
     updated_at               TIMESTAMP      NOT NULL,
     created_by               BIGINT         NOT NULL,
     updated_by               BIGINT         NOT NULL,
+    CONSTRAINT uk_grn_uid           UNIQUE (uid),
     CONSTRAINT uk_grn_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_grn_company  FOREIGN KEY (company_id)   REFERENCES company (id),
     CONSTRAINT fk_grn_branch   FOREIGN KEY (branch_id)    REFERENCES branch (id),

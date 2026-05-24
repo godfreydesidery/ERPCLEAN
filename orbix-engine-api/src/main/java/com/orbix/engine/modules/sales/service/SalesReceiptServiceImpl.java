@@ -100,8 +100,8 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public SalesReceiptDto post(Long receiptId) {
-        SalesReceipt receipt = requireReceipt(receiptId);
+    public SalesReceiptDto post(String uid) {
+        SalesReceipt receipt = requireReceiptByUid(uid);
         BusinessDay day = dayGuard.requireOpenDay(receipt.getBranchId());
         Long actorId = context.userId();
         List<ReceiptAllocation> rows = allocations.findBySalesReceiptId(receipt.getId());
@@ -167,8 +167,8 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public SalesReceiptDto cancel(Long receiptId) {
-        SalesReceipt receipt = requireReceipt(receiptId);
+    public SalesReceiptDto cancel(String uid) {
+        SalesReceipt receipt = requireReceiptByUid(uid);
         receipt.cancel(context.userId());
         events.publish("SalesReceiptCancelled.v1", AGG, String.valueOf(receipt.getId()),
             Map.of(F_ID, receipt.getId(), F_NUMBER, receipt.getNumber()));
@@ -188,8 +188,8 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
 
     @Override
     @Transactional(readOnly = true)
-    public SalesReceiptDto get(Long receiptId) {
-        SalesReceipt receipt = requireReceipt(receiptId);
+    public SalesReceiptDto get(String uid) {
+        SalesReceipt receipt = requireReceiptByUid(uid);
         return SalesReceiptDto.from(receipt, allocations.findBySalesReceiptId(receipt.getId()));
     }
 
@@ -232,11 +232,11 @@ public class SalesReceiptServiceImpl implements SalesReceiptService {
         return sum;
     }
 
-    private SalesReceipt requireReceipt(Long id) {
-        SalesReceipt receipt = receipts.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Sales receipt not found: " + id));
+    private SalesReceipt requireReceiptByUid(String uid) {
+        SalesReceipt receipt = receipts.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Sales receipt not found: " + uid));
         if (!Objects.equals(receipt.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Sales receipt not found: " + id);
+            throw new NoSuchElementException("Sales receipt not found: " + uid);
         }
         branchScope.requireAccess(receipt.getBranchId());
         return receipt;

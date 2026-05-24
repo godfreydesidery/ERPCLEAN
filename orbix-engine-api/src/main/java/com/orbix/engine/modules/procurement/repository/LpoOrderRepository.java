@@ -7,10 +7,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface LpoOrderRepository extends JpaRepository<LpoOrder, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<LpoOrder> findByUid(String uid);
 
     List<LpoOrder> findByCompanyIdOrderByIdDesc(Long companyId);
 

@@ -14,6 +14,8 @@ import java.util.Optional;
 
 public interface StockBatchRepository extends JpaRepository<StockBatch, Long> {
 
+    Optional<StockBatch> findByUid(String uid);
+
     Optional<StockBatch> findByBranchIdAndItemIdAndBatchNo(Long branchId, Long itemId, String batchNo);
 
     /**

@@ -10,10 +10,13 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface SalesReceiptRepository extends JpaRepository<SalesReceipt, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<SalesReceipt> findByUid(String uid);
 
     List<SalesReceipt> findByCompanyIdOrderByIdDesc(Long companyId);
 

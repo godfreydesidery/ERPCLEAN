@@ -20,15 +20,15 @@ public interface CustomerReturnService {
 
     CustomerReturnDto createDraft(CreateCustomerReturnRequestDto request);
 
-    CustomerReturnDto post(Long returnId);
+    CustomerReturnDto post(String uid);
 
-    CustomerReturnDto cancel(Long returnId);
+    CustomerReturnDto cancel(String uid);
 
-    CustomerCreditNoteDto issueCreditNote(Long returnId, IssueCreditNoteRequestDto request);
+    CustomerCreditNoteDto issueCreditNote(String uid, IssueCreditNoteRequestDto request);
 
     PageDto<CustomerReturnDto> list(Long branchId, Pageable pageable);
 
-    CustomerReturnDto get(Long returnId);
+    CustomerReturnDto get(String uid);
 
     List<CustomerCreditNoteDto> listCreditNotes(Long branchId);
 }

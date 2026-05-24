@@ -6,10 +6,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface CustomerReturnRepository extends JpaRepository<CustomerReturn, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<CustomerReturn> findByUid(String uid);
 
     List<CustomerReturn> findByCompanyIdOrderByIdDesc(Long companyId);
 

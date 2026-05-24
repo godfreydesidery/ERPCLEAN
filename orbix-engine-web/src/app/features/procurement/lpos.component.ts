@@ -451,16 +451,16 @@ export class LposComponent implements OnInit {
   }
 
   submit(lpo: LpoOrder): void {
-    this.run(this.procurement.submitLpo(lpo.id), `LPO submitted.`);
+    this.run(this.procurement.submitLpo(lpo.uid), `LPO submitted.`);
   }
 
   approve(lpo: LpoOrder): void {
-    this.run(this.procurement.approveLpo(lpo.id), `LPO approved.`);
+    this.run(this.procurement.approveLpo(lpo.uid), `LPO approved.`);
   }
 
   cancel(lpo: LpoOrder): void {
     if (!globalThis.confirm(`Cancel ${lpo.number}?`)) return;
-    this.run(this.procurement.cancelLpo(lpo.id), `LPO cancelled.`);
+    this.run(this.procurement.cancelLpo(lpo.uid), `LPO cancelled.`);
   }
 
   private run(op: Observable<LpoOrder>, successMessage: string): void {

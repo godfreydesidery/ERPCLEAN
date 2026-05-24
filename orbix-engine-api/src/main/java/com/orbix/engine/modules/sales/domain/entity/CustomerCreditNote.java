@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.sales.domain.enums.CreditNoteStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -14,12 +15,15 @@ import java.time.LocalDate;
 /** Customer credit note — issued for a return, goodwill, or pricing correction. DATA-MODEL.md §6.9. */
 @Entity
 @Table(name = "customer_credit_note",
-    uniqueConstraints = @UniqueConstraint(name = "uk_customer_credit_note_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_customer_credit_note_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_customer_credit_note_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CustomerCreditNote {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CustomerCreditNote extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "customer_credit_note_seq")

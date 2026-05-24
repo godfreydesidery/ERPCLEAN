@@ -55,9 +55,9 @@ public class StockTransferServiceImpl implements StockTransferService {
 
     @Override
     @Transactional(readOnly = true)
-    public StockTransferDto getTransfer(Long transferId) {
-        StockTransfer transfer = requireTransfer(transferId);
-        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transferId));
+    public StockTransferDto getTransfer(String uid) {
+        StockTransfer transfer = requireTransferByUid(uid);
+        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transfer.getId()));
     }
 
     @Override
@@ -86,11 +86,11 @@ public class StockTransferServiceImpl implements StockTransferService {
     @Override
     @Transactional
     @Auditable(action = "ISSUE", entityType = "StockTransfer")
-    public StockTransferDto issueTransfer(Long transferId) {
-        StockTransfer transfer = requireTransfer(transferId);
+    public StockTransferDto issueTransfer(String uid) {
+        StockTransfer transfer = requireTransferByUid(uid);
         branchScope.requireAccess(transfer.getFromBranchId());
         transfer.issue();
-        List<StockTransferLine> lines = transferLines.findByStockTransferId(transferId);
+        List<StockTransferLine> lines = transferLines.findByStockTransferId(transfer.getId());
         for (StockTransferLine line : lines) {
             BigDecimal cost = balances
                 .findById(new ItemBranchBalanceId(line.getItemId(), transfer.getFromBranchId()))
@@ -99,7 +99,7 @@ public class StockTransferServiceImpl implements StockTransferService {
             line.setCostAmount(cost);
             stockMoveService.post(new PostStockMoveRequestDto(
                 line.getItemId(), transfer.getFromBranchId(), line.getIssuedQty().negate(), cost,
-                StockMoveType.TRANSFER_OUT, "StockTransfer", transferId, null, false));
+                StockMoveType.TRANSFER_OUT, "StockTransfer", transfer.getId(), null, false));
         }
         return StockTransferDto.from(transfer, lines);
     }
@@ -107,13 +107,13 @@ public class StockTransferServiceImpl implements StockTransferService {
     @Override
     @Transactional
     @Auditable(action = "RECEIVE", entityType = "StockTransfer")
-    public StockTransferDto receiveTransfer(Long transferId, ReceiveTransferRequestDto request) {
-        StockTransfer transfer = requireTransfer(transferId);
+    public StockTransferDto receiveTransfer(String uid, ReceiveTransferRequestDto request) {
+        StockTransfer transfer = requireTransferByUid(uid);
         branchScope.requireAccess(transfer.getToBranchId());
         if (transfer.getStatus() != StockTransferStatus.ISSUED) {
             throw new IllegalArgumentException("Only an ISSUED transfer can be received");
         }
-        Map<Long, StockTransferLine> linesById = transferLines.findByStockTransferId(transferId).stream()
+        Map<Long, StockTransferLine> linesById = transferLines.findByStockTransferId(transfer.getId()).stream()
             .collect(Collectors.toMap(StockTransferLine::getId, Function.identity()));
         for (ReceiveTransferRequestDto.ReceiveLine entry : request.lines()) {
             StockTransferLine line = linesById.get(entry.lineId());
@@ -124,28 +124,28 @@ public class StockTransferServiceImpl implements StockTransferService {
             if (entry.receivedQty().signum() > 0) {
                 stockMoveService.post(new PostStockMoveRequestDto(
                     line.getItemId(), transfer.getToBranchId(), entry.receivedQty(),
-                    line.getCostAmount(), StockMoveType.TRANSFER_IN, "StockTransfer", transferId,
+                    line.getCostAmount(), StockMoveType.TRANSFER_IN, "StockTransfer", transfer.getId(),
                     null, false));
             }
         }
         transfer.receive();
-        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transferId));
+        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transfer.getId()));
     }
 
     @Override
     @Transactional
     @Auditable(action = "CLOSE", entityType = "StockTransfer")
-    public StockTransferDto closeTransfer(Long transferId) {
-        StockTransfer transfer = requireTransfer(transferId);
+    public StockTransferDto closeTransfer(String uid) {
+        StockTransfer transfer = requireTransferByUid(uid);
         transfer.close();
-        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transferId));
+        return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transfer.getId()));
     }
 
-    private StockTransfer requireTransfer(Long transferId) {
-        StockTransfer transfer = transfers.findById(transferId)
-            .orElseThrow(() -> new NoSuchElementException("Stock transfer not found: " + transferId));
+    private StockTransfer requireTransferByUid(String uid) {
+        StockTransfer transfer = transfers.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Stock transfer not found: " + uid));
         if (!Objects.equals(transfer.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Stock transfer not found: " + transferId);
+            throw new NoSuchElementException("Stock transfer not found: " + uid);
         }
         branchScope.requireAccessToEither(transfer.getFromBranchId(), transfer.getToBranchId());
         return transfer;

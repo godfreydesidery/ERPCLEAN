@@ -12,6 +12,7 @@ import java.util.List;
 
 public record SalesReceiptDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -31,7 +32,7 @@ public record SalesReceiptDto(
 ) {
     public static SalesReceiptDto from(SalesReceipt r, List<ReceiptAllocation> allocs) {
         return new SalesReceiptDto(
-            r.getId(), r.getNumber(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
+            r.getId(), r.getUid(), r.getNumber(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
             r.getReceiptDate(), r.getMethod(), r.getReference(), r.getCurrencyCode(),
             r.getTotalAmount(), r.getAllocatedAmount(), r.getUnallocatedAmount(),
             r.getStatus(), r.getPostedAt(), r.getPostedBy(), r.getNotes(),

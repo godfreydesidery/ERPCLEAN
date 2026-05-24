@@ -27,6 +27,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import com.orbix.engine.modules.common.util.UidGenerator;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -153,10 +156,10 @@ class TillSessionServiceImplTest {
     @Test
     void close_belowVarianceThreshold_succeeds() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
         // expected_cash = opening_float 50000; declared 50500 → variance +500 (within threshold 1000)
-        TillSessionDto dto = service.close(session.getId(),
+        TillSessionDto dto = service.close(session.getUid(),
             new CloseTillSessionRequestDto(new BigDecimal("50500"), null, "ok"));
 
         assertThat(dto.status()).isEqualTo(TillSessionStatus.CLOSED);
@@ -169,12 +172,12 @@ class TillSessionServiceImplTest {
     @Test
     void close_aboveVariance_withoutSupervisor_rejected() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
-        Long id = session.getId();
+        String uid = session.getUid();
         CloseTillSessionRequestDto req = new CloseTillSessionRequestDto(
             new BigDecimal("48000"), null, "short"); // variance -2000 > threshold 1000
-        assertThatThrownBy(() -> service.close(id, req))
+        assertThatThrownBy(() -> service.close(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("supervisor");
     }
@@ -182,13 +185,13 @@ class TillSessionServiceImplTest {
     @Test
     void close_aboveVariance_supervisorMissingPermission_403() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
         when(permissions.resolve(SUPERVISOR_ID, COMPANY_ID, null)).thenReturn(Set.of());
 
-        Long id = session.getId();
+        String uid = session.getUid();
         CloseTillSessionRequestDto req = new CloseTillSessionRequestDto(
             new BigDecimal("52000"), SUPERVISOR_ID, "over");
-        assertThatThrownBy(() -> service.close(id, req))
+        assertThatThrownBy(() -> service.close(uid, req))
             .isInstanceOf(AccessDeniedException.class)
             .hasMessageContaining(TillSessionServiceImpl.VARIANCE_APPROVE_PERMISSION);
     }
@@ -196,12 +199,12 @@ class TillSessionServiceImplTest {
     @Test
     void close_aboveVariance_selfSupervisor_rejected() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
-        Long id = session.getId();
+        String uid = session.getUid();
         CloseTillSessionRequestDto req = new CloseTillSessionRequestDto(
             new BigDecimal("52000"), ACTOR_ID, "over");
-        assertThatThrownBy(() -> service.close(id, req))
+        assertThatThrownBy(() -> service.close(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("your own");
     }
@@ -209,11 +212,11 @@ class TillSessionServiceImplTest {
     @Test
     void close_aboveVariance_withApprovedSupervisor_succeeds() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
         when(permissions.resolve(SUPERVISOR_ID, COMPANY_ID, null))
             .thenReturn(Set.of(TillSessionServiceImpl.VARIANCE_APPROVE_PERMISSION));
 
-        TillSessionDto dto = service.close(session.getId(),
+        TillSessionDto dto = service.close(session.getUid(),
             new CloseTillSessionRequestDto(new BigDecimal("52000"), SUPERVISOR_ID, "over"));
 
         assertThat(dto.status()).isEqualTo(TillSessionStatus.CLOSED);
@@ -225,9 +228,9 @@ class TillSessionServiceImplTest {
     void reconcile_fromClosed_succeeds() {
         TillSession session = openSession(new BigDecimal("50000"));
         session.close(new BigDecimal("50000"), new BigDecimal("50000"), ACTOR_ID, null, null);
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
-        TillSessionDto dto = service.reconcile(session.getId());
+        TillSessionDto dto = service.reconcile(session.getUid());
 
         assertThat(dto.status()).isEqualTo(TillSessionStatus.RECONCILED);
         verify(events).publish(eq("TillSessionReconciled.v1"), any(), any(), any());
@@ -236,10 +239,10 @@ class TillSessionServiceImplTest {
     @Test
     void reconcile_fromOpen_rejected() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
-        Long id = session.getId();
-        assertThatThrownBy(() -> service.reconcile(id))
+        String uid = session.getUid();
+        assertThatThrownBy(() -> service.reconcile(uid))
             .isInstanceOf(IllegalStateException.class);
         verify(events, never()).publish(eq("TillSessionReconciled.v1"), any(), any(), any());
     }
@@ -253,7 +256,7 @@ class TillSessionServiceImplTest {
         // − petty cash 2,000
         // = expected 63,000. Declared 63,200 → variance +200 (within threshold 1000).
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
         com.orbix.engine.modules.pos.domain.entity.PosSale sale = new com.orbix.engine.modules.pos.domain.entity.PosSale(
             "POS-1", "op-1", session.getId(), TILL_ID, BRANCH_ID, COMPANY_ID,
@@ -287,7 +290,7 @@ class TillSessionServiceImplTest {
         when(pickups.sumForSession(session.getId())).thenReturn(new BigDecimal("10000"));
         when(pettyCash.sumForSession(session.getId())).thenReturn(new BigDecimal("2000"));
 
-        TillSessionDto dto = service.close(session.getId(),
+        TillSessionDto dto = service.close(session.getUid(),
             new CloseTillSessionRequestDto(new BigDecimal("63200"), null, "ok"));
 
         assertThat(dto.expectedCashAmount()).isEqualByComparingTo("63000");
@@ -298,7 +301,7 @@ class TillSessionServiceImplTest {
     @Test
     void close_voidedSaleContributesZeroToExpectedCash() {
         TillSession session = openSession(new BigDecimal("50000"));
-        when(sessions.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessions.findByUid(session.getUid())).thenReturn(Optional.of(session));
 
         com.orbix.engine.modules.pos.domain.entity.PosSale voided = new com.orbix.engine.modules.pos.domain.entity.PosSale(
             "POS-V", "op-v", session.getId(), TILL_ID, BRANCH_ID, COMPANY_ID,
@@ -313,7 +316,7 @@ class TillSessionServiceImplTest {
         when(sales.findByTillSessionIdOrderByIdAsc(session.getId()))
             .thenReturn(java.util.List.of(voided));
 
-        TillSessionDto dto = service.close(session.getId(),
+        TillSessionDto dto = service.close(session.getUid(),
             new CloseTillSessionRequestDto(new BigDecimal("50000"), null, "ok"));
 
         assertThat(dto.expectedCashAmount()).isEqualByComparingTo("50000");
@@ -324,6 +327,7 @@ class TillSessionServiceImplTest {
         TillSession session = new TillSession(TILL_ID, BRANCH_ID, COMPANY_ID,
             LocalDate.of(2026, 5, 13), ACTOR_ID, openingFloat);
         session.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(session, "uid", UidGenerator.next());
         return session;
     }
 

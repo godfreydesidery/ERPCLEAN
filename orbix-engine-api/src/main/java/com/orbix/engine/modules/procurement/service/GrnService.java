@@ -16,12 +16,12 @@ public interface GrnService {
     GrnDto createDraft(CreateGrnRequestDto request);
 
     /** DRAFT → POSTED: writes stock moves + batches, advances LPO line received_qty + LPO status. */
-    GrnDto post(Long grnId);
+    GrnDto post(String uid);
 
     /** DRAFT → CANCELLED. */
-    GrnDto cancel(Long grnId);
+    GrnDto cancel(String uid);
 
     PageDto<GrnDto> list(Long branchId, Pageable pageable);
 
-    GrnDto get(Long grnId);
+    GrnDto get(String uid);
 }

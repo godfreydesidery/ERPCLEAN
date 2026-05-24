@@ -144,8 +144,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Override
     @Transactional
     @Auditable(action = "START", entityType = AGG)
-    public ProductionBatchDto start(Long batchId) {
-        ProductionBatch batch = requireBatch(batchId);
+    public ProductionBatchDto start(String uid) {
+        ProductionBatch batch = requireBatchByUid(uid);
         if (batch.getStatus() != ProductionBatchStatus.PLANNED) {
             throw new IllegalStateException(
                 "Only PLANNED batches can be started (was " + batch.getStatus() + ")");
@@ -190,8 +190,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Override
     @Transactional
     @Auditable(action = "POST_OUTPUT", entityType = AGG)
-    public ProductionBatchDto postOutput(Long batchId, PostProductionOutputRequestDto request) {
-        ProductionBatch batch = requireBatch(batchId);
+    public ProductionBatchDto postOutput(String uid, PostProductionOutputRequestDto request) {
+        ProductionBatch batch = requireBatchByUid(uid);
         // Idempotency: re-post of a COMPLETED batch is a no-op.
         if (batch.getStatus() == ProductionBatchStatus.COMPLETED) {
             return loadDto(batch);
@@ -286,8 +286,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public ProductionBatchDto cancel(Long batchId) {
-        ProductionBatch batch = requireBatch(batchId);
+    public ProductionBatchDto cancel(String uid) {
+        ProductionBatch batch = requireBatchByUid(uid);
         if (batch.getStatus() != ProductionBatchStatus.PLANNED) {
             throw new IllegalStateException(
                 "Only PLANNED batches can be cancelled (was " + batch.getStatus() + ")");
@@ -310,8 +310,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Override
     @Transactional
     @Auditable(action = "ADVANCE_LIFECYCLE", entityType = AGG)
-    public ProductionBatchDto advanceLifecycle(Long batchId, AdvanceLifecycleRequestDto request) {
-        ProductionBatch batch = requireBatch(batchId);
+    public ProductionBatchDto advanceLifecycle(String uid, AdvanceLifecycleRequestDto request) {
+        ProductionBatch batch = requireBatchByUid(uid);
         dayGuard.requireOpenDay(batch.getBranchId());
         Long actorId = context.userId();
         ProductionLifecycleState target = request.targetState();
@@ -337,8 +337,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
     @Override
     @Transactional
     @Auditable(action = "CLOSE", entityType = AGG)
-    public ProductionBatchDto close(Long batchId) {
-        ProductionBatch batch = requireBatch(batchId);
+    public ProductionBatchDto close(String uid) {
+        ProductionBatch batch = requireBatchByUid(uid);
         batch.markClosed(context.userId());
         events.publish("ProductionBatchClosed.v1", AGG, String.valueOf(batch.getId()),
             Map.of(F_ID, batch.getId(), F_NUMBER, batch.getNumber(),
@@ -368,8 +368,8 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
 
     @Override
     @Transactional(readOnly = true)
-    public ProductionBatchDto get(Long batchId) {
-        return loadDto(requireBatch(batchId));
+    public ProductionBatchDto get(String uid) {
+        return loadDto(requireBatchByUid(uid));
     }
 
     @Override
@@ -428,11 +428,11 @@ public class ProductionBatchServiceImpl implements ProductionBatchService {
         return candidate;
     }
 
-    private ProductionBatch requireBatch(Long id) {
-        ProductionBatch batch = batches.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Production batch not found: " + id));
+    private ProductionBatch requireBatchByUid(String uid) {
+        ProductionBatch batch = batches.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Production batch not found: " + uid));
         if (!Objects.equals(batch.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Production batch not found: " + id);
+            throw new NoSuchElementException("Production batch not found: " + uid);
         }
         branchScope.requireAccess(batch.getBranchId());
         return batch;

@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/till-sessions")
 @RequiredArgsConstructor
+@Validated
 public class TillSessionController {
 
     private final TillSessionService service;
@@ -31,29 +34,29 @@ public class TillSessionController {
         return service.list(branchId);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('POS.MANAGE_TILL') or hasAuthority('POS.SESSION_OPEN') or hasAuthority('POS.SESSION_CLOSE')")
-    public TillSessionDto get(@PathVariable Long id) {
-        return service.get(id);
+    public TillSessionDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
     @PostMapping("/open")
     @PreAuthorize("hasAuthority('POS.SESSION_OPEN')")
     public ResponseEntity<TillSessionDto> open(@Valid @RequestBody OpenTillSessionRequestDto request) {
         TillSessionDto session = service.open(request);
-        return ResponseEntity.created(URI.create("/api/v1/till-sessions/" + session.id())).body(session);
+        return ResponseEntity.created(URI.create("/api/v1/till-sessions/uid/" + session.uid())).body(session);
     }
 
-    @PostMapping("/{id}/close")
+    @PostMapping("/uid/{uid}/close")
     @PreAuthorize("hasAuthority('POS.SESSION_CLOSE')")
-    public TillSessionDto close(@PathVariable Long id,
+    public TillSessionDto close(@PathVariable @ValidUlid String uid,
                                 @Valid @RequestBody CloseTillSessionRequestDto request) {
-        return service.close(id, request);
+        return service.close(uid, request);
     }
 
-    @PostMapping("/{id}/reconcile")
+    @PostMapping("/uid/{uid}/reconcile")
     @PreAuthorize("hasAuthority('POS.SESSION_RECONCILE')")
-    public TillSessionDto reconcile(@PathVariable Long id) {
-        return service.reconcile(id);
+    public TillSessionDto reconcile(@PathVariable @ValidUlid String uid) {
+        return service.reconcile(uid);
     }
 }

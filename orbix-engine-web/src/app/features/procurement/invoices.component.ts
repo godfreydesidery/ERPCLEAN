@@ -559,12 +559,12 @@ export class InvoicesComponent implements OnInit {
   }
 
   post(inv: SupplierInvoice): void {
-    this.run(this.procurement.postSupplierInvoice(inv.id), `Invoice posted.`);
+    this.run(this.procurement.postSupplierInvoice(inv.uid), `Invoice posted.`);
   }
 
   cancel(inv: SupplierInvoice): void {
     if (!globalThis.confirm(`Cancel ${inv.number}?`)) return;
-    this.run(this.procurement.cancelSupplierInvoice(inv.id), `Invoice cancelled.`);
+    this.run(this.procurement.cancelSupplierInvoice(inv.uid), `Invoice cancelled.`);
   }
 
   private run(op: Observable<SupplierInvoice>, successMessage: string): void {

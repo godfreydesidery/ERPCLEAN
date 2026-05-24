@@ -428,12 +428,12 @@ export class ReturnsComponent implements OnInit {
   }
 
   post(r: CustomerReturn): void {
-    this.run(this.sales.postReturn(r.id), `Return posted.`);
+    this.run(this.sales.postReturn(r.uid), `Return posted.`);
   }
 
   cancel(r: CustomerReturn): void {
     if (!window.confirm(`Cancel ${r.number}?`)) return;
-    this.run(this.sales.cancelReturn(r.id), `Return cancelled.`);
+    this.run(this.sales.cancelReturn(r.uid), `Return cancelled.`);
   }
 
   issueCreditNote(r: CustomerReturn): void {
@@ -441,7 +441,7 @@ export class ReturnsComponent implements OnInit {
     if (!cnNumber || !cnNumber.trim()) return;
     this.busy.set(true);
     this.error.set(null);
-    this.sales.issueCreditNote(r.id, { number: cnNumber.trim(), notes: null }).subscribe({
+    this.sales.issueCreditNote(r.uid, { number: cnNumber.trim(), notes: null }).subscribe({
       next: cn => {
         this.busy.set(false);
         this.info.set(`Credit note ${cn.number} issued for ${cn.totalAmount}.`);
