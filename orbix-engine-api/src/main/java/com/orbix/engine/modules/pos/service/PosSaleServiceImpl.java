@@ -1,8 +1,10 @@
 package com.orbix.engine.modules.pos.service;
 
+import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.domain.entity.FxRate;
 import com.orbix.engine.modules.admin.domain.entity.Section;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
+import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.cash.domain.enums.CashAccount;
@@ -88,6 +90,7 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final VatGroupRepository vatGroups;
     private final CustomerRepository customers;
     private final CompanyRepository companies;
+    private final CurrencyRepository currencies;
     private final FxRateRepository fxRates;
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
@@ -655,6 +658,14 @@ public class PosSaleServiceImpl implements PosSaleService {
             .getCurrencyCode();
     }
 
+    /** Decimal places to round functional-currency money to. Falls back to the
+     *  generic money scale if the currency row is unknown (keeps math safe). */
+    private int functionalScale(String functionalCode) {
+        return currencies.findById(functionalCode)
+            .map(Currency::getMinorUnitDigits)
+            .orElse(MONEY_SCALE);
+    }
+
     private TenderResolution resolveTender(Long tillId, String functional, Instant at,
                                            PosPaymentMethod method, BigDecimal tenderAmount,
                                            String requestedCurrency, String reference,
@@ -662,11 +673,12 @@ public class PosSaleServiceImpl implements PosSaleService {
         String code = requestedCurrency == null || requestedCurrency.isBlank()
             ? functional
             : requestedCurrency.trim().toUpperCase();
+        int functionalScale = functionalScale(functional);
         BigDecimal rate;
         BigDecimal functionalAmount;
         if (code.equals(functional)) {
             rate = BigDecimal.ONE;
-            functionalAmount = tenderAmount.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            functionalAmount = tenderAmount.setScale(functionalScale, RoundingMode.HALF_UP);
         } else {
             if (!tillCurrencies.existsByIdTillIdAndIdCurrencyCode(tillId, code)) {
                 throw new IllegalArgumentException(
@@ -676,8 +688,11 @@ public class PosSaleServiceImpl implements PosSaleService {
                 .orElseThrow(() -> new IllegalArgumentException(
                     "No FX rate quoted for " + code + " -> " + functional + " at or before " + at));
             rate = fx.getRate();
+            // Convert at the rate, then quantise to the functional currency's own
+            // precision so the credited amount lands on real cash granularity
+            // (not a hard-coded 4dp).
             functionalAmount = tenderAmount.multiply(rate)
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                .setScale(functionalScale, RoundingMode.HALF_UP);
         }
         return new TenderResolution(method, code, tenderAmount, rate, functionalAmount,
             reference, terminalId, last4);

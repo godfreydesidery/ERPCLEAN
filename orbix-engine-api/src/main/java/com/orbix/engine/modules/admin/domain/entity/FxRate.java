@@ -2,17 +2,24 @@ package com.orbix.engine.modules.admin.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** Daily FX rate snapshot. Most recent rate ≤ sale time wins. DATA-MODEL.md §17.3. */
+/**
+ * Daily FX rate snapshot. Most recent rate ≤ sale time wins. DATA-MODEL.md §17.3.
+ *
+ * <p>Append-only and immutable: a quote is a historical fact. There are no
+ * setters — supersede a rate by inserting a newer row, never by mutating one.
+ * The rate a transaction used is frozen onto that transaction (e.g.
+ * {@code pos_payment.fx_rate_snapshot}).
+ */
 @Entity
 @Table(name = "fx_rate")
-@Data
+@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id")
 public class FxRate {
