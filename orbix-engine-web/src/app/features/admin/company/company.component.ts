@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CompanyService } from './company.service';
 import { Company, UpdateCompanyRequest } from './company.models';
@@ -67,7 +67,7 @@ import { CurrencyAdminService } from '../currencies/currency-admin.service';
             </div>
             <div class="col-md-4">
               <label class="form-label small mb-1">Email</label>
-              <input class="form-control form-control-sm" [(ngModel)]="f.email" name="email">
+              <input class="form-control form-control-sm" type="email" [(ngModel)]="f.email" name="email">
             </div>
             <div class="col-md-4">
               <label class="form-label small mb-1">Website</label>
@@ -104,9 +104,10 @@ import { CurrencyAdminService } from '../currencies/currency-admin.service';
     }
   `
 })
-export class CompanyProfileComponent implements OnInit {
+export class CompanyProfileComponent implements OnInit, OnDestroy {
   private readonly api = inject(CompanyService);
   private readonly currencyApi = inject(CurrencyAdminService);
+  private infoTimer?: ReturnType<typeof setTimeout>;
 
   protected readonly form = signal<UpdateCompanyRequest | null>(null);
   protected readonly code = signal('');
@@ -142,9 +143,20 @@ export class CompanyProfileComponent implements OnInit {
     this.saving.set(true);
     this.error.set(null);
     this.api.update(f).subscribe({
-      next: c => { this.apply(c); this.saving.set(false); this.info.set('Company profile saved.'); },
+      next: c => { this.apply(c); this.saving.set(false); this.flashInfo('Company profile saved.'); },
       error: err => { this.saving.set(false); this.error.set(err?.error?.message ?? 'Failed to save.'); }
     });
+  }
+
+  /** Show a success message that auto-dismisses after a few seconds. */
+  private flashInfo(message: string): void {
+    this.info.set(message);
+    clearTimeout(this.infoTimer);
+    this.infoTimer = setTimeout(() => this.info.set(null), 4000);
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.infoTimer);
   }
 
   private apply(c: Company): void {

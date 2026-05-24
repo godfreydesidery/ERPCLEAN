@@ -13,11 +13,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DateTimeException;
 import java.time.ZoneId;
+import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class CompanyServiceImpl implements CompanyService {
+
+    private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
 
     private final CompanyRepository companies;
     private final CurrencyRepository currencies;
@@ -35,17 +39,21 @@ public class CompanyServiceImpl implements CompanyService {
     public CompanyDto updateCurrent(UpdateCompanyRequestDto r) {
         Company company = requireCurrent();
         String currency = r.currencyCode().trim().toUpperCase();
+        String country = r.countryCode().trim().toUpperCase();
         String timeZone = r.timeZone().trim();
         // Selectable on the UI, but validate here too in case the API is called directly.
         if (!currencies.existsById(currency)) {
             throw new IllegalArgumentException("Unknown currency: " + currency);
+        }
+        if (!ISO_COUNTRIES.contains(country)) {
+            throw new IllegalArgumentException("Unknown country code: " + country);
         }
         validateZone(timeZone);
         company.updateProfile(
             r.name().trim(), trimToNull(r.legalName()), trimToNull(r.tin()), trimToNull(r.vrn()),
             trimToNull(r.physicalAddress()), trimToNull(r.postalAddress()), trimToNull(r.phone()),
             trimToNull(r.email()), trimToNull(r.website()),
-            currency, r.countryCode().trim().toUpperCase(), timeZone,
+            currency, country, timeZone,
             trimToNull(r.defaultInvoiceNote()), trimToNull(r.defaultQuotationNote()),
             context.userId());
         return CompanyDto.from(companies.save(company));
