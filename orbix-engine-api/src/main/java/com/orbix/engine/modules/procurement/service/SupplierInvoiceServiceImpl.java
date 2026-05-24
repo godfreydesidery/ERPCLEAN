@@ -101,8 +101,8 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public SupplierInvoiceDto post(Long invoiceId) {
-        SupplierInvoice invoice = requireInvoice(invoiceId);
+    public SupplierInvoiceDto post(String uid) {
+        SupplierInvoice invoice = requireInvoiceByUid(uid);
         List<SupplierInvoiceGrn> rows = allocations.findBySupplierInvoiceId(invoice.getId());
         BigDecimal allocated = rows.stream()
             .map(SupplierInvoiceGrn::getAmount)
@@ -122,8 +122,8 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public SupplierInvoiceDto cancel(Long invoiceId) {
-        SupplierInvoice invoice = requireInvoice(invoiceId);
+    public SupplierInvoiceDto cancel(String uid) {
+        SupplierInvoice invoice = requireInvoiceByUid(uid);
         invoice.cancel(context.userId());
         events.publish("SupplierInvoiceCancelled.v1", AGG, String.valueOf(invoice.getId()),
             Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber()));
@@ -143,8 +143,8 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public SupplierInvoiceDto get(Long invoiceId) {
-        SupplierInvoice invoice = requireInvoice(invoiceId);
+    public SupplierInvoiceDto get(String uid) {
+        SupplierInvoice invoice = requireInvoiceByUid(uid);
         return SupplierInvoiceDto.from(invoice, allocations.findBySupplierInvoiceId(invoice.getId()));
     }
 
@@ -198,11 +198,11 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
         }
     }
 
-    private SupplierInvoice requireInvoice(Long id) {
-        SupplierInvoice invoice = invoices.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Supplier invoice not found: " + id));
+    private SupplierInvoice requireInvoiceByUid(String uid) {
+        SupplierInvoice invoice = invoices.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Supplier invoice not found: " + uid));
         if (!Objects.equals(invoice.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Supplier invoice not found: " + id);
+            throw new NoSuchElementException("Supplier invoice not found: " + uid);
         }
         branchScope.requireAccess(invoice.getBranchId());
         return invoice;

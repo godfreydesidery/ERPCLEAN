@@ -3,6 +3,7 @@
 
 CREATE TABLE lpo_order (
     id                      BIGINT         NOT NULL PRIMARY KEY,
+    uid                     CHAR(26)       NOT NULL,
     number                  VARCHAR(40)    NOT NULL,
     company_id              BIGINT         NOT NULL,
     branch_id               BIGINT         NOT NULL,
@@ -22,6 +23,7 @@ CREATE TABLE lpo_order (
     updated_at              TIMESTAMP      NOT NULL,
     created_by              BIGINT         NOT NULL,
     updated_by              BIGINT         NOT NULL,
+    CONSTRAINT uk_lpo_order_uid           UNIQUE (uid),
     CONSTRAINT uk_lpo_order_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_lpo_order_company       FOREIGN KEY (company_id)    REFERENCES company (id),
     CONSTRAINT fk_lpo_order_branch        FOREIGN KEY (branch_id)     REFERENCES branch (id),

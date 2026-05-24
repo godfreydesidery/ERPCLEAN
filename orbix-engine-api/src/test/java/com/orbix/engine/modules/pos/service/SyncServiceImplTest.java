@@ -12,6 +12,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.PriceListItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.pos.domain.dto.BalanceSnapshotDto;
 import com.orbix.engine.modules.pos.domain.dto.CatalogSnapshotDto;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -187,7 +188,7 @@ class SyncServiceImplTest {
 
     private PosSaleDto stubPostedDto(String clientOpId, long id) {
         return new PosSaleDto(
-            id, "TILL-1-" + clientOpId, clientOpId, 200L, 100L, BRANCH_ID, COMPANY_ID,
+            id, UidGenerator.next(), "TILL-1-" + clientOpId, clientOpId, 200L, 100L, BRANCH_ID, COMPANY_ID,
             33L, 540L, ACTOR_ID, null,
             com.orbix.engine.modules.pos.domain.enums.PosSaleKind.SALE, null,
             Instant.parse("2026-05-13T10:00:00Z"), Instant.now(), LocalDate.of(2026, 5, 13),

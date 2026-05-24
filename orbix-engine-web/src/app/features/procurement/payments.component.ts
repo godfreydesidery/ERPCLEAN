@@ -533,12 +533,12 @@ export class PaymentsComponent implements OnInit {
   }
 
   post(p: SupplierPayment): void {
-    this.run(this.procurement.postSupplierPayment(p.id), `Payment posted.`);
+    this.run(this.procurement.postSupplierPayment(p.uid), `Payment posted.`);
   }
 
   cancel(p: SupplierPayment): void {
     if (!globalThis.confirm(`Cancel ${p.number}?`)) return;
-    this.run(this.procurement.cancelSupplierPayment(p.id), `Payment cancelled.`);
+    this.run(this.procurement.cancelSupplierPayment(p.uid), `Payment cancelled.`);
   }
 
   private run(op: Observable<SupplierPayment>, successMessage: string): void {

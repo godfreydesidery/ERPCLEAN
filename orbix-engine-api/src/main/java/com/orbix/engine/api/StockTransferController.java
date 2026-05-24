@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockTransferRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.ReceiveTransferRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockTransferDto;
@@ -8,15 +9,21 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
 
-/** Inter-branch stock transfers (F2.3). Gated by {@code STOCK.TRANSFER}. */
+/**
+ * Inter-branch stock transfers (F2.3). Gated by {@code STOCK.TRANSFER}.
+ * Transfers are addressed externally by their {@code uid} (a ULID) via the
+ * literal {@code /uid/{uid}} segment; the numeric {@code id} stays in the body.
+ */
 @RestController
 @RequestMapping("/api/v1/stock-transfers")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAuthority('STOCK.TRANSFER')")
 public class StockTransferController {
 
@@ -27,32 +34,32 @@ public class StockTransferController {
         return service.listTransfers();
     }
 
-    @GetMapping("/{id}")
-    public StockTransferDto getTransfer(@PathVariable Long id) {
-        return service.getTransfer(id);
+    @GetMapping("/uid/{uid}")
+    public StockTransferDto getTransfer(@PathVariable @ValidUlid String uid) {
+        return service.getTransfer(uid);
     }
 
     @PostMapping
     public ResponseEntity<StockTransferDto> createTransfer(
             @Valid @RequestBody CreateStockTransferRequestDto request) {
         StockTransferDto transfer = service.createTransfer(request);
-        return ResponseEntity.created(URI.create("/api/v1/stock-transfers/" + transfer.id()))
+        return ResponseEntity.created(URI.create("/api/v1/stock-transfers/uid/" + transfer.uid()))
             .body(transfer);
     }
 
-    @PostMapping("/{id}/issue")
-    public StockTransferDto issueTransfer(@PathVariable Long id) {
-        return service.issueTransfer(id);
+    @PostMapping("/uid/{uid}/issue")
+    public StockTransferDto issueTransfer(@PathVariable @ValidUlid String uid) {
+        return service.issueTransfer(uid);
     }
 
-    @PutMapping("/{id}/receive")
-    public StockTransferDto receiveTransfer(@PathVariable Long id,
+    @PutMapping("/uid/{uid}/receive")
+    public StockTransferDto receiveTransfer(@PathVariable @ValidUlid String uid,
                                             @Valid @RequestBody ReceiveTransferRequestDto request) {
-        return service.receiveTransfer(id, request);
+        return service.receiveTransfer(uid, request);
     }
 
-    @PostMapping("/{id}/close")
-    public StockTransferDto closeTransfer(@PathVariable Long id) {
-        return service.closeTransfer(id);
+    @PostMapping("/uid/{uid}/close")
+    public StockTransferDto closeTransfer(@PathVariable @ValidUlid String uid) {
+        return service.closeTransfer(uid);
     }
 }

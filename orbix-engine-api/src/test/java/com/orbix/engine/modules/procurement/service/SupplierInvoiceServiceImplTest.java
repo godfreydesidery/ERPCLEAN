@@ -4,6 +4,7 @@ import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.party.domain.entity.Supplier;
 import com.orbix.engine.modules.party.repository.SupplierRepository;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -218,11 +220,11 @@ class SupplierInvoiceServiceImplTest {
     @Test
     void post_emitsMatchedEvent_andFlipsStatus() {
         SupplierInvoice invoice = createdInvoice("SI-P", new BigDecimal("1180"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(allocations.findBySupplierInvoiceId(invoice.getId())).thenReturn(List.of(
             new SupplierInvoiceGrn(invoice.getId(), GRN_A_ID, new BigDecimal("1180"))));
 
-        SupplierInvoiceDto dto = service.post(invoice.getId());
+        SupplierInvoiceDto dto = service.post(invoice.getUid());
 
         assertThat(dto.status()).isEqualTo(SupplierInvoiceStatus.POSTED);
         verify(events).publish(eq("SupplierInvoiceMatched.v1"), any(), any(), any());
@@ -232,12 +234,12 @@ class SupplierInvoiceServiceImplTest {
     void post_rejectsWhenAllocationsDriftOutsideTolerance() {
         // Header totalAmount 1180, allocations sum to 1100 → outside tolerance.
         SupplierInvoice invoice = createdInvoice("SI-PX", new BigDecimal("1180"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(allocations.findBySupplierInvoiceId(invoice.getId())).thenReturn(List.of(
             new SupplierInvoiceGrn(invoice.getId(), GRN_A_ID, new BigDecimal("1100"))));
 
-        Long id = invoice.getId();
-        assertThatThrownBy(() -> service.post(id))
+        String uid = invoice.getUid();
+        assertThatThrownBy(() -> service.post(uid))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("tolerance");
     }
@@ -245,9 +247,9 @@ class SupplierInvoiceServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         SupplierInvoice invoice = createdInvoice("SI-C", new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
 
-        SupplierInvoiceDto dto = service.cancel(invoice.getId());
+        SupplierInvoiceDto dto = service.cancel(invoice.getUid());
 
         assertThat(dto.status()).isEqualTo(SupplierInvoiceStatus.CANCELLED);
         verify(events).publish(eq("SupplierInvoiceCancelled.v1"), any(), any(), any());
@@ -286,9 +288,11 @@ class SupplierInvoiceServiceImplTest {
             LocalDate.now(), LocalDate.now().plusDays(30), "TZS",
             new BigDecimal("100"), BigDecimal.ZERO, null, ACTOR_ID);
         foreign.setId(900L);
-        when(invoices.findById(900L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(invoices.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.get(900L)).isInstanceOf(NoSuchElementException.class);
+        String uid = foreign.getUid();
+        assertThatThrownBy(() -> service.get(uid)).isInstanceOf(NoSuchElementException.class);
     }
 
     private SupplierInvoice createdInvoice(String number, BigDecimal total) {
@@ -298,6 +302,7 @@ class SupplierInvoiceServiceImplTest {
             LocalDate.of(2026, 5, 10), LocalDate.of(2026, 6, 9), "TZS",
             subtotal, BigDecimal.ZERO, null, ACTOR_ID);
         invoice.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(invoice, "uid", UidGenerator.next());
         return invoice;
     }
 }

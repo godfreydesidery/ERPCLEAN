@@ -11,6 +11,7 @@ import java.util.List;
 
 public record GrnDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -30,6 +31,7 @@ public record GrnDto(
     public static GrnDto from(Grn grn, List<GrnLine> lines) {
         return new GrnDto(
             grn.getId(),
+            grn.getUid(),
             grn.getNumber(),
             grn.getCompanyId(),
             grn.getBranchId(),

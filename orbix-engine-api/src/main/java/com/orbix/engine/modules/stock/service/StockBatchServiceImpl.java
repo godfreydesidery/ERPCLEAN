@@ -134,8 +134,18 @@ public class StockBatchServiceImpl implements StockBatchService {
     @Override
     @Transactional
     @Auditable(action = "RECALL", entityType = "StockBatch")
+    public StockBatchDto recallBatchByUid(String uid, RecallStockBatchRequestDto request) {
+        return recall(requireBatchByUid(uid), request);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "RECALL", entityType = "StockBatch")
     public StockBatchDto recallBatch(Long batchId, RecallStockBatchRequestDto request) {
-        StockBatch batch = requireBatch(batchId);
+        return recall(requireBatch(batchId), request);
+    }
+
+    private StockBatchDto recall(StockBatch batch, RecallStockBatchRequestDto request) {
         BigDecimal remaining = batch.getQtyOnHand();
         batch.writeOffRemaining(StockBatchStatus.RECALLED, context.userId());
         if (remaining.signum() > 0) {
@@ -179,8 +189,24 @@ public class StockBatchServiceImpl implements StockBatchService {
 
     @Override
     @Transactional(readOnly = true)
+    public StockBatchDto getBatchByUid(String uid) {
+        return StockBatchDto.from(requireBatchByUid(uid));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public StockBatchDto getBatch(Long batchId) {
         return StockBatchDto.from(requireBatch(batchId));
+    }
+
+    private StockBatch requireBatchByUid(String uid) {
+        StockBatch batch = batches.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Stock batch not found: " + uid));
+        if (!Objects.equals(batch.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Stock batch not found: " + uid);
+        }
+        branchScope.requireAccess(batch.getBranchId());
+        return batch;
     }
 
     private StockBatch requireBatch(Long batchId) {

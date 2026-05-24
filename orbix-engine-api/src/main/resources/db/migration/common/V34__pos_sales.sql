@@ -6,6 +6,7 @@
 
 CREATE TABLE pos_sale (
     id                       BIGINT         NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)       NOT NULL,
     number                   VARCHAR(60)    NOT NULL,
     client_op_id             VARCHAR(40)    NOT NULL,
     till_session_id          BIGINT         NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE pos_sale (
     fiscal_signature         VARCHAR(200),
     notes                    VARCHAR(2000),
     version                  INT            NOT NULL DEFAULT 0,
+    CONSTRAINT uk_pos_sale_uid             UNIQUE (uid),
     CONSTRAINT uk_pos_sale_company_number  UNIQUE (company_id, number),
     CONSTRAINT uk_pos_sale_client_op       UNIQUE (company_id, client_op_id),
     CONSTRAINT fk_pos_sale_company    FOREIGN KEY (company_id)            REFERENCES company      (id),

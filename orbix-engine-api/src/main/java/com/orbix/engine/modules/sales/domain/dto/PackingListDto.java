@@ -10,6 +10,7 @@ import java.util.List;
 
 public record PackingListDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -24,7 +25,7 @@ public record PackingListDto(
     List<PackingListLineDto> lines
 ) {
     public static PackingListDto from(PackingList p, List<PackingListLine> lines) {
-        return new PackingListDto(p.getId(), p.getNumber(), p.getCompanyId(), p.getBranchId(),
+        return new PackingListDto(p.getId(), p.getUid(), p.getNumber(), p.getCompanyId(), p.getBranchId(),
             p.getSalesInvoiceId(), p.getDispatchDate(), p.getDriverName(), p.getVehicleNo(),
             p.getStatus(), p.getDeliveredAt(), p.getDeliveredBy(), p.getNotes(),
             lines.stream().map(PackingListLineDto::from).toList());

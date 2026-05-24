@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.procurement.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -14,12 +15,15 @@ import java.time.LocalDate;
 /** Goods Received Note — header. DATA-MODEL.md §5.5. */
 @Entity
 @Table(name = "grn",
-    uniqueConstraints = @UniqueConstraint(name = "uk_grn_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_grn_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_grn_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Grn {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Grn extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "grn_seq")

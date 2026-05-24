@@ -12,6 +12,7 @@ import java.util.List;
 
 public record CustomerOrderDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -41,6 +42,7 @@ public record CustomerOrderDto(
                                         List<CustomerOrderPayment> payments) {
         return new CustomerOrderDto(
             o.getId(),
+            o.getUid(),
             o.getNumber(),
             o.getCompanyId(),
             o.getBranchId(),

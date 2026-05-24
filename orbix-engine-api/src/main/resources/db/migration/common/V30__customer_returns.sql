@@ -5,6 +5,7 @@
 
 CREATE TABLE customer_return (
     id                  BIGINT         NOT NULL PRIMARY KEY,
+    uid                 CHAR(26)       NOT NULL,
     number              VARCHAR(40)    NOT NULL,
     company_id          BIGINT         NOT NULL,
     branch_id           BIGINT         NOT NULL,
@@ -23,6 +24,7 @@ CREATE TABLE customer_return (
     updated_at          TIMESTAMP      NOT NULL,
     created_by          BIGINT         NOT NULL,
     updated_by          BIGINT         NOT NULL,
+    CONSTRAINT uk_customer_return_uid           UNIQUE (uid),
     CONSTRAINT uk_customer_return_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_customer_return_company  FOREIGN KEY (company_id)          REFERENCES company       (id),
     CONSTRAINT fk_customer_return_branch   FOREIGN KEY (branch_id)           REFERENCES branch        (id),
@@ -54,6 +56,7 @@ CREATE INDEX ix_customer_return_line_return ON customer_return_line (customer_re
 
 CREATE TABLE customer_credit_note (
     id                  BIGINT         NOT NULL PRIMARY KEY,
+    uid                 CHAR(26)       NOT NULL,
     number              VARCHAR(40)    NOT NULL,
     company_id          BIGINT         NOT NULL,
     branch_id           BIGINT         NOT NULL,
@@ -70,6 +73,7 @@ CREATE TABLE customer_credit_note (
     updated_at          TIMESTAMP      NOT NULL,
     created_by          BIGINT         NOT NULL,
     updated_by          BIGINT         NOT NULL,
+    CONSTRAINT uk_customer_credit_note_uid           UNIQUE (uid),
     CONSTRAINT uk_customer_credit_note_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_customer_credit_note_company  FOREIGN KEY (company_id)         REFERENCES company         (id),
     CONSTRAINT fk_customer_credit_note_branch   FOREIGN KEY (branch_id)          REFERENCES branch          (id),

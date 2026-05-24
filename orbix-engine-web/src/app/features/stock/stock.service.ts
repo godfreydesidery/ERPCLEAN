@@ -50,22 +50,26 @@ export class StockService {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts`, request));
   }
 
-  startCount(id: string): Observable<StockCount> {
-    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/start`, {}));
+  getCount(uid: string): Observable<StockCount> {
+    return unwrap(this.http.get<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}`));
   }
 
-  recordCounts(id: string, request: RecordCountsRequest): Observable<StockCount> {
+  startCount(uid: string): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/start`, {}));
+  }
+
+  recordCounts(uid: string, request: RecordCountsRequest): Observable<StockCount> {
     return unwrap(this.http.put<ApiResponse<StockCount>>(
-      `${this.base}/stock-counts/${id}/counts`, request
+      `${this.base}/stock-counts/uid/${uid}/counts`, request
     ));
   }
 
-  closeCount(id: string): Observable<StockCount> {
-    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/close`, {}));
+  closeCount(uid: string): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/close`, {}));
   }
 
-  postCount(id: string): Observable<StockCount> {
-    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/${id}/post`, {}));
+  postCount(uid: string): Observable<StockCount> {
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/post`, {}));
   }
 
   // ---- stock transfers ------------------------------------------------------
@@ -78,21 +82,25 @@ export class StockService {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(`${this.base}/stock-transfers`, request));
   }
 
-  issueTransfer(id: string): Observable<StockTransfer> {
+  getTransfer(uid: string): Observable<StockTransfer> {
+    return unwrap(this.http.get<ApiResponse<StockTransfer>>(`${this.base}/stock-transfers/uid/${uid}`));
+  }
+
+  issueTransfer(uid: string): Observable<StockTransfer> {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(
-      `${this.base}/stock-transfers/${id}/issue`, {}
+      `${this.base}/stock-transfers/uid/${uid}/issue`, {}
     ));
   }
 
-  receiveTransfer(id: string, request: ReceiveTransferRequest): Observable<StockTransfer> {
+  receiveTransfer(uid: string, request: ReceiveTransferRequest): Observable<StockTransfer> {
     return unwrap(this.http.put<ApiResponse<StockTransfer>>(
-      `${this.base}/stock-transfers/${id}/receive`, request
+      `${this.base}/stock-transfers/uid/${uid}/receive`, request
     ));
   }
 
-  closeTransfer(id: string): Observable<StockTransfer> {
+  closeTransfer(uid: string): Observable<StockTransfer> {
     return unwrap(this.http.post<ApiResponse<StockTransfer>>(
-      `${this.base}/stock-transfers/${id}/close`, {}
+      `${this.base}/stock-transfers/uid/${uid}/close`, {}
     ));
   }
 
@@ -119,9 +127,13 @@ export class StockService {
     ));
   }
 
-  recallBatch(id: string, request: RecallStockBatchRequest): Observable<StockBatch> {
+  getBatch(uid: string): Observable<StockBatch> {
+    return unwrap(this.http.get<ApiResponse<StockBatch>>(`${this.base}/stock-batches/uid/${uid}`));
+  }
+
+  recallBatch(uid: string, request: RecallStockBatchRequest): Observable<StockBatch> {
     return unwrap(this.http.post<ApiResponse<StockBatch>>(
-      `${this.base}/stock-batches/${id}/recall`, request
+      `${this.base}/stock-batches/uid/${uid}/recall`, request
     ));
   }
 

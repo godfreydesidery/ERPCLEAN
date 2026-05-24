@@ -6,8 +6,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface StockTransferRepository extends JpaRepository<StockTransfer, Long> {
+
+    Optional<StockTransfer> findByUid(String uid);
 
     List<StockTransfer> findByCompanyIdOrderByIdDesc(Long companyId);
 

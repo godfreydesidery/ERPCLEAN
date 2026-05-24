@@ -197,8 +197,8 @@ public class PosSaleServiceImpl implements PosSaleService {
 
     @Override
     @Transactional(readOnly = true)
-    public PosSaleDto get(Long saleId) {
-        PosSale sale = requireSale(saleId);
+    public PosSaleDto get(String uid) {
+        PosSale sale = requireSaleByUid(uid);
         return PosSaleDto.from(sale,
             lines.findByPosSaleIdOrderByLineNoAsc(sale.getId()),
             payments.findByPosSaleIdOrderByIdAsc(sale.getId()));
@@ -207,8 +207,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     @Override
     @Transactional
     @Auditable(action = "VOID", entityType = AGG)
-    public PosSaleDto voidSale(Long saleId, VoidPosSaleRequestDto request) {
-        PosSale sale = requireSale(saleId);
+    public PosSaleDto voidSale(String uid, VoidPosSaleRequestDto request) {
+        PosSale sale = requireSaleByUid(uid);
         BusinessDay day = dayGuard.requireOpenDay(sale.getBranchId());
         if (!Objects.equals(day.getBusinessDate(), sale.getBusinessDate())) {
             throw new IllegalArgumentException(
@@ -559,6 +559,17 @@ public class PosSaleServiceImpl implements PosSaleService {
         return code.trim();
     }
 
+    private PosSale requireSaleByUid(String uid) {
+        PosSale sale = sales.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("POS sale not found: " + uid));
+        if (!Objects.equals(sale.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("POS sale not found: " + uid);
+        }
+        branchScope.requireAccess(sale.getBranchId());
+        return sale;
+    }
+
+    /** By-id lookup for cross-aggregate joins (refund references the original sale by its Long id). */
     private PosSale requireSale(Long id) {
         PosSale sale = sales.findById(id)
             .orElseThrow(() -> new NoSuchElementException("POS sale not found: " + id));

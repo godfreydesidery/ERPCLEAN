@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.sales.domain.enums.PackingListStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -13,12 +14,15 @@ import java.time.LocalDate;
 /** Packing list — header. DATA-MODEL.md §6.10. */
 @Entity
 @Table(name = "packing_list",
-    uniqueConstraints = @UniqueConstraint(name = "uk_packing_list_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_packing_list_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_packing_list_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class PackingList {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class PackingList extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "packing_list_seq")

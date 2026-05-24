@@ -367,7 +367,7 @@ export class TillAdminComponent implements OnInit {
     }
     const supervisorId = supervisorIdStr || null;
     this.busy.set(true);
-    this.api.closeSession(s.id, {
+    this.api.closeSession(s.uid, {
       declaredCashAmount: amount,
       supervisorId,
       notes: null
@@ -383,7 +383,7 @@ export class TillAdminComponent implements OnInit {
 
   reconcileSession(s: TillSession): void {
     this.busy.set(true);
-    this.api.reconcileSession(s.id).subscribe({
+    this.api.reconcileSession(s.uid).subscribe({
       next: () => {
         this.busy.set(false);
         this.info.set(`Session #${s.id} reconciled.`);
@@ -395,7 +395,7 @@ export class TillAdminComponent implements OnInit {
 
   deactivate(t: Till): void {
     this.busy.set(true);
-    this.api.deactivateTill(t.id).subscribe({
+    this.api.deactivateTill(t.uid).subscribe({
       next: () => {
         this.busy.set(false);
         this.info.set(`Till ${t.code} deactivated.`);
@@ -407,7 +407,7 @@ export class TillAdminComponent implements OnInit {
 
   activate(t: Till): void {
     this.busy.set(true);
-    this.api.activateTill(t.id).subscribe({
+    this.api.activateTill(t.uid).subscribe({
       next: () => {
         this.busy.set(false);
         this.info.set(`Till ${t.code} activated.`);

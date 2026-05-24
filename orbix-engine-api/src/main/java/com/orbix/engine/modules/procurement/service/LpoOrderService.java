@@ -17,18 +17,18 @@ public interface LpoOrderService {
 
     LpoOrderDto createDraft(CreateLpoOrderRequestDto request);
 
-    LpoOrderDto updateDraft(Long lpoId, UpdateLpoOrderRequestDto request);
+    LpoOrderDto updateDraft(String uid, UpdateLpoOrderRequestDto request);
 
     /** Moves DRAFT → PENDING_APPROVAL (or DRAFT → APPROVED if total ≤ threshold). */
-    LpoOrderDto submit(Long lpoId);
+    LpoOrderDto submit(String uid);
 
     /** Moves PENDING_APPROVAL → APPROVED. Gated by {@code PROCUREMENT.APPROVE_LPO} at the controller. */
-    LpoOrderDto approve(Long lpoId);
+    LpoOrderDto approve(String uid);
 
     /** Moves DRAFT / PENDING_APPROVAL → CANCELLED. */
-    LpoOrderDto cancel(Long lpoId);
+    LpoOrderDto cancel(String uid);
 
     PageDto<LpoOrderDto> list(Long branchId, Pageable pageable);
 
-    LpoOrderDto get(Long lpoId);
+    LpoOrderDto get(String uid);
 }

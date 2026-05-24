@@ -85,8 +85,8 @@ public class PackingListServiceImpl implements PackingListService {
     @Override
     @Transactional
     @Auditable(action = "DISPATCH", entityType = AGG)
-    public PackingListDto dispatch(Long packingListId) {
-        PackingList pl = requirePackingList(packingListId);
+    public PackingListDto dispatch(String uid) {
+        PackingList pl = requirePackingListByUid(uid);
         pl.dispatch(context.userId());
         events.publish("PackingListDispatched.v1", AGG, String.valueOf(pl.getId()),
             Map.of(F_ID, pl.getId(), F_NUMBER, pl.getNumber(),
@@ -98,8 +98,8 @@ public class PackingListServiceImpl implements PackingListService {
     @Override
     @Transactional
     @Auditable(action = "DELIVER", entityType = AGG)
-    public PackingListDto markDelivered(Long packingListId) {
-        PackingList pl = requirePackingList(packingListId);
+    public PackingListDto markDelivered(String uid) {
+        PackingList pl = requirePackingListByUid(uid);
         pl.markDelivered(context.userId());
         events.publish("PackingListDelivered.v1", AGG, String.valueOf(pl.getId()),
             Map.of(F_ID, pl.getId(), F_NUMBER, pl.getNumber(),
@@ -110,8 +110,8 @@ public class PackingListServiceImpl implements PackingListService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public PackingListDto cancel(Long packingListId) {
-        PackingList pl = requirePackingList(packingListId);
+    public PackingListDto cancel(String uid) {
+        PackingList pl = requirePackingListByUid(uid);
         pl.cancel(context.userId());
         events.publish("PackingListCancelled.v1", AGG, String.valueOf(pl.getId()),
             Map.of(F_ID, pl.getId(), F_NUMBER, pl.getNumber()));
@@ -133,16 +133,16 @@ public class PackingListServiceImpl implements PackingListService {
 
     @Override
     @Transactional(readOnly = true)
-    public PackingListDto get(Long packingListId) {
-        PackingList pl = requirePackingList(packingListId);
+    public PackingListDto get(String uid) {
+        PackingList pl = requirePackingListByUid(uid);
         return PackingListDto.from(pl, lines.findByPackingListIdOrderByIdAsc(pl.getId()));
     }
 
-    private PackingList requirePackingList(Long id) {
-        PackingList pl = packingLists.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Packing list not found: " + id));
+    private PackingList requirePackingListByUid(String uid) {
+        PackingList pl = packingLists.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Packing list not found: " + uid));
         if (!Objects.equals(pl.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Packing list not found: " + id);
+            throw new NoSuchElementException("Packing list not found: " + uid);
         }
         branchScope.requireAccess(pl.getBranchId());
         return pl;

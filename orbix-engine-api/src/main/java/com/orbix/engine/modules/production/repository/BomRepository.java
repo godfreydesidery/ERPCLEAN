@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface BomRepository extends JpaRepository<Bom, Long> {
 
+    Optional<Bom> findByUid(String uid);
+
     Optional<Bom> findByOutputItemIdAndVersion(Long outputItemId, Integer version);
 
     Optional<Bom> findTopByOutputItemIdOrderByVersionDesc(Long outputItemId);

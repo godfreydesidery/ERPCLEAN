@@ -11,6 +11,7 @@ import java.util.List;
 
 public record StockCountDto(
     Long id,
+    String uid,
     String number,
     Long branchId,
     Long companyId,
@@ -24,7 +25,7 @@ public record StockCountDto(
 ) {
     public static StockCountDto from(StockCount count, List<StockCountLine> lines) {
         return new StockCountDto(
-            count.getId(), count.getNumber(), count.getBranchId(), count.getCompanyId(),
+            count.getId(), count.getUid(), count.getNumber(), count.getBranchId(), count.getCompanyId(),
             count.getCountDate(), count.getType(), count.getStatus(), count.getStartedBy(),
             count.getClosedBy(), count.getPostedAt(),
             lines.stream().map(StockCountLineDto::from).toList());

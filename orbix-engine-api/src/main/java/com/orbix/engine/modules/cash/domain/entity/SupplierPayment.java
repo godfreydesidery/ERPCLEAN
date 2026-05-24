@@ -2,6 +2,7 @@ package com.orbix.engine.modules.cash.domain.entity;
 
 import com.orbix.engine.modules.cash.domain.enums.PaymentMethod;
 import com.orbix.engine.modules.cash.domain.enums.SupplierPaymentStatus;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -15,12 +16,15 @@ import java.time.LocalDate;
 /** Supplier payment — header. DATA-MODEL.md §10.4. */
 @Entity
 @Table(name = "supplier_payment",
-    uniqueConstraints = @UniqueConstraint(name = "uk_supplier_payment_branch_number",
-        columnNames = {"branch_id", "number"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_supplier_payment_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_supplier_payment_branch_number",
+            columnNames = {"branch_id", "number"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class SupplierPayment {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class SupplierPayment extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "supplier_payment_seq")

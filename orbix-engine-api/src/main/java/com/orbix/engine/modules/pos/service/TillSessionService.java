@@ -19,13 +19,13 @@ public interface TillSessionService {
 
     TillSessionDto open(OpenTillSessionRequestDto request);
 
-    TillSessionDto close(Long sessionId, CloseTillSessionRequestDto request);
+    TillSessionDto close(String uid, CloseTillSessionRequestDto request);
 
-    TillSessionDto reconcile(Long sessionId);
+    TillSessionDto reconcile(String uid);
 
     List<TillSessionDto> list(Long branchId);
 
     List<TillSessionDto> listByTill(Long tillId);
 
-    TillSessionDto get(Long sessionId);
+    TillSessionDto get(String uid);
 }

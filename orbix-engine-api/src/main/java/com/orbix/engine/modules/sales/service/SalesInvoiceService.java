@@ -18,15 +18,15 @@ public interface SalesInvoiceService {
     SalesInvoiceDto createDraft(CreateSalesInvoiceRequestDto request);
 
     /** DRAFT → POSTED. Requires open business day; writes stock moves + opens debt. */
-    SalesInvoiceDto post(Long invoiceId);
+    SalesInvoiceDto post(String uid);
 
     /** POSTED → VOIDED (only on the same business day). Writes compensating stock moves. */
-    SalesInvoiceDto voidInvoice(Long invoiceId, VoidSalesInvoiceRequestDto request);
+    SalesInvoiceDto voidInvoice(String uid, VoidSalesInvoiceRequestDto request);
 
     /** DRAFT → CANCELLED. */
-    SalesInvoiceDto cancel(Long invoiceId);
+    SalesInvoiceDto cancel(String uid);
 
     PageDto<SalesInvoiceDto> list(Long branchId, Pageable pageable);
 
-    SalesInvoiceDto get(Long invoiceId);
+    SalesInvoiceDto get(String uid);
 }

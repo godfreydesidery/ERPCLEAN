@@ -107,8 +107,8 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG_RETURN)
-    public CustomerReturnDto post(Long returnId) {
-        CustomerReturn ret = requireReturn(returnId);
+    public CustomerReturnDto post(String uid) {
+        CustomerReturn ret = requireReturnByUid(uid);
         dayGuard.requireOpenDay(ret.getBranchId());
         Long actorId = context.userId();
         Long companyId = context.companyId();
@@ -143,8 +143,8 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG_RETURN)
-    public CustomerReturnDto cancel(Long returnId) {
-        CustomerReturn ret = requireReturn(returnId);
+    public CustomerReturnDto cancel(String uid) {
+        CustomerReturn ret = requireReturnByUid(uid);
         ret.cancel(context.userId());
         events.publish("CustomerReturnCancelled.v1", AGG_RETURN, String.valueOf(ret.getId()),
             Map.of(F_RETURN_ID, ret.getId(), F_NUMBER, ret.getNumber()));
@@ -154,8 +154,8 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
     @Override
     @Transactional
     @Auditable(action = "ISSUE_CREDIT", entityType = AGG_CN)
-    public CustomerCreditNoteDto issueCreditNote(Long returnId, IssueCreditNoteRequestDto request) {
-        CustomerReturn ret = requireReturn(returnId);
+    public CustomerCreditNoteDto issueCreditNote(String uid, IssueCreditNoteRequestDto request) {
+        CustomerReturn ret = requireReturnByUid(uid);
         String number = request.number().trim().toUpperCase();
         if (creditNotes.existsByBranchIdAndNumber(ret.getBranchId(), number)) {
             throw new IllegalArgumentException(
@@ -193,8 +193,8 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
 
     @Override
     @Transactional(readOnly = true)
-    public CustomerReturnDto get(Long returnId) {
-        CustomerReturn ret = requireReturn(returnId);
+    public CustomerReturnDto get(String uid) {
+        CustomerReturn ret = requireReturnByUid(uid);
         return CustomerReturnDto.from(ret, lines.findByCustomerReturnIdOrderByLineNoAsc(ret.getId()));
     }
 
@@ -237,11 +237,11 @@ public class CustomerReturnServiceImpl implements CustomerReturnService {
         return saved;
     }
 
-    private CustomerReturn requireReturn(Long id) {
-        CustomerReturn ret = returns.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Customer return not found: " + id));
+    private CustomerReturn requireReturnByUid(String uid) {
+        CustomerReturn ret = returns.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Customer return not found: " + uid));
         if (!Objects.equals(ret.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Customer return not found: " + id);
+            throw new NoSuchElementException("Customer return not found: " + uid);
         }
         branchScope.requireAccess(ret.getBranchId());
         return ret;

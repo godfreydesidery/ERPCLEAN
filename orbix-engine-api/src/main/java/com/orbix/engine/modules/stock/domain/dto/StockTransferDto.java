@@ -9,6 +9,7 @@ import java.util.List;
 
 public record StockTransferDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long fromBranchId,
@@ -20,7 +21,7 @@ public record StockTransferDto(
 ) {
     public static StockTransferDto from(StockTransfer transfer, List<StockTransferLine> lines) {
         return new StockTransferDto(
-            transfer.getId(), transfer.getNumber(), transfer.getCompanyId(),
+            transfer.getId(), transfer.getUid(), transfer.getNumber(), transfer.getCompanyId(),
             transfer.getFromBranchId(), transfer.getToBranchId(), transfer.getIssuedAt(),
             transfer.getReceivedAt(), transfer.getStatus(),
             lines.stream().map(StockTransferLineDto::from).toList());

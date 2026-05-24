@@ -11,6 +11,7 @@ import com.orbix.engine.modules.stock.domain.entity.StockTransfer;
 import com.orbix.engine.modules.stock.domain.entity.StockTransferLine;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.domain.enums.StockTransferStatus;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.repository.StockTransferLineRepository;
 import com.orbix.engine.modules.stock.repository.StockTransferRepository;
@@ -21,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -66,6 +68,7 @@ class StockTransferServiceImplTest {
     private StockTransfer transfer(StockTransferStatus status) {
         StockTransfer t = new StockTransfer("TR-1", COMPANY_ID, FROM_BRANCH, TO_BRANCH);
         t.setId(1L);
+        ReflectionTestUtils.setField(t, "uid", UidGenerator.next());
         t.setStatus(status);
         return t;
     }
@@ -100,13 +103,13 @@ class StockTransferServiceImplTest {
     void issueTransfer_postsTransferOutAndFreezesCost() {
         StockTransfer t = transfer(StockTransferStatus.DRAFT);
         StockTransferLine l = line(10L, new BigDecimal("5"));
-        when(transfers.findById(1L)).thenReturn(Optional.of(t));
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
         when(transferLines.findByStockTransferId(1L)).thenReturn(List.of(l));
         ItemBranchBalance bal = new ItemBranchBalance(8801L, FROM_BRANCH);
         bal.setAvgCost(new BigDecimal("480"));
         when(balances.findById(new ItemBranchBalanceId(8801L, FROM_BRANCH))).thenReturn(Optional.of(bal));
 
-        service.issueTransfer(1L);
+        service.issueTransfer(t.getUid());
 
         assertThat(t.getStatus()).isEqualTo(StockTransferStatus.ISSUED);
         assertThat(l.getCostAmount()).isEqualByComparingTo("480");
@@ -121,10 +124,10 @@ class StockTransferServiceImplTest {
         StockTransfer t = transfer(StockTransferStatus.ISSUED);
         StockTransferLine l = line(10L, new BigDecimal("5"));
         l.setCostAmount(new BigDecimal("480"));
-        when(transfers.findById(1L)).thenReturn(Optional.of(t));
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
         when(transferLines.findByStockTransferId(1L)).thenReturn(List.of(l));
 
-        service.receiveTransfer(1L, new ReceiveTransferRequestDto(
+        service.receiveTransfer(t.getUid(), new ReceiveTransferRequestDto(
             List.of(new ReceiveTransferRequestDto.ReceiveLine(10L, new BigDecimal("5")))));
 
         assertThat(t.getStatus()).isEqualTo(StockTransferStatus.RECEIVED);
@@ -138,10 +141,12 @@ class StockTransferServiceImplTest {
 
     @Test
     void receiveTransfer_rejectsTransferNotIssued() {
-        when(transfers.findById(1L)).thenReturn(Optional.of(transfer(StockTransferStatus.DRAFT)));
+        StockTransfer t = transfer(StockTransferStatus.DRAFT);
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
 
-        assertThatThrownBy(() -> service.receiveTransfer(1L, new ReceiveTransferRequestDto(
-            List.of(new ReceiveTransferRequestDto.ReceiveLine(10L, BigDecimal.ONE)))))
+        ReceiveTransferRequestDto dto = new ReceiveTransferRequestDto(
+            List.of(new ReceiveTransferRequestDto.ReceiveLine(10L, BigDecimal.ONE)));
+        assertThatThrownBy(() -> service.receiveTransfer(t.getUid(), dto))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("ISSUED");
         verify(stockMoveService, never()).post(any());

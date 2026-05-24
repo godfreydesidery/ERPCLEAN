@@ -27,28 +27,28 @@ export class ProcurementService {
     ));
   }
 
-  getLpo(id: string): Observable<LpoOrder> {
-    return unwrap(this.http.get<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}`));
+  getLpo(uid: string): Observable<LpoOrder> {
+    return unwrap(this.http.get<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}`));
   }
 
   createLpo(request: CreateLpoOrderRequest): Observable<LpoOrder> {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos`, request));
   }
 
-  updateLpo(id: string, request: UpdateLpoOrderRequest): Observable<LpoOrder> {
-    return unwrap(this.http.patch<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}`, request));
+  updateLpo(uid: string, request: UpdateLpoOrderRequest): Observable<LpoOrder> {
+    return unwrap(this.http.patch<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}`, request));
   }
 
-  submitLpo(id: string): Observable<LpoOrder> {
-    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/submit`, {}));
+  submitLpo(uid: string): Observable<LpoOrder> {
+    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/submit`, {}));
   }
 
-  approveLpo(id: string): Observable<LpoOrder> {
-    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/approve`, {}));
+  approveLpo(uid: string): Observable<LpoOrder> {
+    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/approve`, {}));
   }
 
-  cancelLpo(id: string): Observable<LpoOrder> {
-    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/${id}/cancel`, {}));
+  cancelLpo(uid: string): Observable<LpoOrder> {
+    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, {}));
   }
 
   // ---- GRN (F3.2) ----------------------------------------------------------
@@ -59,20 +59,20 @@ export class ProcurementService {
     ));
   }
 
-  getGrn(id: string): Observable<Grn> {
-    return unwrap(this.http.get<ApiResponse<Grn>>(`${this.base}/grns/${id}`));
+  getGrn(uid: string): Observable<Grn> {
+    return unwrap(this.http.get<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}`));
   }
 
   createGrn(request: CreateGrnRequest): Observable<Grn> {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns`, request));
   }
 
-  postGrn(id: string): Observable<Grn> {
-    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/post`, {}));
+  postGrn(uid: string): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}/post`, {}));
   }
 
-  cancelGrn(id: string): Observable<Grn> {
-    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/${id}/cancel`, {}));
+  cancelGrn(uid: string): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}/cancel`, {}));
   }
 
   // ---- supplier invoices (F3.3) -------------------------------------------
@@ -83,9 +83,9 @@ export class ProcurementService {
     ));
   }
 
-  getSupplierInvoice(id: string): Observable<SupplierInvoice> {
+  getSupplierInvoice(uid: string): Observable<SupplierInvoice> {
     return unwrap(this.http.get<ApiResponse<SupplierInvoice>>(
-      `${this.base}/supplier-invoices/${id}`
+      `${this.base}/supplier-invoices/uid/${uid}`
     ));
   }
 
@@ -95,15 +95,15 @@ export class ProcurementService {
     ));
   }
 
-  postSupplierInvoice(id: string): Observable<SupplierInvoice> {
+  postSupplierInvoice(uid: string): Observable<SupplierInvoice> {
     return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
-      `${this.base}/supplier-invoices/${id}/post`, {}
+      `${this.base}/supplier-invoices/uid/${uid}/post`, {}
     ));
   }
 
-  cancelSupplierInvoice(id: string): Observable<SupplierInvoice> {
+  cancelSupplierInvoice(uid: string): Observable<SupplierInvoice> {
     return unwrap(this.http.post<ApiResponse<SupplierInvoice>>(
-      `${this.base}/supplier-invoices/${id}/cancel`, {}
+      `${this.base}/supplier-invoices/uid/${uid}/cancel`, {}
     ));
   }
 
@@ -115,9 +115,9 @@ export class ProcurementService {
     ));
   }
 
-  getSupplierPayment(id: string): Observable<SupplierPayment> {
+  getSupplierPayment(uid: string): Observable<SupplierPayment> {
     return unwrap(this.http.get<ApiResponse<SupplierPayment>>(
-      `${this.base}/supplier-payments/${id}`
+      `${this.base}/supplier-payments/uid/${uid}`
     ));
   }
 
@@ -127,15 +127,15 @@ export class ProcurementService {
     ));
   }
 
-  postSupplierPayment(id: string): Observable<SupplierPayment> {
+  postSupplierPayment(uid: string): Observable<SupplierPayment> {
     return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
-      `${this.base}/supplier-payments/${id}/post`, {}
+      `${this.base}/supplier-payments/uid/${uid}/post`, {}
     ));
   }
 
-  cancelSupplierPayment(id: string): Observable<SupplierPayment> {
+  cancelSupplierPayment(uid: string): Observable<SupplierPayment> {
     return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
-      `${this.base}/supplier-payments/${id}/cancel`, {}
+      `${this.base}/supplier-payments/uid/${uid}/cancel`, {}
     ));
   }
 }

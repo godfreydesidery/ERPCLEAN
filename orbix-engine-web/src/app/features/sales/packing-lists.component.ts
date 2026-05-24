@@ -62,9 +62,9 @@ import {
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="PKL0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Invoice ID</label>
-                  <input class="form-control" type="number" name="iid"
-                         [(ngModel)]="newInvoiceId" (ngModelChange)="loadInvoice()" required>
+                  <label class="form-label small fw-semibold text-secondary">Invoice UID</label>
+                  <input class="form-control font-monospace" type="text" name="iid"
+                         [(ngModel)]="newInvoiceUid" (ngModelChange)="loadInvoice()" required>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Dispatch date</label>
@@ -326,7 +326,7 @@ export class PackingListsComponent implements OnInit {
   );
 
   protected newNumber = '';
-  protected newInvoiceId: string | null = null;
+  protected newInvoiceUid: string | null = null;
   protected newDispatchDate = new Date().toISOString().slice(0, 10);
   protected newDriverName = '';
   protected newVehicleNo = '';
@@ -346,8 +346,8 @@ export class PackingListsComponent implements OnInit {
   select(p: PackingList): void { this.selected.set(p); }
 
   loadInvoice(): void {
-    if (this.newInvoiceId === null) { this.loadedInvoice.set(null); return; }
-    this.sales.getInvoice(this.newInvoiceId).subscribe({
+    if (this.newInvoiceUid === null) { this.loadedInvoice.set(null); return; }
+    this.sales.getInvoice(this.newInvoiceUid).subscribe({
       next: inv => {
         this.loadedInvoice.set(inv);
         this.lineSelected = {};
@@ -386,16 +386,16 @@ export class PackingListsComponent implements OnInit {
   }
 
   dispatch(p: PackingList): void {
-    this.run(this.sales.dispatchPackingList(p.id), `Dispatched.`);
+    this.run(this.sales.dispatchPackingList(p.uid), `Dispatched.`);
   }
 
   deliver(p: PackingList): void {
-    this.run(this.sales.deliverPackingList(p.id), `Marked delivered.`);
+    this.run(this.sales.deliverPackingList(p.uid), `Marked delivered.`);
   }
 
   cancel(p: PackingList): void {
     if (!window.confirm(`Cancel ${p.number}?`)) return;
-    this.run(this.sales.cancelPackingList(p.id), `Cancelled.`);
+    this.run(this.sales.cancelPackingList(p.uid), `Cancelled.`);
   }
 
   private run(op: Observable<PackingList>, msg: string): void {

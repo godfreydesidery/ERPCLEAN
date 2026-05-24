@@ -16,23 +16,24 @@ public interface BomService {
 
     BomDto create(CreateBomRequestDto request);
 
-    BomDto patch(Long bomId, PatchBomRequestDto request);
+    BomDto patch(String uid, PatchBomRequestDto request);
 
     /** DRAFT -> ACTIVE; runs the cycle check. */
-    BomDto activate(Long bomId);
+    BomDto activate(String uid);
 
     /** ACTIVE -> RETIRED. Sets {@code valid_to = today}. */
-    BomDto retire(Long bomId);
+    BomDto retire(String uid);
 
     /**
      * Clone the current ACTIVE version into a new DRAFT version (N+1), so the
      * recipe can be edited without disturbing in-flight batches. The caller
      * activates the new DRAFT separately; activation auto-retires the prior
-     * ACTIVE at {@code newVersion.validFrom − 1}.
+     * ACTIVE at {@code newVersion.validFrom − 1}. Addressed by the source
+     * BOM's {@code uid}.
      */
-    BomDto version(Long bomId);
+    BomDto version(String uid);
 
-    BomDto get(Long bomId);
+    BomDto get(String uid);
 
     List<BomDto> list(Long sectionId, Long outputItemId, BomStatus status);
 }

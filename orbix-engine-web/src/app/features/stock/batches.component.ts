@@ -293,7 +293,7 @@ export class BatchesComponent implements OnInit {
   onRecall(batch: StockBatch): void {
     const reason = globalThis.prompt(`Recall batch ${batch.batchNo} — reason?`);
     if (!reason?.trim()) return;
-    this.stock.recallBatch(batch.id, { reason: reason.trim() }).subscribe({
+    this.stock.recallBatch(batch.uid, { reason: reason.trim() }).subscribe({
       next: () => {
         this.info.set(`Batch ${batch.batchNo} recalled.`);
         this.refresh();

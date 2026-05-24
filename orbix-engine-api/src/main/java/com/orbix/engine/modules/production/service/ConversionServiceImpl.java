@@ -86,8 +86,8 @@ public class ConversionServiceImpl implements ConversionService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public ConversionDto post(Long conversionId) {
-        Conversion conv = requireConversion(conversionId);
+    public ConversionDto post(String uid) {
+        Conversion conv = requireConversionByUid(uid);
         if (conv.getStatus() != ConversionStatus.DRAFT) {
             throw new IllegalStateException(
                 "Only DRAFT conversions can be posted (was " + conv.getStatus() + ")");
@@ -135,8 +135,8 @@ public class ConversionServiceImpl implements ConversionService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public ConversionDto cancel(Long conversionId) {
-        Conversion conv = requireConversion(conversionId);
+    public ConversionDto cancel(String uid) {
+        Conversion conv = requireConversionByUid(uid);
         conv.cancel(context.userId());
         events.publish("ConversionCancelled.v1", AGG, String.valueOf(conv.getId()),
             Map.of(F_ID, conv.getId(), F_NUMBER, conv.getNumber()));
@@ -145,8 +145,8 @@ public class ConversionServiceImpl implements ConversionService {
 
     @Override
     @Transactional(readOnly = true)
-    public ConversionDto get(Long conversionId) {
-        return ConversionDto.from(requireConversion(conversionId));
+    public ConversionDto get(String uid) {
+        return ConversionDto.from(requireConversionByUid(uid));
     }
 
     @Override
@@ -168,11 +168,11 @@ public class ConversionServiceImpl implements ConversionService {
             .toList();
     }
 
-    private Conversion requireConversion(Long id) {
-        Conversion conv = conversions.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Conversion not found: " + id));
+    private Conversion requireConversionByUid(String uid) {
+        Conversion conv = conversions.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Conversion not found: " + uid));
         if (!Objects.equals(conv.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Conversion not found: " + id);
+            throw new NoSuchElementException("Conversion not found: " + uid);
         }
         branchScope.requireAccess(conv.getBranchId());
         return conv;

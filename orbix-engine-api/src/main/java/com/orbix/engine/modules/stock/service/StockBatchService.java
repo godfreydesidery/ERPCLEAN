@@ -38,9 +38,16 @@ public interface StockBatchService {
     int markExpired(LocalDate asOf);
 
     /**
-     * Recalls an ACTIVE batch — writes off the remaining on-hand as an
-     * EXPIRY_WRITE_OFF stock move, flips the status, and emits
-     * {@code BatchRecalled.v1}.
+     * Recalls an ACTIVE batch by its {@code uid} — writes off the remaining
+     * on-hand as an EXPIRY_WRITE_OFF stock move, flips the status, and emits
+     * {@code BatchRecalled.v1}. The controller-facing entry point.
+     */
+    StockBatchDto recallBatchByUid(String uid, RecallStockBatchRequestDto request);
+
+    /**
+     * Recalls an ACTIVE batch by its numeric {@code id} — internal entry point
+     * for cross-module callers that already hold the batch id (e.g. production
+     * batch write-offs). Same behaviour as {@link #recallBatchByUid}.
      */
     StockBatchDto recallBatch(Long batchId, RecallStockBatchRequestDto request);
 
@@ -49,5 +56,9 @@ public interface StockBatchService {
     /** Active batches whose expiry falls on or before {@code today + daysAhead}. */
     List<StockBatchDto> listExpiringSoon(Long branchId, int daysAhead);
 
+    /** Controller-facing lookup by {@code uid}. */
+    StockBatchDto getBatchByUid(String uid);
+
+    /** Internal lookup by numeric {@code id} — for cross-module callers holding the batch id. */
     StockBatchDto getBatch(Long batchId);
 }

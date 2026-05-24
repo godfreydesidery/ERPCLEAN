@@ -9,6 +9,7 @@ import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -151,9 +153,9 @@ class LpoOrderServiceImplTest {
         when(settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL))
             .thenReturn(new BigDecimal("5000"));
         LpoOrder order = createdOrder("LPO-AUTO", new BigDecimal("1000"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.submit(order.getId());
+        LpoOrderDto dto = service.submit(order.getUid());
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.APPROVED);
         assertThat(dto.approvedBy()).isEqualTo(ACTOR_ID);
@@ -166,9 +168,9 @@ class LpoOrderServiceImplTest {
         when(settings.getDecimal(SettingKey.PROCUREMENT_LPO_AUTO_APPROVAL))
             .thenReturn(new BigDecimal("5000"));
         LpoOrder order = createdOrder("LPO-BIG", new BigDecimal("10000"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.submit(order.getId());
+        LpoOrderDto dto = service.submit(order.getUid());
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.PENDING_APPROVAL);
         verify(events).publish(eq("LpoOrderSubmitted.v1"), any(), any(), any());
@@ -178,9 +180,9 @@ class LpoOrderServiceImplTest {
     @Test
     void submit_thresholdZero_alwaysGoesToPendingApproval() {
         LpoOrder order = createdOrder("LPO-NOAUTO", new BigDecimal("10"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.submit(order.getId());
+        LpoOrderDto dto = service.submit(order.getUid());
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.PENDING_APPROVAL);
     }
@@ -189,9 +191,9 @@ class LpoOrderServiceImplTest {
     void approve_pendingApproval_setsApprovedFields() {
         LpoOrder order = createdOrder("LPO-APR", new BigDecimal("10000"));
         order.submit(ACTOR_ID);
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.approve(order.getId());
+        LpoOrderDto dto = service.approve(order.getUid());
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.APPROVED);
         assertThat(dto.approvedBy()).isEqualTo(ACTOR_ID);
@@ -201,10 +203,10 @@ class LpoOrderServiceImplTest {
     @Test
     void approve_draftDirectly_isRejected() {
         LpoOrder order = createdOrder("LPO-DRAFT", new BigDecimal("10000"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        Long id = order.getId();
-        assertThatThrownBy(() -> service.approve(id))
+        String uid = order.getUid();
+        assertThatThrownBy(() -> service.approve(uid))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("PENDING_APPROVAL");
     }
@@ -212,9 +214,9 @@ class LpoOrderServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         LpoOrder order = createdOrder("LPO-CXL", new BigDecimal("10"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.cancel(order.getId());
+        LpoOrderDto dto = service.cancel(order.getUid());
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.CANCELLED);
         verify(events).publish(eq("LpoOrderCancelled.v1"), any(), any(), any());
@@ -224,10 +226,10 @@ class LpoOrderServiceImplTest {
     void cancel_fromApproved_isRejected() {
         LpoOrder order = createdOrder("LPO-CXLA", new BigDecimal("10"));
         order.approve(ACTOR_ID);
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        Long id = order.getId();
-        assertThatThrownBy(() -> service.cancel(id))
+        String uid = order.getUid();
+        assertThatThrownBy(() -> service.cancel(uid))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -236,15 +238,17 @@ class LpoOrderServiceImplTest {
         LpoOrder foreign = new LpoOrder("LPO-X", 999L, BRANCH_ID, SUPPLIER_ID,
             LocalDate.now(), null, "TZS", null, ACTOR_ID);
         foreign.setId(900L);
-        when(orders.findById(900L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(orders.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
-        assertThatThrownBy(() -> service.get(900L)).isInstanceOf(NoSuchElementException.class);
+        String uid = foreign.getUid();
+        assertThatThrownBy(() -> service.get(uid)).isInstanceOf(NoSuchElementException.class);
     }
 
     @Test
     void updateDraft_replacesLinesAndReRollsTotals() {
         LpoOrder order = createdOrder("LPO-UPD", new BigDecimal("1000"));
-        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
         var request = new com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto(
             SUPPLIER_ID, LocalDate.of(2026, 5, 16), null, "TZS", "edited",
@@ -253,7 +257,7 @@ class LpoOrderServiceImplTest {
             ))
         );
 
-        LpoOrderDto dto = service.updateDraft(order.getId(), request);
+        LpoOrderDto dto = service.updateDraft(order.getUid(), request);
 
         // 20 * 50 = 1000 subtotal; 180 tax; 1180 total
         assertThat(dto.subtotalAmount()).isEqualByComparingTo("1000");
@@ -265,6 +269,7 @@ class LpoOrderServiceImplTest {
         LpoOrder order = new LpoOrder(number, COMPANY_ID, BRANCH_ID, SUPPLIER_ID,
             LocalDate.of(2026, 5, 15), null, "TZS", null, ACTOR_ID);
         order.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(order, "uid", UidGenerator.next());
         order.rollUpTotals(total, BigDecimal.ZERO);
         return order;
     }

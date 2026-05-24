@@ -25,6 +25,7 @@ import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -208,10 +210,10 @@ class GrnServiceImplTest {
     void post_writesStockMoveForEachLine_andEmitsGrnPosted() {
         Grn grn = postable(null);
         GrnLine line = grnLineRow(grn.getId(), null, new BigDecimal("10"), new BigDecimal("90"), null, null);
-        when(grns.findById(grn.getId())).thenReturn(Optional.of(grn));
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
         when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
 
-        service.post(grn.getId());
+        service.post(grn.getUid());
 
         ArgumentCaptor<PostStockMoveRequestDto> captor =
             ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
@@ -235,15 +237,15 @@ class GrnServiceImplTest {
         Grn grn = postable(null);
         GrnLine line = grnLineRow(grn.getId(), null, new BigDecimal("10"), new BigDecimal("90"),
             "B-001", LocalDate.of(2026, 12, 31));
-        when(grns.findById(grn.getId())).thenReturn(Optional.of(grn));
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
         when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
         when(stockBatchService.createBatch(any(CreateStockBatchRequestDto.class)))
-            .thenReturn(new StockBatchDto(7777L, ITEM_ID, BRANCH_ID, COMPANY_ID, "B-001",
+            .thenReturn(new StockBatchDto(7777L, "01HZ8X7M3K9PJK2D7Q5BCN8W4F", ITEM_ID, BRANCH_ID, COMPANY_ID, "B-001",
                 null, LocalDate.of(2026, 12, 31),
                 new BigDecimal("10"), new BigDecimal("10"), new BigDecimal("90"),
                 "Grn", grn.getId(), StockBatchStatus.ACTIVE));
 
-        service.post(grn.getId());
+        service.post(grn.getUid());
 
         ArgumentCaptor<PostStockMoveRequestDto> captor =
             ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
@@ -261,10 +263,10 @@ class GrnServiceImplTest {
 
         Grn grn = postable(500L);
         GrnLine line = grnLineRow(grn.getId(), 601L, new BigDecimal("6"), new BigDecimal("90"), null, null);
-        when(grns.findById(grn.getId())).thenReturn(Optional.of(grn));
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
         when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
 
-        service.post(grn.getId());
+        service.post(grn.getUid());
 
         assertThat(lpo.getStatus()).isEqualTo(LpoOrderStatus.PARTIALLY_RECEIVED);
         assertThat(lpoLine.getReceivedQty()).isEqualByComparingTo("6");
@@ -279,10 +281,10 @@ class GrnServiceImplTest {
 
         Grn grn = postable(500L);
         GrnLine line = grnLineRow(grn.getId(), 601L, new BigDecimal("10"), new BigDecimal("90"), null, null);
-        when(grns.findById(grn.getId())).thenReturn(Optional.of(grn));
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
         when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
 
-        service.post(grn.getId());
+        service.post(grn.getUid());
 
         assertThat(lpo.getStatus()).isEqualTo(LpoOrderStatus.RECEIVED);
         assertThat(lpoLine.isFullyReceived()).isTrue();
@@ -291,9 +293,9 @@ class GrnServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         Grn grn = postable(null);
-        when(grns.findById(grn.getId())).thenReturn(Optional.of(grn));
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
 
-        GrnDto dto = service.cancel(grn.getId());
+        GrnDto dto = service.cancel(grn.getUid());
 
         assertThat(dto.status()).isEqualTo(GrnStatus.CANCELLED);
         verify(events).publish(eq("GrnCancelled.v1"), any(), any(), any());
@@ -314,6 +316,7 @@ class GrnServiceImplTest {
         Grn grn = new Grn("GRN-P", COMPANY_ID, BRANCH_ID, SUPPLIER_ID, lpoOrderId,
             LocalDate.of(2026, 5, 16), null, null, ACTOR_ID);
         grn.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(grn, "uid", UidGenerator.next());
         return grn;
     }
 

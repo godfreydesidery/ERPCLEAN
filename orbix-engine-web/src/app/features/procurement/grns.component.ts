@@ -56,9 +56,9 @@ import {
         </div>
         <div class="card-body p-3 d-flex flex-column gap-3">
           <form (ngSubmit)="loadLpo()" #lf="ngForm">
-            <label class="form-label small fw-semibold text-secondary">LPO ID</label>
+            <label class="form-label small fw-semibold text-secondary">LPO uid</label>
             <div class="input-group">
-              <input class="form-control" type="number" name="lpoId" [(ngModel)]="lpoIdInput" required>
+              <input class="form-control font-monospace" name="lpoUid" [(ngModel)]="lpoUidInput" required>
               <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1" type="submit" [disabled]="busy() || lf.invalid">
                 <i class="bi bi-arrow-down-circle"></i> Load LPO
               </button>
@@ -375,7 +375,7 @@ export class GrnsComponent implements OnInit {
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  protected lpoIdInput: string | null = null;
+  protected lpoUidInput: string | null = null;
   protected newNumber = '';
   protected receivedDate = new Date().toISOString().slice(0, 10);
   protected deliveryNote = '';
@@ -408,9 +408,9 @@ export class GrnsComponent implements OnInit {
   select(grn: Grn): void { this.selected.set(grn); }
 
   loadLpo(): void {
-    if (this.lpoIdInput === null) return;
+    if (this.lpoUidInput === null) return;
     this.error.set(null);
-    this.procurement.getLpo(this.lpoIdInput).subscribe({
+    this.procurement.getLpo(this.lpoUidInput).subscribe({
       next: lpo => {
         this.loadedLpo.set(lpo);
         this.receiveQty = {};
@@ -462,12 +462,12 @@ export class GrnsComponent implements OnInit {
   }
 
   post(grn: Grn): void {
-    this.run(this.procurement.postGrn(grn.id), `GRN posted.`);
+    this.run(this.procurement.postGrn(grn.uid), `GRN posted.`);
   }
 
   cancel(grn: Grn): void {
     if (!globalThis.confirm(`Cancel ${grn.number}?`)) return;
-    this.run(this.procurement.cancelGrn(grn.id), `GRN cancelled.`);
+    this.run(this.procurement.cancelGrn(grn.uid), `GRN cancelled.`);
   }
 
   private run(op: Observable<Grn>, successMessage: string): void {

@@ -10,6 +10,7 @@ import java.util.List;
 
 public record BomDto(
     Long id,
+    String uid,
     Long companyId,
     Long sectionId,
     Long parentBomId,
@@ -27,6 +28,7 @@ public record BomDto(
     public static BomDto from(Bom bom, List<BomLine> lines) {
         return new BomDto(
             bom.getId(),
+            bom.getUid(),
             bom.getCompanyId(),
             bom.getSectionId(),
             bom.getParentBomId(),

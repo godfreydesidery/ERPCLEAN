@@ -10,10 +10,13 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface SupplierPaymentRepository extends JpaRepository<SupplierPayment, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
+
+    Optional<SupplierPayment> findByUid(String uid);
 
     List<SupplierPayment> findByCompanyIdOrderByIdDesc(Long companyId);
 

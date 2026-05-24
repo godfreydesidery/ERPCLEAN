@@ -5,6 +5,7 @@
 
 CREATE TABLE sales_receipt (
     id                 BIGINT         NOT NULL PRIMARY KEY,
+    uid                CHAR(26)       NOT NULL,
     number             VARCHAR(40)    NOT NULL,
     company_id         BIGINT         NOT NULL,
     branch_id          BIGINT         NOT NULL,
@@ -25,6 +26,7 @@ CREATE TABLE sales_receipt (
     updated_at         TIMESTAMP      NOT NULL,
     created_by         BIGINT         NOT NULL,
     updated_by         BIGINT         NOT NULL,
+    CONSTRAINT uk_sales_receipt_uid           UNIQUE (uid),
     CONSTRAINT uk_sales_receipt_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_sales_receipt_company  FOREIGN KEY (company_id)    REFERENCES company  (id),
     CONSTRAINT fk_sales_receipt_branch   FOREIGN KEY (branch_id)     REFERENCES branch   (id),

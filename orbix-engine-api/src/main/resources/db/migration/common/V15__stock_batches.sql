@@ -6,6 +6,7 @@
 
 CREATE TABLE stock_batch (
     id              BIGINT         NOT NULL PRIMARY KEY,
+    uid             CHAR(26)       NOT NULL,
     item_id         BIGINT         NOT NULL,
     branch_id       BIGINT         NOT NULL,
     company_id      BIGINT         NOT NULL,
@@ -23,6 +24,7 @@ CREATE TABLE stock_batch (
     updated_at      TIMESTAMP      NOT NULL,
     created_by      BIGINT         NOT NULL,
     updated_by      BIGINT         NOT NULL,
+    CONSTRAINT uk_stock_batch_uid           UNIQUE (uid),
     CONSTRAINT uk_stock_batch_branch_item_no UNIQUE (branch_id, item_id, batch_no),
     CONSTRAINT fk_stock_batch_item    FOREIGN KEY (item_id)    REFERENCES item (id),
     CONSTRAINT fk_stock_batch_branch  FOREIGN KEY (branch_id)  REFERENCES branch (id),

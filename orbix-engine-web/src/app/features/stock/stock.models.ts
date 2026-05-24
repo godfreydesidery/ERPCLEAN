@@ -61,6 +61,7 @@ export interface StockCountLine {
 
 export interface StockCount {
   id: string;
+  uid: string;
   number: string;
   branchId: string;
   companyId: string;
@@ -97,6 +98,7 @@ export interface StockTransferLine {
 
 export interface StockTransfer {
   id: string;
+  uid: string;
   number: string;
   companyId: string;
   fromBranchId: string;
@@ -125,6 +127,7 @@ export const STOCK_BATCH_STATUSES: StockBatchStatus[] = ['ACTIVE', 'EXHAUSTED', 
 
 export interface StockBatch {
   id: string;
+  uid: string;
   itemId: string;
   branchId: string;
   companyId: string;

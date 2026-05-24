@@ -6,6 +6,7 @@
 
 CREATE TABLE supplier_invoice (
     id                       BIGINT         NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)       NOT NULL,
     number                   VARCHAR(40)    NOT NULL,
     supplier_invoice_no      VARCHAR(80)    NOT NULL,
     company_id               BIGINT         NOT NULL,
@@ -27,6 +28,7 @@ CREATE TABLE supplier_invoice (
     updated_at               TIMESTAMP      NOT NULL,
     created_by               BIGINT         NOT NULL,
     updated_by               BIGINT         NOT NULL,
+    CONSTRAINT uk_supplier_invoice_uid           UNIQUE (uid),
     CONSTRAINT uk_supplier_invoice_branch_number UNIQUE (branch_id, number),
     CONSTRAINT uk_supplier_invoice_supplier_no   UNIQUE (supplier_id, supplier_invoice_no),
     CONSTRAINT fk_supplier_invoice_company  FOREIGN KEY (company_id)    REFERENCES company  (id),

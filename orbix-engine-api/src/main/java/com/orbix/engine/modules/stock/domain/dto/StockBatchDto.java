@@ -8,6 +8,7 @@ import java.time.LocalDate;
 
 public record StockBatchDto(
     Long id,
+    String uid,
     Long itemId,
     Long branchId,
     Long companyId,
@@ -24,6 +25,7 @@ public record StockBatchDto(
     public static StockBatchDto from(StockBatch b) {
         return new StockBatchDto(
             b.getId(),
+            b.getUid(),
             b.getItemId(),
             b.getBranchId(),
             b.getCompanyId(),

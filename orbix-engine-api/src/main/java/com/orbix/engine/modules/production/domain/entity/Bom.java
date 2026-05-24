@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.production.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.production.domain.enums.BomStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -22,12 +23,15 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "bom",
-    uniqueConstraints = @UniqueConstraint(name = "uk_bom_output_version",
-        columnNames = {"output_item_id", "version"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_bom_uid", columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_bom_output_version",
+            columnNames = {"output_item_id", "version"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class Bom {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class Bom extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "bom_seq")

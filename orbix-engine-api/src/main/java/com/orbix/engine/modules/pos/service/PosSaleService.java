@@ -33,7 +33,7 @@ public interface PosSaleService {
      * and any sale on a business day different from the till session's
      * current open day.
      */
-    PosSaleDto voidSale(Long saleId, VoidPosSaleRequestDto request);
+    PosSaleDto voidSale(String uid, VoidPosSaleRequestDto request);
 
     /**
      * Post a refund against a POSTED POS sale (F5.5). Creates a new
@@ -50,7 +50,7 @@ public interface PosSaleService {
 
     List<PosSaleDto> list(Long branchId);
 
-    PosSaleDto get(Long saleId);
+    PosSaleDto get(String uid);
 
     List<PosSaleDto> listForSession(Long tillSessionId);
 }

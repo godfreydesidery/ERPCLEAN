@@ -13,6 +13,7 @@ import java.util.List;
 
 public record PosSaleDto(
     Long id,
+    String uid,
     String number,
     String clientOpId,
     Long tillSessionId,
@@ -44,7 +45,7 @@ public record PosSaleDto(
 ) {
     public static PosSaleDto from(PosSale s, List<PosSaleLine> lines, List<PosPayment> payments) {
         return new PosSaleDto(
-            s.getId(), s.getNumber(), s.getClientOpId(),
+            s.getId(), s.getUid(), s.getNumber(), s.getClientOpId(),
             s.getTillSessionId(), s.getTillId(), s.getBranchId(), s.getCompanyId(),
             s.getSectionId(), s.getCustomerId(), s.getCashierId(), s.getSupervisorId(),
             s.getKind(), s.getRefundedFromSaleId(),

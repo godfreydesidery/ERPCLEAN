@@ -11,13 +11,13 @@ public interface TillService {
 
     TillDto create(CreateTillRequestDto request);
 
-    TillDto update(Long tillId, UpdateTillRequestDto request);
+    TillDto update(String uid, UpdateTillRequestDto request);
 
-    TillDto deactivate(Long tillId);
+    TillDto deactivate(String uid);
 
-    TillDto activate(Long tillId);
+    TillDto activate(String uid);
 
     List<TillDto> list(Long branchId);
 
-    TillDto get(Long tillId);
+    TillDto get(String uid);
 }

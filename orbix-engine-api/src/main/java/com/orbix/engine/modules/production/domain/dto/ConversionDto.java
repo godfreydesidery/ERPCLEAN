@@ -9,6 +9,7 @@ import java.time.LocalDate;
 
 public record ConversionDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -28,6 +29,7 @@ public record ConversionDto(
     public static ConversionDto from(Conversion c) {
         return new ConversionDto(
             c.getId(),
+            c.getUid(),
             c.getNumber(),
             c.getCompanyId(),
             c.getBranchId(),

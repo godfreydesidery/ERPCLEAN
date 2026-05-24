@@ -3,6 +3,7 @@ package com.orbix.engine.modules.sales.service;
 import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -165,13 +167,13 @@ class SalesReceiptServiceImplTest {
     @Test
     void post_advancesInvoicePaid_andFlipsPartiallyPaid() {
         SalesReceipt receipt = createdReceipt("SR-P", new BigDecimal("400"));
-        when(receipts.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receipts.findByUid(receipt.getUid())).thenReturn(Optional.of(receipt));
         SalesInvoice invoice = postedInvoice(INVOICE_A, new BigDecimal("1000"), BigDecimal.ZERO);
         when(invoices.findById(INVOICE_A)).thenReturn(Optional.of(invoice));
         when(allocations.findBySalesReceiptId(receipt.getId())).thenReturn(List.of(
             new ReceiptAllocation(receipt.getId(), INVOICE_A, new BigDecimal("400"), ACTOR_ID)));
 
-        SalesReceiptDto dto = service.post(receipt.getId());
+        SalesReceiptDto dto = service.post(receipt.getUid());
 
         assertThat(dto.status()).isEqualTo(SalesReceiptStatus.POSTED);
         assertThat(invoice.getPaidAmount()).isEqualByComparingTo("400");
@@ -183,13 +185,13 @@ class SalesReceiptServiceImplTest {
     @Test
     void post_fullSettlement_flipsInvoiceToPaid() {
         SalesReceipt receipt = createdReceipt("SR-FULL", new BigDecimal("1000"));
-        when(receipts.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receipts.findByUid(receipt.getUid())).thenReturn(Optional.of(receipt));
         SalesInvoice invoice = postedInvoice(INVOICE_A, new BigDecimal("1000"), BigDecimal.ZERO);
         when(invoices.findById(INVOICE_A)).thenReturn(Optional.of(invoice));
         when(allocations.findBySalesReceiptId(receipt.getId())).thenReturn(List.of(
             new ReceiptAllocation(receipt.getId(), INVOICE_A, new BigDecimal("1000"), ACTOR_ID)));
 
-        service.post(receipt.getId());
+        service.post(receipt.getUid());
 
         assertThat(invoice.getStatus()).isEqualTo(SalesInvoiceStatus.PAID);
     }
@@ -197,12 +199,12 @@ class SalesReceiptServiceImplTest {
     @Test
     void post_dayClosed_isRejected() {
         SalesReceipt receipt = createdReceipt("SR-DAY", new BigDecimal("100"));
-        when(receipts.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receipts.findByUid(receipt.getUid())).thenReturn(Optional.of(receipt));
         when(dayGuard.requireOpenDay(BRANCH_ID))
             .thenThrow(new IllegalStateException("No open business day"));
 
-        Long id = receipt.getId();
-        assertThatThrownBy(() -> service.post(id))
+        String uid = receipt.getUid();
+        assertThatThrownBy(() -> service.post(uid))
             .isInstanceOf(IllegalStateException.class);
         verify(events, never()).publish(eq("SalesReceiptPosted.v1"), any(), any(), any());
     }
@@ -210,9 +212,9 @@ class SalesReceiptServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         SalesReceipt receipt = createdReceipt("SR-C", new BigDecimal("100"));
-        when(receipts.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receipts.findByUid(receipt.getUid())).thenReturn(Optional.of(receipt));
 
-        SalesReceiptDto dto = service.cancel(receipt.getId());
+        SalesReceiptDto dto = service.cancel(receipt.getUid());
 
         assertThat(dto.status()).isEqualTo(SalesReceiptStatus.CANCELLED);
         verify(events).publish(eq("SalesReceiptCancelled.v1"), any(), any(), any());
@@ -233,6 +235,7 @@ class SalesReceiptServiceImplTest {
             LocalDate.of(2026, 5, 20), ReceiptMethod.CASH, null, "TZS",
             total, null, ACTOR_ID);
         r.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(r, "uid", UidGenerator.next());
         return r;
     }
 }

@@ -130,8 +130,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "PATCH", entityType = AGG)
-    public CustomerOrderDto patch(Long orderId, PatchCustomerOrderRequestDto request) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto patch(String uid, PatchCustomerOrderRequestDto request) {
+        CustomerOrder order = requireOrderByUid(uid);
         if (order.getStatus() != CustomerOrderStatus.DRAFT) {
             throw new IllegalStateException(
                 "Order lines can only be edited while DRAFT (status was " + order.getStatus() + ")");
@@ -162,8 +162,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "RESERVE", entityType = AGG)
-    public CustomerOrderDto reserve(Long orderId) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto reserve(String uid) {
+        CustomerOrder order = requireOrderByUid(uid);
         if (order.getStatus() != CustomerOrderStatus.DRAFT) {
             throw new IllegalStateException(
                 "Only DRAFT orders can be reserved (was " + order.getStatus() + ")");
@@ -192,8 +192,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "PAY", entityType = AGG)
-    public CustomerOrderDto pay(Long orderId, PayCustomerOrderRequestDto request) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto pay(String uid, PayCustomerOrderRequestDto request) {
+        CustomerOrder order = requireOrderByUid(uid);
         Long actorId = context.userId();
 
         // Idempotency probe — same (order, idempotencyKey) returns the prior state.
@@ -264,8 +264,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public CustomerOrderDto cancel(Long orderId, CancelCustomerOrderRequestDto request) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto cancel(String uid, CancelCustomerOrderRequestDto request) {
+        CustomerOrder order = requireOrderByUid(uid);
         if (order.getStatus().isTerminal()) {
             throw new IllegalStateException(
                 "Cannot cancel an order in terminal status " + order.getStatus());
@@ -318,8 +318,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "READY", entityType = AGG)
-    public CustomerOrderDto markReady(Long orderId) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto markReady(String uid) {
+        CustomerOrder order = requireOrderByUid(uid);
         if (order.getType() != CustomerOrderType.PRE_ORDER) {
             throw new IllegalArgumentException(
                 "markReady is only valid for PRE_ORDER (was " + order.getType() + ")");
@@ -337,8 +337,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional
     @Auditable(action = "COLLECT", entityType = AGG)
-    public CustomerOrderDto collect(Long orderId) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto collect(String uid) {
+        CustomerOrder order = requireOrderByUid(uid);
         if (order.getStatus() != CustomerOrderStatus.READY) {
             throw new IllegalStateException(
                 "Only READY orders can be collected (was " + order.getStatus() + ")");
@@ -383,8 +383,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public CustomerOrderDto get(Long orderId) {
-        CustomerOrder order = requireOrder(orderId);
+    public CustomerOrderDto get(String uid) {
+        CustomerOrder order = requireOrderByUid(uid);
         return loadDto(order);
     }
 
@@ -461,11 +461,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     // Helpers
     // ---------------------------------------------------------------------
 
-    private CustomerOrder requireOrder(Long id) {
-        CustomerOrder order = orders.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Customer order not found: " + id));
+    private CustomerOrder requireOrderByUid(String uid) {
+        CustomerOrder order = orders.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Customer order not found: " + uid));
         if (!Objects.equals(order.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Customer order not found: " + id);
+            throw new NoSuchElementException("Customer order not found: " + uid);
         }
         branchScope.requireAccess(order.getBranchId());
         return order;

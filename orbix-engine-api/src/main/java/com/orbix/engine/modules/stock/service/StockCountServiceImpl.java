@@ -54,9 +54,9 @@ public class StockCountServiceImpl implements StockCountService {
 
     @Override
     @Transactional(readOnly = true)
-    public StockCountDto getCount(Long countId) {
-        StockCount count = requireCount(countId);
-        return StockCountDto.from(count, countLines.findByStockCountId(countId));
+    public StockCountDto getCount(String uid) {
+        StockCount count = requireCountByUid(uid);
+        return StockCountDto.from(count, countLines.findByStockCountId(count.getId()));
     }
 
     @Override
@@ -84,21 +84,21 @@ public class StockCountServiceImpl implements StockCountService {
     @Override
     @Transactional
     @Auditable(action = "START", entityType = "StockCount")
-    public StockCountDto startCount(Long countId) {
-        StockCount count = requireCount(countId);
+    public StockCountDto startCount(String uid) {
+        StockCount count = requireCountByUid(uid);
         count.start();
-        return StockCountDto.from(count, countLines.findByStockCountId(countId));
+        return StockCountDto.from(count, countLines.findByStockCountId(count.getId()));
     }
 
     @Override
     @Transactional
     @Auditable(action = "RECORD_COUNTS", entityType = "StockCount")
-    public StockCountDto recordCounts(Long countId, RecordCountsRequestDto request) {
-        StockCount count = requireCount(countId);
+    public StockCountDto recordCounts(String uid, RecordCountsRequestDto request) {
+        StockCount count = requireCountByUid(uid);
         if (count.getStatus() != StockCountStatus.IN_PROGRESS) {
             throw new IllegalArgumentException("Counts can only be recorded on an IN_PROGRESS count");
         }
-        Map<Long, StockCountLine> linesById = countLines.findByStockCountId(countId).stream()
+        Map<Long, StockCountLine> linesById = countLines.findByStockCountId(count.getId()).stream()
             .collect(Collectors.toMap(StockCountLine::getId, Function.identity()));
         for (RecordCountsRequestDto.CountEntry entry : request.counts()) {
             StockCountLine line = linesById.get(entry.lineId());
@@ -107,16 +107,16 @@ public class StockCountServiceImpl implements StockCountService {
             }
             line.recordCount(entry.countedQty(), entry.note());
         }
-        return StockCountDto.from(count, countLines.findByStockCountId(countId));
+        return StockCountDto.from(count, countLines.findByStockCountId(count.getId()));
     }
 
     @Override
     @Transactional
     @Auditable(action = "CLOSE", entityType = "StockCount")
-    public StockCountDto closeCount(Long countId) {
-        StockCount count = requireCount(countId);
+    public StockCountDto closeCount(String uid) {
+        StockCount count = requireCountByUid(uid);
         count.close(context.userId());
-        List<StockCountLine> lines = countLines.findByStockCountId(countId);
+        List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
         lines.forEach(StockCountLine::computeVariance);
         return StockCountDto.from(count, lines);
     }
@@ -124,10 +124,10 @@ public class StockCountServiceImpl implements StockCountService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = "StockCount")
-    public StockCountDto postCount(Long countId) {
-        StockCount count = requireCount(countId);
+    public StockCountDto postCount(String uid) {
+        StockCount count = requireCountByUid(uid);
         count.post();
-        List<StockCountLine> lines = countLines.findByStockCountId(countId);
+        List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
         for (StockCountLine line : lines) {
             BigDecimal variance = line.getVarianceQty();
             if (variance == null || variance.signum() == 0) {
@@ -139,16 +139,16 @@ public class StockCountServiceImpl implements StockCountService {
                 .orElse(BigDecimal.ZERO);
             stockMoveService.post(new PostStockMoveRequestDto(
                 line.getItemId(), count.getBranchId(), variance, unitCost,
-                StockMoveType.ADJUSTMENT, "StockCount", countId, line.getNote(), true));
+                StockMoveType.ADJUSTMENT, "StockCount", count.getId(), line.getNote(), true));
         }
         return StockCountDto.from(count, lines);
     }
 
-    private StockCount requireCount(Long countId) {
-        StockCount count = counts.findById(countId)
-            .orElseThrow(() -> new NoSuchElementException("Stock count not found: " + countId));
+    private StockCount requireCountByUid(String uid) {
+        StockCount count = counts.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Stock count not found: " + uid));
         if (!Objects.equals(count.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Stock count not found: " + countId);
+            throw new NoSuchElementException("Stock count not found: " + uid);
         }
         branchScope.requireAccess(count.getBranchId());
         return count;

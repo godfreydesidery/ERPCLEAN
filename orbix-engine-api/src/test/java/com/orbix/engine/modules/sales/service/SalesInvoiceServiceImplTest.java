@@ -9,6 +9,7 @@ import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -39,6 +40,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -230,14 +232,14 @@ class SalesInvoiceServiceImplTest {
     void post_writesStockMovesAndEmitsPosted() {
         SalesInvoice invoice = postableInvoice("SI-P", PaymentTerms.CASH, new BigDecimal("1180"));
         SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
         when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
             .thenReturn(Optional.of(balanceRow(new BigDecimal("75"))));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        SalesInvoiceDto dto = service.post(invoice.getId());
+        SalesInvoiceDto dto = service.post(invoice.getUid());
 
         assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.POSTED);
         assertThat(dto.postedBusinessDate()).isEqualTo(LocalDate.of(2026, 5, 13));
@@ -261,7 +263,7 @@ class SalesInvoiceServiceImplTest {
 
         SalesInvoice invoice = postableInvoice("SI-B", PaymentTerms.CASH, new BigDecimal("1180"));
         SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
         when(stockBatchService.drainFefo(ITEM_ID, BRANCH_ID, new BigDecimal("10")))
             .thenReturn(List.of(
@@ -271,7 +273,7 @@ class SalesInvoiceServiceImplTest {
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        service.post(invoice.getId());
+        service.post(invoice.getUid());
 
         // 4*70 + 6*80 = 280 + 480 = 760; 760 / 10 = 76 weighted avg
         assertThat(line.getCostAmount()).isEqualByComparingTo("76");
@@ -286,12 +288,12 @@ class SalesInvoiceServiceImplTest {
     @Test
     void post_requiresOpenBusinessDay() {
         SalesInvoice invoice = postableInvoice("SI-DAY", PaymentTerms.CASH, new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(dayGuard.requireOpenDay(BRANCH_ID))
             .thenThrow(new IllegalStateException("No open business day"));
 
-        Long id = invoice.getId();
-        assertThatThrownBy(() -> service.post(id))
+        String uid = invoice.getUid();
+        assertThatThrownBy(() -> service.post(uid))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -301,12 +303,12 @@ class SalesInvoiceServiceImplTest {
         invoice.post(LocalDate.of(2026, 5, 13), ACTOR_ID);
         SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
         line.setCostAmount(new BigDecimal("75"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        SalesInvoiceDto dto = service.voidInvoice(invoice.getId(),
+        SalesInvoiceDto dto = service.voidInvoice(invoice.getUid(),
             new VoidSalesInvoiceRequestDto("operator error"));
 
         assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.VOIDED);
@@ -324,13 +326,13 @@ class SalesInvoiceServiceImplTest {
     void voidInvoice_differentBusinessDay_isRejected() {
         SalesInvoice invoice = postableInvoice("SI-VD", PaymentTerms.CASH, new BigDecimal("100"));
         invoice.post(LocalDate.of(2026, 5, 12), ACTOR_ID);
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        Long id = invoice.getId();
+        String uid = invoice.getUid();
         VoidSalesInvoiceRequestDto req = new VoidSalesInvoiceRequestDto("late");
-        assertThatThrownBy(() -> service.voidInvoice(id, req))
+        assertThatThrownBy(() -> service.voidInvoice(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("same business day");
         verify(stockMoveService, never()).post(any());
@@ -346,14 +348,14 @@ class SalesInvoiceServiceImplTest {
         SalesInvoice invoice = postableInvoice("SI-VB", PaymentTerms.CASH, new BigDecimal("100"));
         invoice.post(LocalDate.of(2026, 5, 13), ACTOR_ID);
         SalesInvoiceLine line = lineRow(invoice, new BigDecimal("1"), new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        Long id = invoice.getId();
+        String uid = invoice.getUid();
         VoidSalesInvoiceRequestDto req = new VoidSalesInvoiceRequestDto("test");
-        assertThatThrownBy(() -> service.voidInvoice(id, req))
+        assertThatThrownBy(() -> service.voidInvoice(uid, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("batch-tracked");
     }
@@ -361,9 +363,9 @@ class SalesInvoiceServiceImplTest {
     @Test
     void cancel_fromDraft_succeeds() {
         SalesInvoice invoice = postableInvoice("SI-CXL", PaymentTerms.CASH, new BigDecimal("100"));
-        when(invoices.findById(invoice.getId())).thenReturn(Optional.of(invoice));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
 
-        SalesInvoiceDto dto = service.cancel(invoice.getId());
+        SalesInvoiceDto dto = service.cancel(invoice.getUid());
 
         assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.CANCELLED);
         verify(events).publish(eq("SalesInvoiceCancelled.v1"), any(), any(), any());
@@ -374,6 +376,7 @@ class SalesInvoiceServiceImplTest {
             LocalDate.of(2026, 5, 13), null, terms, "TZS", PRICE_LIST_ID,
             null, null, ACTOR_ID);
         invoice.setId(nextId.getAndIncrement());
+        ReflectionTestUtils.setField(invoice, "uid", UidGenerator.next());
         invoice.rollUpTotals(total, BigDecimal.ZERO, BigDecimal.ZERO);
         return invoice;
     }

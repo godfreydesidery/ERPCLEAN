@@ -17,12 +17,12 @@ public interface SupplierPaymentService {
     SupplierPaymentDto createDraft(CreateSupplierPaymentRequestDto request);
 
     /** DRAFT → POSTED: requires an open business day; advances invoice settlement. */
-    SupplierPaymentDto post(Long paymentId);
+    SupplierPaymentDto post(String uid);
 
     /** DRAFT → CANCELLED. */
-    SupplierPaymentDto cancel(Long paymentId);
+    SupplierPaymentDto cancel(String uid);
 
     PageDto<SupplierPaymentDto> list(Long branchId, Pageable pageable);
 
-    SupplierPaymentDto get(Long paymentId);
+    SupplierPaymentDto get(String uid);
 }

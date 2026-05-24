@@ -97,8 +97,8 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public SupplierPaymentDto post(Long paymentId) {
-        SupplierPayment payment = requirePayment(paymentId);
+    public SupplierPaymentDto post(String uid) {
+        SupplierPayment payment = requirePaymentByUid(uid);
         BusinessDay day = dayGuard.requireOpenDay(payment.getBranchId());
 
         List<SupplierPaymentAllocation> rows = allocations.findBySupplierPaymentId(payment.getId());
@@ -155,8 +155,8 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public SupplierPaymentDto cancel(Long paymentId) {
-        SupplierPayment payment = requirePayment(paymentId);
+    public SupplierPaymentDto cancel(String uid) {
+        SupplierPayment payment = requirePaymentByUid(uid);
         payment.cancel(context.userId());
         events.publish("SupplierPaymentCancelled.v1", AGG, String.valueOf(payment.getId()),
             Map.of(F_ID, payment.getId(), F_NUMBER, payment.getNumber()));
@@ -177,8 +177,8 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public SupplierPaymentDto get(Long paymentId) {
-        SupplierPayment payment = requirePayment(paymentId);
+    public SupplierPaymentDto get(String uid) {
+        SupplierPayment payment = requirePaymentByUid(uid);
         return SupplierPaymentDto.from(payment, allocations.findBySupplierPaymentId(payment.getId()));
     }
 
@@ -222,11 +222,11 @@ public class SupplierPaymentServiceImpl implements SupplierPaymentService {
         return sum;
     }
 
-    private SupplierPayment requirePayment(Long id) {
-        SupplierPayment payment = payments.findById(id)
-            .orElseThrow(() -> new NoSuchElementException("Supplier payment not found: " + id));
+    private SupplierPayment requirePaymentByUid(String uid) {
+        SupplierPayment payment = payments.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Supplier payment not found: " + uid));
         if (!Objects.equals(payment.getCompanyId(), context.companyId())) {
-            throw new NoSuchElementException("Supplier payment not found: " + id);
+            throw new NoSuchElementException("Supplier payment not found: " + uid);
         }
         branchScope.requireAccess(payment.getBranchId());
         return payment;

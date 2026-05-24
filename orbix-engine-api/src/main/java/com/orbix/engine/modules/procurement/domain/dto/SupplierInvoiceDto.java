@@ -11,6 +11,7 @@ import java.util.List;
 
 public record SupplierInvoiceDto(
     Long id,
+    String uid,
     String number,
     String supplierInvoiceNo,
     Long companyId,
@@ -32,6 +33,7 @@ public record SupplierInvoiceDto(
     public static SupplierInvoiceDto from(SupplierInvoice inv, List<SupplierInvoiceGrn> allocs) {
         return new SupplierInvoiceDto(
             inv.getId(),
+            inv.getUid(),
             inv.getNumber(),
             inv.getSupplierInvoiceNo(),
             inv.getCompanyId(),

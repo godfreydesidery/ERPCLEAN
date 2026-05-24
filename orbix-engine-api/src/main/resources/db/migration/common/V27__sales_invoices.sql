@@ -6,6 +6,7 @@
 
 CREATE TABLE sales_invoice (
     id                  BIGINT         NOT NULL PRIMARY KEY,
+    uid                 CHAR(26)       NOT NULL,
     number              VARCHAR(40)    NOT NULL,
     company_id          BIGINT         NOT NULL,
     branch_id           BIGINT         NOT NULL,
@@ -35,6 +36,7 @@ CREATE TABLE sales_invoice (
     updated_at          TIMESTAMP      NOT NULL,
     created_by          BIGINT         NOT NULL,
     updated_by          BIGINT         NOT NULL,
+    CONSTRAINT uk_sales_invoice_uid           UNIQUE (uid),
     CONSTRAINT uk_sales_invoice_branch_number UNIQUE (branch_id, number),
     CONSTRAINT fk_sales_invoice_company    FOREIGN KEY (company_id)    REFERENCES company    (id),
     CONSTRAINT fk_sales_invoice_branch     FOREIGN KEY (branch_id)     REFERENCES branch     (id),

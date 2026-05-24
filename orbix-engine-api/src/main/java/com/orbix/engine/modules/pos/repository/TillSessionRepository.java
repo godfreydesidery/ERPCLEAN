@@ -10,6 +10,8 @@ import java.util.Optional;
 
 public interface TillSessionRepository extends JpaRepository<TillSession, Long> {
 
+    Optional<TillSession> findByUid(String uid);
+
     Optional<TillSession> findFirstByTillIdAndStatus(Long tillId, TillSessionStatus status);
 
     List<TillSession> findByCompanyIdOrderByIdDesc(Long companyId);

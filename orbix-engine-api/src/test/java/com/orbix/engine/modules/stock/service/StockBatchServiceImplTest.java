@@ -11,6 +11,7 @@ import com.orbix.engine.modules.stock.domain.dto.StockBatchDto;
 import com.orbix.engine.modules.stock.domain.entity.StockBatch;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.stock.repository.StockBatchRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -68,6 +70,7 @@ class StockBatchServiceImplTest {
         StockBatch b = new StockBatch(ITEM_ID, BRANCH_ID, COMPANY_ID, no, null, expiry, qty, cost,
             "GRN", 999L, ACTOR_ID);
         b.setId(id);
+        ReflectionTestUtils.setField(b, "uid", UidGenerator.next());
         return b;
     }
 
@@ -163,9 +166,9 @@ class StockBatchServiceImplTest {
     void recallBatch_writesOffRemainingAndEmitsRecalledEvent() {
         StockBatch batch = batch(42L, "B-RECALL", LocalDate.of(2026, 9, 1),
             new BigDecimal("8"), new BigDecimal("125"));
-        when(batches.findById(42L)).thenReturn(Optional.of(batch));
+        when(batches.findByUid(batch.getUid())).thenReturn(Optional.of(batch));
 
-        StockBatchDto result = service.recallBatch(42L,
+        StockBatchDto result = service.recallBatchByUid(batch.getUid(),
             new RecallStockBatchRequestDto("Supplier safety notice"));
 
         assertThat(result.status()).isEqualTo(StockBatchStatus.RECALLED);
@@ -186,9 +189,9 @@ class StockBatchServiceImplTest {
         StockBatch batch = batch(43L, "B-EMPTY", LocalDate.of(2026, 9, 1),
             new BigDecimal("5"), new BigDecimal("100"));
         batch.setQtyOnHand(BigDecimal.ZERO);
-        when(batches.findById(43L)).thenReturn(Optional.of(batch));
+        when(batches.findByUid(batch.getUid())).thenReturn(Optional.of(batch));
 
-        service.recallBatch(43L, new RecallStockBatchRequestDto("admin error"));
+        service.recallBatchByUid(batch.getUid(), new RecallStockBatchRequestDto("admin error"));
 
         verify(stockMoveService, never()).post(any());
         verify(events).publish(eq("BatchRecalled.v1"), any(), any(), any());
@@ -199,10 +202,11 @@ class StockBatchServiceImplTest {
         StockBatch foreign = new StockBatch(ITEM_ID, BRANCH_ID, 999L, "B-X", null, null,
             BigDecimal.ONE, BigDecimal.ONE, "GRN", 1L, ACTOR_ID);
         foreign.setId(99L);
-        when(batches.findById(99L)).thenReturn(Optional.of(foreign));
+        ReflectionTestUtils.setField(foreign, "uid", UidGenerator.next());
+        when(batches.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
 
         RecallStockBatchRequestDto dto = new RecallStockBatchRequestDto("recall");
-        assertThatThrownBy(() -> service.recallBatch(99L, dto))
+        assertThatThrownBy(() -> service.recallBatchByUid(foreign.getUid(), dto))
             .isInstanceOf(NoSuchElementException.class);
     }
 

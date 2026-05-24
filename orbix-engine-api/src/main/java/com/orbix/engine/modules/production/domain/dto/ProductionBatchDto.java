@@ -12,6 +12,7 @@ import java.util.List;
 
 public record ProductionBatchDto(
     Long id,
+    String uid,
     String number,
     Long companyId,
     Long branchId,
@@ -36,6 +37,7 @@ public record ProductionBatchDto(
                                           List<ProductionOutput> outputs) {
         return new ProductionBatchDto(
             b.getId(),
+            b.getUid(),
             b.getNumber(),
             b.getCompanyId(),
             b.getBranchId(),

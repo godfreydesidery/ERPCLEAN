@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.orders.domain.dto.CancelCustomerOrderRequestDto;
 import com.orbix.engine.modules.orders.domain.dto.CreateCustomerOrderRequestDto;
 import com.orbix.engine.modules.orders.domain.dto.CustomerOrderDto;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -26,6 +28,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
+@Validated
 public class CustomerOrderController {
 
     private final CustomerOrderService service;
@@ -35,7 +38,7 @@ public class CustomerOrderController {
     public ResponseEntity<CustomerOrderDto> create(
             @Valid @RequestBody CreateCustomerOrderRequestDto request) {
         CustomerOrderDto created = service.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/orders/" + created.id())).body(created);
+        return ResponseEntity.created(URI.create("/api/v1/orders/uid/" + created.uid())).body(created);
     }
 
     @GetMapping
@@ -47,52 +50,52 @@ public class CustomerOrderController {
         return service.list(branchId, customerId, status, type);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('ORDER.READ') or hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto get(@PathVariable Long id) {
-        return service.get(id);
+    public CustomerOrderDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto patch(@PathVariable Long id,
+    public CustomerOrderDto patch(@PathVariable @ValidUlid String uid,
                                   @Valid @RequestBody PatchCustomerOrderRequestDto request) {
-        return service.patch(id, request);
+        return service.patch(uid, request);
     }
 
-    @PostMapping("/{id}/reserve")
+    @PostMapping("/uid/{uid}/reserve")
     @PreAuthorize("hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto reserve(@PathVariable Long id) {
-        return service.reserve(id);
+    public CustomerOrderDto reserve(@PathVariable @ValidUlid String uid) {
+        return service.reserve(uid);
     }
 
-    @PostMapping("/{id}/payments")
+    @PostMapping("/uid/{uid}/payments")
     @PreAuthorize("hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto pay(@PathVariable Long id,
+    public CustomerOrderDto pay(@PathVariable @ValidUlid String uid,
                                 @Valid @RequestBody PayCustomerOrderRequestDto request) {
-        return service.pay(id, request);
+        return service.pay(uid, request);
     }
 
-    @PostMapping("/{id}/cancel")
+    @PostMapping("/uid/{uid}/cancel")
     @PreAuthorize("hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto cancel(@PathVariable Long id,
+    public CustomerOrderDto cancel(@PathVariable @ValidUlid String uid,
                                    @Valid @RequestBody CancelCustomerOrderRequestDto request) {
-        return service.cancel(id, request);
+        return service.cancel(uid, request);
     }
 
     /**
      * Manual READY transition for PRE_ORDER — replaces the (deferred)
      * {@code ProductionOutputPosted.v1} subscriber until F7.3 lands.
      */
-    @PostMapping("/{id}/ready")
+    @PostMapping("/uid/{uid}/ready")
     @PreAuthorize("hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto markReady(@PathVariable Long id) {
-        return service.markReady(id);
+    public CustomerOrderDto markReady(@PathVariable @ValidUlid String uid) {
+        return service.markReady(uid);
     }
 
-    @PostMapping("/{id}/collect")
+    @PostMapping("/uid/{uid}/collect")
     @PreAuthorize("hasAuthority('ORDER.COLLECT') or hasAuthority('ORDER.MANAGE')")
-    public CustomerOrderDto collect(@PathVariable Long id) {
-        return service.collect(id);
+    public CustomerOrderDto collect(@PathVariable @ValidUlid String uid) {
+        return service.collect(uid);
     }
 }

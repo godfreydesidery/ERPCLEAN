@@ -1,5 +1,6 @@
 package com.orbix.engine.api;
 
+import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.production.domain.dto.BomDto;
 import com.orbix.engine.modules.production.domain.dto.CreateBomRequestDto;
 import com.orbix.engine.modules.production.domain.dto.PatchBomRequestDto;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -22,6 +24,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/boms")
 @RequiredArgsConstructor
+@Validated
 public class BomController {
 
     private final BomService service;
@@ -30,7 +33,7 @@ public class BomController {
     @PreAuthorize("hasAuthority('PROD.MANAGE_BOM')")
     public ResponseEntity<BomDto> create(@Valid @RequestBody CreateBomRequestDto request) {
         BomDto created = service.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/boms/" + created.id())).body(created);
+        return ResponseEntity.created(URI.create("/api/v1/boms/uid/" + created.uid())).body(created);
     }
 
     @GetMapping
@@ -41,35 +44,35 @@ public class BomController {
         return service.list(sectionId, outputItemId, status);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('PROD.READ_BOM') or hasAuthority('PROD.MANAGE_BOM')")
-    public BomDto get(@PathVariable Long id) {
-        return service.get(id);
+    public BomDto get(@PathVariable @ValidUlid String uid) {
+        return service.get(uid);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/uid/{uid}")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BOM')")
-    public BomDto patch(@PathVariable Long id,
+    public BomDto patch(@PathVariable @ValidUlid String uid,
                         @Valid @RequestBody PatchBomRequestDto request) {
-        return service.patch(id, request);
+        return service.patch(uid, request);
     }
 
-    @PostMapping("/{id}/activate")
+    @PostMapping("/uid/{uid}/activate")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BOM')")
-    public BomDto activate(@PathVariable Long id) {
-        return service.activate(id);
+    public BomDto activate(@PathVariable @ValidUlid String uid) {
+        return service.activate(uid);
     }
 
-    @PostMapping("/{id}/retire")
+    @PostMapping("/uid/{uid}/retire")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BOM')")
-    public BomDto retire(@PathVariable Long id) {
-        return service.retire(id);
+    public BomDto retire(@PathVariable @ValidUlid String uid) {
+        return service.retire(uid);
     }
 
-    @PostMapping("/{id}/version")
+    @PostMapping("/uid/{uid}/version")
     @PreAuthorize("hasAuthority('PROD.MANAGE_BOM')")
-    public ResponseEntity<BomDto> version(@PathVariable Long id) {
-        BomDto next = service.version(id);
-        return ResponseEntity.created(URI.create("/api/v1/boms/" + next.id())).body(next);
+    public ResponseEntity<BomDto> version(@PathVariable @ValidUlid String uid) {
+        BomDto next = service.version(uid);
+        return ResponseEntity.created(URI.create("/api/v1/boms/uid/" + next.uid())).body(next);
     }
 }
