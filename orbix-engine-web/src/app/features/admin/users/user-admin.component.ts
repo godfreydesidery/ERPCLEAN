@@ -266,7 +266,7 @@ type UserListFilter = 'all' | 'active' | 'disabled' | 'locked' | 'reset';
             }
           </ul>
         }
-        @if (totalPages() > 1) {
+        @if (totalPages() >= 1) {
           <div class="card-footer">
             <orbix-pager [page]="page()" [totalPages]="totalPages()"
                          [totalElements]="total()" [pageSize]="pageSize"
