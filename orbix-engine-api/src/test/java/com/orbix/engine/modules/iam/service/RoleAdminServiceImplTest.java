@@ -12,6 +12,8 @@ import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.Permission;
 import com.orbix.engine.modules.iam.domain.entity.Role;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
+import com.orbix.engine.modules.admin.domain.entity.Branch;
+import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.iam.repository.AppUserRepository;
 import com.orbix.engine.modules.iam.repository.PermissionRepository;
 import com.orbix.engine.modules.iam.repository.RoleRepository;
@@ -34,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +51,7 @@ class RoleAdminServiceImplTest {
     @Mock private PermissionRepository permissions;
     @Mock private UserRoleRepository userRoles;
     @Mock private AppUserRepository users;
+    @Mock private BranchRepository branches;
     @Mock private TokenGuardService tokenGuard;
     @Mock private RootAdminGuard rootAdminGuard;
     @Mock private RequestContext context;
@@ -270,6 +274,46 @@ class RoleAdminServiceImplTest {
         assertThatThrownBy(() -> service.grantRoleByUid("R5", new GrantRoleRequestDto("jdoe", null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already has role");
+        verify(userRoles, never()).save(any());
+    }
+
+    @Test
+    void grantRole_withValidBranch_createsBranchScopedGrant() {
+        Role existing = role(5L, "R5", "BUYER", false);
+        AppUser user = new AppUser("jdoe", "hash", "Jane Doe", COMPANY_ID, null, ACTOR_ID);
+        user.setId(20L);
+        Branch branch = mock(Branch.class);
+        when(branch.getCompanyId()).thenReturn(COMPANY_ID);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
+        when(users.findByUsername("jdoe")).thenReturn(Optional.of(user));
+        when(branches.findById(12L)).thenReturn(Optional.of(branch));
+        when(userRoles.findByUserIdAndCompanyIdAndRevokedAtIsNull(20L, COMPANY_ID))
+            .thenReturn(List.of());
+        when(userRoles.save(any(UserRole.class))).thenAnswer(inv -> {
+            UserRole ur = inv.getArgument(0);
+            ur.setId(78L);
+            return ur;
+        });
+
+        service.grantRoleByUid("R5", new GrantRoleRequestDto("jdoe", 12L));
+
+        ArgumentCaptor<UserRole> saved = ArgumentCaptor.forClass(UserRole.class);
+        verify(userRoles).save(saved.capture());
+        assertThat(saved.getValue().getBranchId()).isEqualTo(12L);
+    }
+
+    @Test
+    void grantRole_withBranchNotInCompany_isRejected() {
+        Role existing = role(5L, "R5", "BUYER", false);
+        AppUser user = new AppUser("jdoe", "hash", "Jane Doe", COMPANY_ID, null, ACTOR_ID);
+        user.setId(20L);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
+        when(users.findByUsername("jdoe")).thenReturn(Optional.of(user));
+        when(branches.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.grantRoleByUid("R5", new GrantRoleRequestDto("jdoe", 99L)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not in your company");
         verify(userRoles, never()).save(any());
     }
 

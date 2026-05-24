@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AccessibleBranch, BranchService } from '../../../core/branch/branch.service';
+import { PagerComponent } from '../../../core/ui/pager.component';
 import { RoleAdminService } from './role-admin.service';
 import { Permission, RoleDetail, RoleGrant, RoleSummary } from './role-admin.models';
 
@@ -20,7 +21,7 @@ interface GrantGroup {
 @Component({
   selector: 'orbix-role-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, PagerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -40,6 +41,12 @@ interface GrantGroup {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
         <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (info()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -269,26 +276,11 @@ interface GrantGroup {
                 }
               </ul>
 
-              @if (filteredGrantGroups().length > grantsPageSize) {
-                <div class="card-footer bg-white border-top p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                  <small class="text-secondary">
-                    Page {{ grantsPage() + 1 }} of {{ totalGrantPages() }} ·
-                    {{ filteredGrantGroups().length }} user{{ filteredGrantGroups().length === 1 ? '' : 's' }}
-                  </small>
-                  <div class="btn-group">
-                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
-                            [disabled]="grantsPage() === 0"
-                            (click)="grantsPage.set(grantsPage() - 1)">
-                      <i class="bi bi-chevron-left"></i> Prev
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
-                            [disabled]="grantsPage() + 1 >= totalGrantPages()"
-                            (click)="grantsPage.set(grantsPage() + 1)">
-                      Next <i class="bi bi-chevron-right"></i>
-                    </button>
-                  </div>
-                </div>
-              }
+              <div class="card-footer bg-white border-top p-3">
+                <orbix-pager [page]="grantsPage()" [totalPages]="totalGrantPages()"
+                             [totalElements]="filteredGrantGroups().length" [pageSize]="grantsPageSize"
+                             (pageChange)="grantsPage.set($event)"/>
+              </div>
             }
           </div>
         } @else {
@@ -409,6 +401,7 @@ export class RoleAdminComponent implements OnInit {
   protected readonly branches = signal<AccessibleBranch[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly info = signal<string | null>(null);
   protected readonly showNewRole = signal(false);
 
   // ---- Granted-to filtering + pagination state ---------------------------
@@ -521,6 +514,7 @@ export class RoleAdminComponent implements OnInit {
 
   selectRole(uid: string): void {
     this.error.set(null);
+    this.info.set(null);
     // Reset the Granted-to filter/pagination when switching roles.
     this.grantSearchTerm = '';
     this.grantSearchSignal.set('');
@@ -552,7 +546,7 @@ export class RoleAdminComponent implements OnInit {
       this.showNewRole.set(false);
       this.loadRoles();
       this.applySelected(role);
-    });
+    }, 'Role created.');
   }
 
   saveDetails(role: RoleDetail): void {
@@ -562,7 +556,7 @@ export class RoleAdminComponent implements OnInit {
     }), updated => {
       this.applySelected(updated);
       this.loadRoles();
-    });
+    }, 'Role details saved.');
   }
 
   savePermissions(role: RoleDetail): void {
@@ -571,16 +565,18 @@ export class RoleAdminComponent implements OnInit {
       updated => {
         this.applySelected(updated);
         this.loadRoles();
-      }
+      },
+      'Permissions saved.'
     );
   }
 
   deleteRole(role: RoleDetail): void {
+    if (!globalThis.confirm(`Delete role "${role.name}" (${role.code})? This cannot be undone.`)) return;
     this.run(this.api.deleteRole(role.uid), () => {
       this.selected.set(null);
       this.grants.set([]);
       this.loadRoles();
-    });
+    }, 'Role deleted.');
   }
 
 
@@ -598,11 +594,16 @@ export class RoleAdminComponent implements OnInit {
     });
   }
 
-  private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
+  private run<T>(source: Observable<T>, onSuccess: (value: T) => void, successMsg?: string): void {
     this.saving.set(true);
     this.error.set(null);
+    this.info.set(null);
     source.subscribe({
-      next: value => { this.saving.set(false); onSuccess(value); },
+      next: value => {
+        this.saving.set(false);
+        onSuccess(value);
+        if (successMsg) this.info.set(successMsg);
+      },
       error: err => { this.saving.set(false); this.showError(err); }
     });
   }

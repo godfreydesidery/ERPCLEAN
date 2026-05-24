@@ -15,6 +15,7 @@ import com.orbix.engine.modules.iam.domain.entity.AppUser;
 import com.orbix.engine.modules.iam.domain.entity.Permission;
 import com.orbix.engine.modules.iam.domain.entity.Role;
 import com.orbix.engine.modules.iam.domain.entity.UserRole;
+import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.iam.repository.AppUserRepository;
 import com.orbix.engine.modules.iam.repository.PermissionRepository;
 import com.orbix.engine.modules.iam.repository.RoleRepository;
@@ -42,6 +43,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     private final PermissionRepository permissions;
     private final UserRoleRepository userRoles;
     private final AppUserRepository users;
+    private final BranchRepository branches;
     private final TokenGuardService tokenGuard;
     private final RootAdminGuard rootAdminGuard;
     private final RequestContext context;
@@ -144,6 +146,17 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             .orElseThrow(() -> new NoSuchElementException("User not found: " + request.username()));
         // rootadmin is company-wide ADMIN forever — no added/branch-scoped roles.
         rootAdminGuard.assertMutable(user, "granted roles");
+
+        // Validate the branch scope: null = company-wide; otherwise it must be a
+        // real branch in this company. Without this a bad branchId hits a FK and
+        // surfaces as a 500 — reject it cleanly instead (defense-in-depth).
+        if (request.branchId() != null
+                && branches.findById(request.branchId())
+                    .filter(b -> Objects.equals(b.getCompanyId(), companyId))
+                    .isEmpty()) {
+            throw new IllegalArgumentException(
+                "Branch " + request.branchId() + " is not in your company");
+        }
 
         boolean alreadyGranted = userRoles
             .findByUserIdAndCompanyIdAndRevokedAtIsNull(user.getId(), companyId).stream()
