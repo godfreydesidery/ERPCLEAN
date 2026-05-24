@@ -110,6 +110,29 @@ class BranchServiceImplTest {
     }
 
     @Test
+    void createBranch_rejectsInvalidTimeZone() {
+        when(branches.existsByCompanyIdAndCode(COMPANY_ID, "DT")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createBranch(new CreateBranchRequestDto(
+            "DT", "Downtown", "RETAIL", null, null, "Not/AZone")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Invalid time zone");
+        verify(branches, never()).save(any());
+    }
+
+    @Test
+    void updateBranch_rejectsInvalidTimeZone() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
+            "Downtown", "RETAIL", null, null, "Not/AZone")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Invalid time zone");
+        assertThat(existing.getTimeZone()).isEqualTo("Africa/Kampala");
+    }
+
+    @Test
     void getBranch_fromAnotherCompany_throwsNotFound() {
         Branch foreign = branch(50L, 999L, "DT");
         when(branches.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));

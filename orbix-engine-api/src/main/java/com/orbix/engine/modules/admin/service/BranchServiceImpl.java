@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +60,7 @@ public class BranchServiceImpl implements BranchService {
         if (branches.existsByCompanyIdAndCode(companyId, code)) {
             throw new IllegalArgumentException("Branch code already exists: " + code);
         }
+        validateZone(request.timeZone());
 
         Branch branch = branches.save(new Branch(
             companyId, code, request.name(), request.type(),
@@ -82,6 +85,7 @@ public class BranchServiceImpl implements BranchService {
     @Auditable(action = "UPDATE", entityType = "Branch")
     public BranchResponseDto updateBranchByUid(String uid, UpdateBranchRequestDto request) {
         Branch branch = requireBranchByUid(uid);
+        validateZone(request.timeZone());
         branch.updateDetails(request.name(), request.type(), request.physicalAddress(),
             request.phone(), request.timeZone(), context.userId());
         events.publish("BranchUpdated.v1", "Branch", branch.getUid(),
@@ -101,6 +105,14 @@ public class BranchServiceImpl implements BranchService {
         branch.deactivate(context.userId());
         events.publish("BranchDeactivated.v1", "Branch", branch.getUid(),
             Map.of(BRANCH_UID_KEY, branch.getUid()));
+    }
+
+    private static void validateZone(String timeZone) {
+        try {
+            ZoneId.of(timeZone.trim());
+        } catch (DateTimeException e) {
+            throw new IllegalArgumentException("Invalid time zone: " + timeZone);
+        }
     }
 
     private Branch requireBranchByUid(String uid) {

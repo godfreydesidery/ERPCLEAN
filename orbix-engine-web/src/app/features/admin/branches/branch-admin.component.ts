@@ -192,7 +192,7 @@ import { Branch, SECTION_TYPES, Section } from './branch-admin.models';
                 </thead>
                 <tbody>
                   @for (section of sections(); track section.id) {
-                    <tr [class.table-active]="editingSectionId() === section.id">
+                    <tr [class.table-active]="editingSectionId() === section.uid">
                       <td><span class="badge text-bg-light border text-secondary font-monospace">{{ section.code }}</span></td>
                       <td class="fw-semibold text-dark">{{ section.name }}</td>
                       <td class="small text-secondary">{{ section.type }}</td>
@@ -366,7 +366,7 @@ export class BranchAdminComponent implements OnInit {
       physicalAddress: branch.physicalAddress ?? ''
     };
     this.cancelSectionEdit();
-    this.loadSections(branch.id);
+    this.loadSections(branch.uid);
   }
 
   createBranch(): void {
@@ -386,7 +386,7 @@ export class BranchAdminComponent implements OnInit {
   }
 
   saveBranch(branch: Branch): void {
-    this.run(this.api.updateBranch(branch.id, {
+    this.run(this.api.updateBranch(branch.uid, {
       name: this.editBranch.name.trim(),
       type: this.editBranch.type.trim(),
       phone: emptyToNull(this.editBranch.phone),
@@ -399,14 +399,14 @@ export class BranchAdminComponent implements OnInit {
   }
 
   deactivateBranch(branch: Branch): void {
-    this.run(this.api.deactivateBranch(branch.id), () => {
+    this.run(this.api.deactivateBranch(branch.uid), () => {
       this.loadBranches();
       this.selected.set({ ...branch, status: 'INACTIVE' });
     });
   }
 
   editSection(section: Section): void {
-    this.editingSectionId.set(section.id);
+    this.editingSectionId.set(section.uid);
     this.sectionForm = { code: section.code, name: section.name, type: section.type };
   }
 
@@ -419,10 +419,10 @@ export class BranchAdminComponent implements OnInit {
     const editingId = this.editingSectionId();
     const onDone = () => {
       this.cancelSectionEdit();
-      this.loadSections(branch.id);
+      this.loadSections(branch.uid);
     };
     const call = editingId === null
-      ? this.api.createSection(branch.id, {
+      ? this.api.createSection(branch.uid, {
           code: this.sectionForm.code.trim(),
           name: this.sectionForm.name.trim(),
           type: this.sectionForm.type,
@@ -437,7 +437,7 @@ export class BranchAdminComponent implements OnInit {
   }
 
   deactivateSection(section: Section): void {
-    this.run(this.api.deactivateSection(section.id), () => this.loadSections(section.branchId));
+    this.run(this.api.deactivateSection(section.uid), () => this.loadSections(this.selected()!.uid));
   }
 
   private loadBranches(): void {
