@@ -27,51 +27,23 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findByDefaultCompanyIdOrderByIdAsc(Long defaultCompanyId);
 
     /**
-     * Users visible to a branch-scoped admin in {@code (companyId, branchId)} —
-     * either holds an active grant covering that branch (specific or
-     * company-wide), or has no grants at all yet (orphan, freshly created).
-     * Company-wide admins should bypass this and use
-     * {@link #findByDefaultCompanyIdOrderByIdAsc} to see everyone.
-     */
-    @Query("""
-        select u from AppUser u
-        where u.defaultCompanyId = :companyId
-        and (
-            exists (
-                select 1 from UserRole ur
-                where ur.userId = u.id
-                  and ur.companyId = :companyId
-                  and ur.revokedAt is null
-                  and (ur.branchId is null or ur.branchId = :branchId)
-            )
-            or not exists (
-                select 1 from UserRole ur
-                where ur.userId = u.id
-                  and ur.companyId = :companyId
-                  and ur.revokedAt is null
-            )
-        )
-        order by u.id asc
-        """)
-    List<AppUser> findVisibleInBranch(@Param("companyId") Long companyId,
-                                      @Param("branchId") Long branchId);
-
-    /**
      * Server-side paginated + searchable + status-filtered user listing. One
      * query for both scopes: company-wide callers ({@code companyWide = true})
-     * see everyone in the company; branch-scoped callers see users covering
-     * their branch plus orphans (no grants yet). {@code q} matches username /
-     * display name / email (case-insensitive); {@code statusFilter} is one of
-     * all|active|disabled|locked|reset.
+     * see everyone in the company; branch-scoped callers see only users whose
+     * home branch ({@code defaultBranchId}) is their active branch AND who are
+     * not company-wide-privileged — users in other branches, users with no home
+     * branch, and any user holding a company-wide grant are all hidden.
+     * {@code q} matches username / display name / email (case-insensitive);
+     * {@code statusFilter} is one of all|active|disabled|locked|reset.
      */
     @Query(value = """
         select u from AppUser u
         where u.defaultCompanyId = :companyId
           and (:companyWide = true
-               or exists (select 1 from UserRole ur where ur.userId = u.id and ur.companyId = :companyId
-                            and ur.revokedAt is null and (ur.branchId is null or ur.branchId = :branchId))
-               or not exists (select 1 from UserRole ur where ur.userId = u.id and ur.companyId = :companyId
-                            and ur.revokedAt is null))
+               or (u.defaultBranchId = :branchId
+                   and not exists (select 1 from UserRole ur where ur.userId = u.id
+                                     and ur.companyId = :companyId and ur.revokedAt is null
+                                     and ur.branchId is null)))
           and (:q is null
                or lower(u.username) like lower(concat('%', :q, '%'))
                or lower(u.displayName) like lower(concat('%', :q, '%'))
@@ -86,10 +58,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
         select count(u) from AppUser u
         where u.defaultCompanyId = :companyId
           and (:companyWide = true
-               or exists (select 1 from UserRole ur where ur.userId = u.id and ur.companyId = :companyId
-                            and ur.revokedAt is null and (ur.branchId is null or ur.branchId = :branchId))
-               or not exists (select 1 from UserRole ur where ur.userId = u.id and ur.companyId = :companyId
-                            and ur.revokedAt is null))
+               or (u.defaultBranchId = :branchId
+                   and not exists (select 1 from UserRole ur where ur.userId = u.id
+                                     and ur.companyId = :companyId and ur.revokedAt is null
+                                     and ur.branchId is null)))
           and (:q is null
                or lower(u.username) like lower(concat('%', :q, '%'))
                or lower(u.displayName) like lower(concat('%', :q, '%'))

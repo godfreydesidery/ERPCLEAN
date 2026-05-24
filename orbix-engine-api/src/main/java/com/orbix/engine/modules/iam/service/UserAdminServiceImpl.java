@@ -106,8 +106,16 @@ public class UserAdminServiceImpl implements UserAdminService {
         if (users.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists: " + username);
         }
-        if (request.defaultBranchId() != null) {
-            verifyBranchInCompany(request.defaultBranchId(), companyId);
+        // Home-branch visibility model: a branch-scoped admin's new users default
+        // to the admin's active branch so they remain visible to (and managed by)
+        // their creator. Company-wide admins keep full control — null stays
+        // company-wide, or they may target any branch explicitly.
+        Long effectiveBranchId = request.defaultBranchId();
+        if (effectiveBranchId == null && !userRoles.hasAnyCompanyWideGrant(actorId, companyId)) {
+            effectiveBranchId = context.branchId();
+        }
+        if (effectiveBranchId != null) {
+            verifyBranchInCompany(effectiveBranchId, companyId);
         }
 
         boolean serverGenerated = request.password() == null || request.password().isBlank();
@@ -123,7 +131,7 @@ public class UserAdminServiceImpl implements UserAdminService {
             passwords.encode(plain),
             request.displayName().trim(),
             companyId,
-            request.defaultBranchId(),
+            effectiveBranchId,
             actorId
         );
         user.setEmail(emptyToNull(request.email()));
@@ -266,10 +274,12 @@ public class UserAdminServiceImpl implements UserAdminService {
         if (!Objects.equals(user.getDefaultCompanyId(), companyId)) {
             throw new AccessDeniedException("User " + uid + " is not in your company");
         }
-        // Branch-scoped admins can only act on users visible in their branch.
+        // Branch-scoped admins can only act on users whose home branch is their
+        // active branch AND who are not themselves company-wide-privileged.
         // Company-wide admins bypass this.
         if (!userRoles.hasAnyCompanyWideGrant(callerId, companyId)
-            && !userRoles.isUserVisibleInBranch(user.getId(), companyId, context.branchId())) {
+            && (!Objects.equals(user.getDefaultBranchId(), context.branchId())
+                || userRoles.hasAnyCompanyWideGrant(user.getId(), companyId))) {
             throw new AccessDeniedException(
                 "User " + uid + " is not in your branch scope");
         }

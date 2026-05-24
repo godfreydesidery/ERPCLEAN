@@ -69,31 +69,4 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     boolean hasAnyCompanyWideGrant(@Param("userId") Long userId,
                                    @Param("companyId") Long companyId);
 
-    /**
-     * True when the target user is "visible" to a branch-scoped admin:
-     *   - target has at least one active grant covering this branch
-     *     (specific or company-wide), OR
-     *   - target has NO active grants yet (orphan, freshly created — needs
-     *     someone to assign them roles).
-     * Company-wide admins bypass this check entirely.
-     */
-    @Query("""
-        select case when (
-            exists (
-                select 1 from UserRole ur
-                where ur.userId = :userId
-                  and ur.companyId = :companyId
-                  and ur.revokedAt is null
-                  and (ur.branchId is null or ur.branchId = :branchId)
-            ) or not exists (
-                select 1 from UserRole ur
-                where ur.userId = :userId
-                  and ur.companyId = :companyId
-                  and ur.revokedAt is null
-            )
-        ) then true else false end
-        """)
-    boolean isUserVisibleInBranch(@Param("userId") Long userId,
-                                  @Param("companyId") Long companyId,
-                                  @Param("branchId") Long branchId);
 }
