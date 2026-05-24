@@ -106,6 +106,11 @@ public class PriceList extends UidEntity {
         touch(actorId);
     }
 
+    public void activate(Long actorId) {
+        this.status = ItemStatus.ACTIVE;
+        touch(actorId);
+    }
+
     private void touch(Long actorId) {
         this.updatedAt = Instant.now();
         this.updatedBy = actorId;

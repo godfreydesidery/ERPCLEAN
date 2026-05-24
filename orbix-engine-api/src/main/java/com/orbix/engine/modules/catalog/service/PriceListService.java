@@ -26,6 +26,8 @@ public interface PriceListService {
 
     void archivePriceListByUid(String uid);
 
+    void activatePriceListByUid(String uid);
+
     /** The currently-effective price rows on a list. */
     List<PriceListItemDto> listPricesByPriceListUid(String priceListUid);
 

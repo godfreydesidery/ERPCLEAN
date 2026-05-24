@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -34,12 +34,41 @@ import { VatGroup } from '../catalog.models';
       <div class="col-12 col-lg-7">
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3">
-            <h2 class="h6 fw-bold mb-0 text-dark">Existing groups</h2>
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+              <h2 class="h6 fw-bold mb-0 text-dark">Existing groups</h2>
+              <span class="badge text-bg-light text-secondary">{{ filteredVatGroups().length }}</span>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Filter by status">
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ACTIVE'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ACTIVE'"
+                      (click)="setStatusFilter('ACTIVE')">Active</button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ARCHIVED'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ARCHIVED'"
+                      (click)="setStatusFilter('ARCHIVED')">
+                Archived
+                @if (archivedCount() > 0) {
+                  <span class="badge rounded-pill ms-1"
+                        [class.text-bg-light]="statusFilter() === 'ARCHIVED'"
+                        [class.text-bg-secondary]="statusFilter() !== 'ARCHIVED'">{{ archivedCount() }}</span>
+                }
+              </button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ALL'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ALL'"
+                      (click)="setStatusFilter('ALL')">All</button>
+            </div>
           </div>
           @if (vatGroups().length === 0) {
             <div class="p-5 text-center">
               <div class="empty-icon mx-auto mb-3"><i class="bi bi-percent"></i></div>
               <p class="small text-secondary mb-0">No VAT groups yet. Add one to get started.</p>
+            </div>
+          } @else if (filteredVatGroups().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-funnel"></i></div>
+              <p class="small text-secondary mb-0">No VAT groups match the current filter.</p>
             </div>
           } @else {
             <div class="table-responsive">
@@ -51,7 +80,7 @@ import { VatGroup } from '../catalog.models';
                   </tr>
                 </thead>
                 <tbody>
-                  @for (group of vatGroups(); track group.uid) {
+                  @for (group of filteredVatGroups(); track group.uid) {
                     <tr [class.table-active]="editingUid() === group.uid">
                       <td>
                         <span class="badge text-bg-light border text-secondary font-monospace">{{ group.code }}</span>
@@ -68,13 +97,17 @@ import { VatGroup } from '../catalog.models';
                         </span>
                       </td>
                       <td class="text-end">
-                        <div class="btn-group btn-group-sm">
-                          <button class="btn btn-outline-secondary" (click)="edit(group)" [disabled]="busy()" title="Edit">
+                        <div class="d-inline-flex gap-2 justify-content-end">
+                          <button class="btn btn-sm btn-outline-secondary" (click)="edit(group)" [disabled]="busy()" title="Edit">
                             <i class="bi bi-pencil"></i>
                           </button>
                           @if (group.status === 'ACTIVE') {
-                            <button class="btn btn-outline-danger" (click)="archive(group)" [disabled]="busy()" title="Archive">
-                              <i class="bi bi-archive"></i>
+                            <button class="btn btn-sm btn-outline-danger" (click)="archive(group)" [disabled]="busy()">
+                              <i class="bi bi-archive me-1"></i>Archive
+                            </button>
+                          } @else {
+                            <button class="btn btn-sm btn-success" (click)="activate(group)" [disabled]="busy()">
+                              <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
                             </button>
                           }
                         </div>
@@ -206,6 +239,14 @@ export class VatGroupComponent implements OnInit {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
+  protected readonly archivedCount = computed(() =>
+    this.vatGroups().filter(g => g.status === 'ARCHIVED').length);
+  protected readonly filteredVatGroups = computed(() => {
+    const sf = this.statusFilter();
+    return sf === 'ALL' ? this.vatGroups() : this.vatGroups().filter(g => g.status === sf);
+  });
+
   protected form: { code: string; name: string; rate: number; validFrom: string; isDefault: boolean } = blank();
 
   ngOnInit(): void {
@@ -245,8 +286,14 @@ export class VatGroupComponent implements OnInit {
     });
   }
 
+  setStatusFilter(value: 'ACTIVE' | 'ARCHIVED' | 'ALL'): void { this.statusFilter.set(value); }
+
   archive(group: VatGroup): void {
     this.run(this.catalog.archiveVatGroup(group.uid), () => this.load());
+  }
+
+  activate(group: VatGroup): void {
+    this.run(this.catalog.activateVatGroup(group.uid), () => this.load());
   }
 
   private load(): void {

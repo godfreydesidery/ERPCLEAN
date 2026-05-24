@@ -21,4 +21,6 @@ public interface VatGroupService {
     VatGroupDto updateVatGroupByUid(String uid, UpdateVatGroupRequestDto request);
 
     void archiveVatGroupByUid(String uid);
+
+    void activateVatGroupByUid(String uid);
 }

@@ -5,6 +5,7 @@ import com.orbix.engine.modules.catalog.domain.dto.ItemGroupDto;
 import com.orbix.engine.modules.catalog.domain.dto.MoveItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.ItemGroup;
+import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.repository.ItemGroupRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -103,6 +104,17 @@ public class ItemGroupServiceImpl implements ItemGroupService {
     @Auditable(action = "ARCHIVE", entityType = "ItemGroup")
     public void archiveGroupByUid(String uid) {
         requireGroupByUid(uid).archive(context.userId());
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "ItemGroup")
+    public void activateGroupByUid(String uid) {
+        ItemGroup group = requireGroupByUid(uid);
+        if (group.getStatus() == ItemStatus.ACTIVE) {
+            throw new IllegalArgumentException("Item group is already active: " + uid);
+        }
+        group.activate(context.userId());
     }
 
     /** The group plus all of its descendants, by id. */

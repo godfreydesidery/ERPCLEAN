@@ -81,6 +81,17 @@ public class VatGroupServiceImpl implements VatGroupService {
         group.archive(context.userId());
     }
 
+    @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "VatGroup")
+    public void activateVatGroupByUid(String uid) {
+        VatGroup group = requireVatGroupByUid(uid);
+        if (group.getStatus() == ItemStatus.ACTIVE) {
+            throw new IllegalArgumentException("VAT group is already active: " + uid);
+        }
+        group.activate(context.userId());
+    }
+
     private void clearOtherDefaults(Long companyId, Long keepId) {
         Long actorId = context.userId();
         vatGroups.findByCompanyIdAndIsDefaultTrue(companyId).stream()

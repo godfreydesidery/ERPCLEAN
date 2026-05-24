@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -34,23 +34,59 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
       <div class="col-12 col-lg-7">
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3">
-            <h2 class="h6 fw-bold mb-0 text-dark">Existing units</h2>
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+              <h2 class="h6 fw-bold mb-0 text-dark">Existing units</h2>
+              <span class="badge text-bg-light text-secondary">{{ filtered().length }}</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <div class="input-group input-group-sm flex-grow-1" style="min-width: 180px;">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input class="form-control" type="search" placeholder="Search code or name"
+                       [ngModel]="search()" (ngModelChange)="onSearch($event)" name="uomSearch">
+              </div>
+              <div class="btn-group btn-group-sm status-filter" role="group" aria-label="Filter by status">
+                <button type="button" class="btn"
+                        [class.btn-primary]="statusFilter() === 'ACTIVE'"
+                        [class.btn-outline-secondary]="statusFilter() !== 'ACTIVE'"
+                        (click)="setStatusFilter('ACTIVE')">Active</button>
+                <button type="button" class="btn"
+                        [class.btn-primary]="statusFilter() === 'ARCHIVED'"
+                        [class.btn-outline-secondary]="statusFilter() !== 'ARCHIVED'"
+                        (click)="setStatusFilter('ARCHIVED')">
+                  Archived
+                  @if (archivedCount() > 0) {
+                    <span class="badge rounded-pill ms-1"
+                          [class.text-bg-light]="statusFilter() === 'ARCHIVED'"
+                          [class.text-bg-secondary]="statusFilter() !== 'ARCHIVED'">{{ archivedCount() }}</span>
+                  }
+                </button>
+                <button type="button" class="btn"
+                        [class.btn-primary]="statusFilter() === 'ALL'"
+                        [class.btn-outline-secondary]="statusFilter() !== 'ALL'"
+                        (click)="setStatusFilter('ALL')">All</button>
+              </div>
+            </div>
           </div>
           @if (uoms().length === 0) {
             <div class="p-5 text-center">
               <div class="empty-icon mx-auto mb-3"><i class="bi bi-rulers"></i></div>
               <p class="small text-secondary mb-0">No units defined yet. Add one to get started.</p>
             </div>
+          } @else if (filtered().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-search"></i></div>
+              <p class="small text-secondary mb-0">No units match the current filter.</p>
+            </div>
           } @else {
             <div class="table-responsive">
               <table class="table table-hover align-middle mb-0 simple-table">
                 <thead>
                   <tr>
-                    <th>Code</th><th>Name</th><th>Dimension</th><th>Base</th><th class="text-end"></th>
+                    <th>Code</th><th>Name</th><th>Dimension</th><th>Base</th><th>Status</th><th class="text-end"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  @for (uom of uoms(); track uom.uid) {
+                  @for (uom of paged(); track uom.uid) {
                     <tr [class.table-active]="editingUid() === uom.uid">
                       <td><span class="badge text-bg-light border text-secondary font-monospace">{{ uom.code }}</span></td>
                       <td class="fw-semibold text-dark">{{ uom.name }}</td>
@@ -62,15 +98,53 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
                           <span class="text-muted small">—</span>
                         }
                       </td>
+                      <td>
+                        <span class="status-badge status-badge--{{ uom.status.toLowerCase() }}">
+                          <span class="status-badge__dot"></span>{{ uom.status }}
+                        </span>
+                      </td>
                       <td class="text-end">
-                        <button class="btn btn-sm btn-outline-secondary" (click)="edit(uom)" [disabled]="busy()">
-                          <i class="bi bi-pencil"></i>
-                        </button>
+                        <div class="d-inline-flex gap-2 justify-content-end">
+                          <button class="btn btn-sm btn-outline-secondary" (click)="edit(uom)" [disabled]="busy()" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                          </button>
+                          @if (uom.status === 'ACTIVE') {
+                            <button class="btn btn-sm btn-outline-danger" (click)="archive(uom)" [disabled]="busy()">
+                              <i class="bi bi-archive me-1"></i>Archive
+                            </button>
+                          } @else {
+                            <button class="btn btn-sm btn-success" (click)="activate(uom)" [disabled]="busy()">
+                              <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+                            </button>
+                          }
+                        </div>
                       </td>
                     </tr>
                   }
                 </tbody>
               </table>
+            </div>
+            <div class="card-footer bg-white border-top d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 px-3">
+              <span class="small text-secondary">
+                Showing {{ rangeStart() }}–{{ rangeEnd() }} of {{ filtered().length }}
+              </span>
+              <div class="d-flex align-items-center gap-2">
+                <select class="form-select form-select-sm w-auto" [ngModel]="pageSize()"
+                        (ngModelChange)="onPageSize($event)" name="pageSize" aria-label="Page size">
+                  @for (s of pageSizes; track s) { <option [ngValue]="s">{{ s }} / page</option> }
+                </select>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-secondary" (click)="prev()"
+                          [disabled]="currentPage() <= 1" title="Previous page">
+                    <i class="bi bi-chevron-left"></i>
+                  </button>
+                  <span class="btn btn-outline-secondary disabled">{{ currentPage() }} / {{ totalPages() }}</span>
+                  <button class="btn btn-outline-secondary" (click)="next()"
+                          [disabled]="currentPage() >= totalPages()" title="Next page">
+                    <i class="bi bi-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
             </div>
           }
         </div>
@@ -167,6 +241,19 @@ import { UOM_DIMENSIONS, Uom, UomDimension } from '../catalog.models';
     .dim-pill--volume { background: #d1fae5; color: #047857; }
     .dim-pill--length { background: #ede9fe; color: #6d28d9; }
 
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.25rem 0.625rem; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-badge--active   { background: #d1fae5; color: #047857; }
+    .status-badge--active .status-badge__dot   { background: #10b981; }
+    .status-badge--inactive { background: #fef3c7; color: #92400e; }
+    .status-badge--inactive .status-badge__dot { background: #f59e0b; }
+    .status-badge--archived { background: #f3f4f6; color: #4b5563; }
+    .status-badge--archived .status-badge__dot { background: #9ca3af; }
+
     .empty-icon {
       width: 64px; height: 64px; border-radius: 16px;
       background: #eef2ff; color: #6366f1; font-size: 1.75rem;
@@ -187,12 +274,55 @@ export class UomComponent implements OnInit {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
+  // ---- filtering + client-side pagination ----------------------------------
+  protected readonly search = signal('');
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
+  protected readonly pageSizes = [10, 25, 50, 100];
+  protected readonly pageSize = signal(25);
+  protected readonly page = signal(1);
+
+  protected readonly archivedCount = computed(() =>
+    this.uoms().filter(u => u.status === 'ARCHIVED').length);
+
+  protected readonly filtered = computed(() => {
+    const q = this.search().trim().toLowerCase();
+    const sf = this.statusFilter();
+    return this.uoms().filter(u =>
+      (sf === 'ALL' || u.status === sf) &&
+      (q === '' || u.code.toLowerCase().includes(q) || u.name.toLowerCase().includes(q))
+    );
+  });
+
+  protected readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
+
+  /** page() clamped into [1, totalPages] so the view stays valid after filtering. */
+  protected readonly currentPage = computed(() =>
+    Math.min(Math.max(1, this.page()), this.totalPages()));
+
+  protected readonly paged = computed(() => {
+    const start = (this.currentPage() - 1) * this.pageSize();
+    return this.filtered().slice(start, start + this.pageSize());
+  });
+
+  protected readonly rangeStart = computed(() =>
+    this.filtered().length === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1);
+
+  protected readonly rangeEnd = computed(() =>
+    Math.min(this.currentPage() * this.pageSize(), this.filtered().length));
+
   protected readonly dimensions = UOM_DIMENSIONS;
   protected form: { code: string; name: string; dimension: UomDimension; base: boolean } = blank();
 
   ngOnInit(): void {
     this.load();
   }
+
+  onSearch(value: string): void { this.search.set(value); this.page.set(1); }
+  setStatusFilter(value: 'ACTIVE' | 'ARCHIVED' | 'ALL'): void { this.statusFilter.set(value); this.page.set(1); }
+  onPageSize(value: number): void { this.pageSize.set(Number(value)); this.page.set(1); }
+  prev(): void { this.page.set(Math.max(1, this.currentPage() - 1)); }
+  next(): void { this.page.set(Math.min(this.totalPages(), this.currentPage() + 1)); }
 
   edit(uom: Uom): void {
     this.editingUid.set(uom.uid);
@@ -218,6 +348,19 @@ export class UomComponent implements OnInit {
       this.cancel();
       this.load();
     });
+  }
+
+  archive(uom: Uom): void {
+    this.run(this.catalog.archiveUom(uom.uid), () => {
+      if (this.editingUid() === uom.uid) {
+        this.cancel();
+      }
+      this.load();
+    });
+  }
+
+  activate(uom: Uom): void {
+    this.run(this.catalog.activateUom(uom.uid), () => this.load());
   }
 
   private load(): void {

@@ -16,4 +16,8 @@ public interface UomService {
     UomDto createUom(CreateUomRequestDto request);
 
     UomDto updateUomByUid(String uid, UpdateUomRequestDto request);
+
+    void archiveUomByUid(String uid);
+
+    void activateUomByUid(String uid);
 }

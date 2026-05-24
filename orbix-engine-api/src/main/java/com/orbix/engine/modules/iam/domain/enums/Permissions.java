@@ -30,6 +30,7 @@ public final class Permissions {
     public static final String ITEM_CREATE  = "ITEM.CREATE";
     public static final String ITEM_UPDATE  = "ITEM.UPDATE";
     public static final String ITEM_ARCHIVE = "ITEM.ARCHIVE";
+    public static final String UOM_MANAGE   = "UOM.MANAGE";
 
     // ---- party -------------------------------------------------------------
     public static final String PARTY_MANAGE_CUSTOMERS = "PARTY.MANAGE_CUSTOMERS";

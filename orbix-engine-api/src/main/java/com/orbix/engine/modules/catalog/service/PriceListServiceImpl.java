@@ -101,6 +101,17 @@ public class PriceListServiceImpl implements PriceListService {
     }
 
     @Override
+    @Transactional
+    @Auditable(action = "ACTIVATE", entityType = "PriceList")
+    public void activatePriceListByUid(String uid) {
+        PriceList list = requirePriceListByUid(uid);
+        if (list.getStatus() == ItemStatus.ACTIVE) {
+            throw new IllegalArgumentException("Price list is already active: " + uid);
+        }
+        list.activate(context.userId());
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<PriceListItemDto> listPricesByPriceListUid(String priceListUid) {
         PriceList list = requirePriceListByUid(priceListUid);
