@@ -58,4 +58,11 @@ public class ItemGroupController {
         service.archiveGroupByUid(uid);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/uid/{uid}/activate")
+    @PreAuthorize("hasAuthority('ITEM.UPDATE')")
+    public ResponseEntity<Void> activateGroup(@PathVariable @ValidUlid String uid) {
+        service.activateGroupByUid(uid);
+        return ResponseEntity.noContent().build();
+    }
 }

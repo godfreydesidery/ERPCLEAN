@@ -86,6 +86,10 @@ export class CatalogService {
     return this.http.post(`${this.base}/item-groups/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
+  activateGroup(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/item-groups/uid/${uid}/activate`, {}).pipe(map(() => void 0));
+  }
+
   // ---- units of measure -----------------------------------------------------
 
   listUoms(): Observable<Uom[]> {
@@ -126,6 +130,10 @@ export class CatalogService {
     return this.http.post(`${this.base}/vat-groups/uid/${uid}/archive`, {}).pipe(map(() => void 0));
   }
 
+  activateVatGroup(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/vat-groups/uid/${uid}/activate`, {}).pipe(map(() => void 0));
+  }
+
   // ---- item barcodes --------------------------------------------------------
 
   listBarcodes(itemUid: string): Observable<ItemBarcode[]> {
@@ -158,6 +166,10 @@ export class CatalogService {
 
   archivePriceList(uid: string): Observable<void> {
     return this.http.post(`${this.base}/price-lists/uid/${uid}/archive`, {}).pipe(map(() => void 0));
+  }
+
+  activatePriceList(uid: string): Observable<void> {
+    return this.http.post(`${this.base}/price-lists/uid/${uid}/activate`, {}).pipe(map(() => void 0));
   }
 
   listPrices(priceListUid: string): Observable<PriceListItem[]> {

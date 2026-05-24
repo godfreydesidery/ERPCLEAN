@@ -40,18 +40,46 @@ import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/sear
       <!-- Tree -->
       <div class="col-12 col-lg-6">
         <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-            <h2 class="h6 fw-bold mb-0 text-dark">Hierarchy</h2>
-            <span class="badge text-bg-light text-secondary">{{ orderedGroups().length }}</span>
+          <div class="card-header bg-white border-bottom p-3">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+              <h2 class="h6 fw-bold mb-0 text-dark">Hierarchy</h2>
+              <span class="badge text-bg-light text-secondary">{{ visibleGroups().length }}</span>
+            </div>
+            <div class="btn-group btn-group-sm w-100" role="group" aria-label="Filter by status">
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ACTIVE'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ACTIVE'"
+                      (click)="setStatusFilter('ACTIVE')">Active</button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ARCHIVED'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ARCHIVED'"
+                      (click)="setStatusFilter('ARCHIVED')">
+                Archived
+                @if (archivedCount() > 0) {
+                  <span class="badge rounded-pill ms-1"
+                        [class.text-bg-light]="statusFilter() === 'ARCHIVED'"
+                        [class.text-bg-secondary]="statusFilter() !== 'ARCHIVED'">{{ archivedCount() }}</span>
+                }
+              </button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ALL'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ALL'"
+                      (click)="setStatusFilter('ALL')">All</button>
+            </div>
           </div>
           @if (orderedGroups().length === 0) {
             <div class="p-5 text-center">
               <div class="empty-icon mx-auto mb-3"><i class="bi bi-diagram-3"></i></div>
               <p class="small text-secondary mb-0">No groups defined yet.</p>
             </div>
+          } @else if (visibleGroups().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-funnel"></i></div>
+              <p class="small text-secondary mb-0">No groups match the current filter.</p>
+            </div>
           } @else {
             <ul class="list-unstyled mb-0 tree">
-              @for (group of orderedGroups(); track group.id) {
+              @for (group of visibleGroups(); track group.id) {
                 <li>
                   <button type="button" class="tree-row"
                           [class.is-active]="selected()?.id === group.id"
@@ -177,6 +205,13 @@ import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/sear
                     <i class="bi bi-archive"></i> Archive group
                   </button>
                 </div>
+              } @else {
+                <div class="pt-2 border-top">
+                  <button class="btn btn-success w-100 d-inline-flex justify-content-center align-items-center gap-2"
+                          (click)="activate(group)" [disabled]="busy()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Restore group
+                  </button>
+                </div>
               }
             </div>
           </div>
@@ -244,6 +279,7 @@ export class ItemGroupComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
 
   protected readonly mode = signal<'view' | 'create' | 'edit'>('view');
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
 
   protected newParentId: string | null = null;
   protected newCode = '';
@@ -280,6 +316,12 @@ export class ItemGroupComponent implements OnInit {
     };
     visit(null);
     return out;
+  });
+  protected readonly archivedCount = computed(() =>
+    this.groups().filter(g => g.status === 'ARCHIVED').length);
+  protected readonly visibleGroups = computed(() => {
+    const sf = this.statusFilter();
+    return sf === 'ALL' ? this.orderedGroups() : this.orderedGroups().filter(g => g.status === sf);
   });
   // Note: id is now a string (JSON:API discipline) — use String keys in the
   // children-by-parent map and descendant set.
@@ -341,8 +383,17 @@ export class ItemGroupComponent implements OnInit {
     });
   }
 
+  setStatusFilter(value: 'ACTIVE' | 'ARCHIVED' | 'ALL'): void { this.statusFilter.set(value); }
+
   archive(group: ItemGroup): void {
     this.run(this.catalog.archiveGroup(group.uid), () => {
+      this.cancelEditor();
+      this.load();
+    });
+  }
+
+  activate(group: ItemGroup): void {
+    this.run(this.catalog.activateGroup(group.uid), () => {
       this.cancelEditor();
       this.load();
     });

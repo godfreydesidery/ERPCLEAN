@@ -40,18 +40,46 @@ import { PriceList, PriceListItem } from '../catalog.models';
       <!-- Price list selector -->
       <div class="col-12 col-lg-4">
         <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-            <h2 class="h6 fw-bold mb-0 text-dark">Price books</h2>
-            <span class="badge text-bg-light text-secondary">{{ priceLists().length }}</span>
+          <div class="card-header bg-white border-bottom p-3">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+              <h2 class="h6 fw-bold mb-0 text-dark">Price books</h2>
+              <span class="badge text-bg-light text-secondary">{{ filteredPriceLists().length }}</span>
+            </div>
+            <div class="btn-group btn-group-sm w-100" role="group" aria-label="Filter by status">
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ACTIVE'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ACTIVE'"
+                      (click)="setStatusFilter('ACTIVE')">Active</button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ARCHIVED'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ARCHIVED'"
+                      (click)="setStatusFilter('ARCHIVED')">
+                Archived
+                @if (archivedCount() > 0) {
+                  <span class="badge rounded-pill ms-1"
+                        [class.text-bg-light]="statusFilter() === 'ARCHIVED'"
+                        [class.text-bg-secondary]="statusFilter() !== 'ARCHIVED'">{{ archivedCount() }}</span>
+                }
+              </button>
+              <button type="button" class="btn"
+                      [class.btn-primary]="statusFilter() === 'ALL'"
+                      [class.btn-outline-secondary]="statusFilter() !== 'ALL'"
+                      (click)="setStatusFilter('ALL')">All</button>
+            </div>
           </div>
           @if (priceLists().length === 0) {
             <div class="p-5 text-center">
               <div class="empty-icon mx-auto mb-3"><i class="bi bi-cash-stack"></i></div>
               <p class="small text-secondary mb-0">No price lists yet.</p>
             </div>
+          } @else if (filteredPriceLists().length === 0) {
+            <div class="p-5 text-center">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-funnel"></i></div>
+              <p class="small text-secondary mb-0">No price lists match the current filter.</p>
+            </div>
           } @else {
             <ul class="list-unstyled mb-0">
-              @for (list of priceLists(); track list.id) {
+              @for (list of filteredPriceLists(); track list.id) {
                 <li>
                   <button type="button" class="pl-row"
                           [class.is-active]="selected()?.id === list.id"
@@ -184,6 +212,11 @@ import { PriceList, PriceListItem } from '../catalog.models';
                   <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
                           (click)="archiveList(list)" [disabled]="busy()">
                     <i class="bi bi-archive"></i> Archive
+                  </button>
+                } @else {
+                  <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1"
+                          (click)="activateList(list)" [disabled]="busy()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Restore
                   </button>
                 }
               </div>
@@ -358,6 +391,14 @@ export class PriceListComponent implements OnInit {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
+  protected readonly archivedCount = computed(() =>
+    this.priceLists().filter(l => l.status === 'ARCHIVED').length);
+  protected readonly filteredPriceLists = computed(() => {
+    const sf = this.statusFilter();
+    return sf === 'ALL' ? this.priceLists() : this.priceLists().filter(l => l.status === sf);
+  });
+
   protected readonly mode = signal<'view' | 'create' | 'edit-list'>('view');
 
   protected listForm = blankListForm();
@@ -423,10 +464,21 @@ export class PriceListComponent implements OnInit {
     });
   }
 
+  setStatusFilter(value: 'ACTIVE' | 'ARCHIVED' | 'ALL'): void {
+    this.statusFilter.set(value);
+  }
+
   archiveList(list: PriceList): void {
     this.run(this.catalog.archivePriceList(list.uid), () => {
       this.selected.set(null);
       this.mode.set('view');
+      this.loadLists();
+    });
+  }
+
+  activateList(list: PriceList): void {
+    this.run(this.catalog.activatePriceList(list.uid), () => {
+      this.selected.set({ ...list, status: 'ACTIVE' });
       this.loadLists();
     });
   }

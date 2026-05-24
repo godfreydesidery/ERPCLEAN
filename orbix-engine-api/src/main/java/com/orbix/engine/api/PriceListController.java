@@ -59,6 +59,13 @@ public class PriceListController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/price-lists/uid/{uid}/activate")
+    @PreAuthorize("hasAuthority('ITEM.UPDATE')")
+    public ResponseEntity<Void> activatePriceList(@PathVariable @ValidUlid String uid) {
+        service.activatePriceListByUid(uid);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/price-lists/uid/{uid}/items")
     public List<PriceListItemDto> listPrices(@PathVariable @ValidUlid String uid) {
         return service.listPricesByPriceListUid(uid);

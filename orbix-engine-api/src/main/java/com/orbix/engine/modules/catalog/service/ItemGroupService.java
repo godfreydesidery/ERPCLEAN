@@ -26,4 +26,7 @@ public interface ItemGroupService {
 
     /** Soft-delete: status -> ARCHIVED. */
     void archiveGroupByUid(String uid);
+
+    /** Reverse the soft-delete: status -> ACTIVE. */
+    void activateGroupByUid(String uid);
 }

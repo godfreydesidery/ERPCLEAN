@@ -55,4 +55,11 @@ public class VatGroupController {
         service.archiveVatGroupByUid(uid);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/uid/{uid}/activate")
+    @PreAuthorize("hasAuthority('ITEM.UPDATE')")
+    public ResponseEntity<Void> activateVatGroup(@PathVariable @ValidUlid String uid) {
+        service.activateVatGroupByUid(uid);
+        return ResponseEntity.noContent().build();
+    }
 }
