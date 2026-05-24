@@ -1,10 +1,11 @@
-﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
+﻿import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
+import { ConfirmService } from '../../../core/ui/confirm.service';
 import { RouteAdminService } from './route-admin.service';
 import { Route } from './route-admin.models';
 
@@ -31,6 +32,12 @@ import { Route } from './route-admin.models';
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
         <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (info()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -146,6 +153,11 @@ import { Route } from './route-admin.models';
                                 [disabled]="saving()" title="Deactivate">
                           <i class="bi bi-pause-circle"></i>
                         </button>
+                      } @else {
+                        <button class="btn btn-outline-primary" (click)="activate(r)"
+                                [disabled]="saving()" title="Activate">
+                          <i class="bi bi-play-circle"></i>
+                        </button>
                       }
                     </div>
                   </td>
@@ -207,14 +219,18 @@ import { Route } from './route-admin.models';
     }
   `]
 })
-export class RouteAdminComponent implements OnInit {
+export class RouteAdminComponent implements OnInit, OnDestroy {
   private readonly api = inject(RouteAdminService);
+  private readonly confirm = inject(ConfirmService);
 
   protected readonly routes = signal<Route[]>([]);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly info = signal<string | null>(null);
   protected readonly showForm = signal(false);
   protected readonly editing = signal<Route | null>(null);
+
+  private infoTimer: ReturnType<typeof setTimeout> | undefined;
 
   protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
   protected readonly searchSignal = signal('');
@@ -242,6 +258,8 @@ export class RouteAdminComponent implements OnInit {
 
   ngOnInit(): void { this.load(); }
 
+  ngOnDestroy(): void { clearTimeout(this.infoTimer); }
+
   toggleForm(): void {
     const next = !this.showForm();
     this.showForm.set(next);
@@ -262,16 +280,36 @@ export class RouteAdminComponent implements OnInit {
     };
     const call = editing === null
       ? this.api.createRoute({ code: this.form.code.trim(), ...payload })
-      : this.api.updateRoute(editing.id, payload);
+      : this.api.updateRoute(editing.uid, payload);
     this.run(call, () => {
       this.resetForm();
       this.showForm.set(false);
       this.load();
-    });
+    }, editing === null ? 'Route created.' : 'Route updated.');
   }
 
-  deactivate(route: Route): void {
-    this.run(this.api.deactivateRoute(route.id), () => this.load());
+  async deactivate(route: Route): Promise<void> {
+    const { ok, reason } = await this.confirm.ask({
+      title: 'Deactivate route',
+      message: `Deactivate ${route.code} — ${route.name}? Agents can no longer be assigned to it until reactivated.`,
+      confirmText: 'Deactivate',
+      variant: 'warning',
+      reason: { label: 'Reason', required: true }
+    });
+    if (!ok) return;
+    this.run(this.api.deactivateRoute(route.uid, reason), () => this.load(), 'Route deactivated.');
+  }
+
+  async activate(route: Route): Promise<void> {
+    const { ok, reason } = await this.confirm.ask({
+      title: 'Activate route',
+      message: `Reactivate ${route.code} — ${route.name}?`,
+      confirmText: 'Activate',
+      variant: 'primary',
+      reason: { label: 'Reason', required: true }
+    });
+    if (!ok) return;
+    this.run(this.api.activateRoute(route.uid, reason), () => this.load(), 'Route activated.');
   }
 
   private load(): void {
@@ -286,13 +324,23 @@ export class RouteAdminComponent implements OnInit {
     this.form = blankRouteForm();
   }
 
-  private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
+  private run<T>(source: Observable<T>, onSuccess: (value: T) => void, successMsg?: string): void {
     this.saving.set(true);
     this.error.set(null);
     source.subscribe({
-      next: value => { this.saving.set(false); onSuccess(value); },
+      next: value => {
+        this.saving.set(false);
+        onSuccess(value);
+        if (successMsg) this.flashInfo(successMsg);
+      },
       error: err => { this.saving.set(false); this.showError(err); }
     });
+  }
+
+  private flashInfo(message: string): void {
+    this.info.set(message);
+    clearTimeout(this.infoTimer);
+    this.infoTimer = setTimeout(() => this.info.set(null), 4000);
   }
 
   private showError(err: unknown): void {

@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.admin.domain.dto.CreateRouteRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.RouteDto;
+import com.orbix.engine.modules.admin.domain.dto.RouteStatusChangeRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.UpdateRouteRequestDto;
 import com.orbix.engine.modules.admin.service.RouteService;
 import com.orbix.engine.modules.common.validation.ValidUlid;
@@ -49,8 +50,16 @@ public class RouteController {
     }
 
     @PostMapping("/uid/{uid}/deactivate")
-    public ResponseEntity<Void> deactivateRoute(@PathVariable @ValidUlid String uid) {
-        service.deactivateRouteByUid(uid);
+    public ResponseEntity<Void> deactivateRoute(@PathVariable @ValidUlid String uid,
+                                                @Valid @RequestBody RouteStatusChangeRequestDto request) {
+        service.deactivateRouteByUid(uid, request.reason());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/uid/{uid}/activate")
+    public ResponseEntity<Void> activateRoute(@PathVariable @ValidUlid String uid,
+                                              @Valid @RequestBody RouteStatusChangeRequestDto request) {
+        service.activateRouteByUid(uid, request.reason());
         return ResponseEntity.noContent().build();
     }
 }
