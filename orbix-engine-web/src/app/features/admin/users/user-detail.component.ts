@@ -212,7 +212,7 @@ import {
                             [(ngModel)]="grantPick[role.id]" name="gp{{ role.id }}">
                       <option [ngValue]="null">— Pick scope —</option>
                       @if (!hasCompanyWide(roleGrants)) {
-                        <option [ngValue]="-1">Company-wide</option>
+                        <option [ngValue]="''">Company-wide</option>
                       }
                       @for (b of branches(); track b.id) {
                         @if (!hasBranch(roleGrants, b.id)) {
