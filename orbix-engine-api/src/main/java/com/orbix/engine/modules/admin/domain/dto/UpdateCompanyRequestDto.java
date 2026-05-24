@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.admin.domain.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -12,7 +13,7 @@ public record UpdateCompanyRequestDto(
     String physicalAddress,
     String postalAddress,
     @Size(max = 40) String phone,
-    @Size(max = 120) String email,
+    @Email @Size(max = 120) String email,
     @Size(max = 200) String website,
     @NotBlank @Size(min = 3, max = 3) String currencyCode,
     @NotBlank @Size(min = 2, max = 2) String countryCode,
