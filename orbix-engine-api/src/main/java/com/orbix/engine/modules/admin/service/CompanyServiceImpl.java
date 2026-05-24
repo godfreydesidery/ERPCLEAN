@@ -3,6 +3,8 @@ package com.orbix.engine.modules.admin.service;
 import com.orbix.engine.modules.admin.domain.dto.CompanyDto;
 import com.orbix.engine.modules.admin.domain.dto.UpdateCompanyRequestDto;
 import com.orbix.engine.modules.admin.domain.entity.Company;
+import com.orbix.engine.modules.admin.domain.entity.Currency;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -42,8 +44,11 @@ public class CompanyServiceImpl implements CompanyService {
         String country = r.countryCode().trim().toUpperCase();
         String timeZone = r.timeZone().trim();
         // Selectable on the UI, but validate here too in case the API is called directly.
-        if (!currencies.existsById(currency)) {
-            throw new IllegalArgumentException("Unknown currency: " + currency);
+        // The functional currency must be one that is registered AND enabled.
+        Currency functional = currencies.findById(currency)
+            .orElseThrow(() -> new IllegalArgumentException("Unknown currency: " + currency));
+        if (functional.getStatus() != AdminStatus.ACTIVE) {
+            throw new IllegalArgumentException("Currency is not active: " + currency);
         }
         if (!ISO_COUNTRIES.contains(country)) {
             throw new IllegalArgumentException("Unknown country code: " + country);

@@ -38,4 +38,11 @@ public class Currency {
         this.symbol = symbol;
         this.minorUnitDigits = minorUnitDigits;
     }
+
+    /** Correct the display details. The ISO {@code code} (PK) is never editable. */
+    public void updateDetails(String name, String symbol, int minorUnitDigits) {
+        this.name = name;
+        this.symbol = symbol;
+        this.minorUnitDigits = minorUnitDigits;
+    }
 }

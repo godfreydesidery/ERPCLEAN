@@ -2,6 +2,7 @@ package com.orbix.engine.modules.admin.service;
 
 import com.orbix.engine.modules.admin.domain.dto.CreateCurrencyRequestDto;
 import com.orbix.engine.modules.admin.domain.dto.CurrencyDto;
+import com.orbix.engine.modules.admin.domain.dto.UpdateCurrencyRequestDto;
 
 import java.util.List;
 
@@ -14,6 +15,8 @@ public interface CurrencyService {
     List<CurrencyDto> listCurrencies();
 
     CurrencyDto createCurrency(CreateCurrencyRequestDto request);
+
+    CurrencyDto updateCurrency(String code, UpdateCurrencyRequestDto request);
 
     CurrencyDto enableCurrency(String code);
 

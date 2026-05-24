@@ -11,16 +11,18 @@ import java.util.Optional;
 
 public interface FxRateRepository extends JpaRepository<FxRate, Long> {
 
-    /** Full quote history, newest first — backs the admin rate-history table. */
-    List<FxRate> findAllByOrderByEffectiveAtDesc();
+    /** Full quote history, newest first — backs the admin rate-history table.
+     *  Tie-broken by id desc so same-instant quotes have a stable order. */
+    List<FxRate> findAllByOrderByEffectiveAtDescIdDesc();
 
-    /** Most recent rate with effective_at &lt;= the supplied time. Used at POS tender step. */
+    /** Most recent rate with effective_at &lt;= the supplied time. Used at POS tender step.
+     *  Tie-broken by id desc so the latest-quoted row wins when effective_at is equal. */
     @Query("""
         select r from FxRate r
         where r.fromCurrency = :from
           and r.toCurrency   = :to
           and r.effectiveAt <= :at
-        order by r.effectiveAt desc
+        order by r.effectiveAt desc, r.id desc
         limit 1
         """)
     Optional<FxRate> findMostRecent(@Param("from") String fromCurrency,

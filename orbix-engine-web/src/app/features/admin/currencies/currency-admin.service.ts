@@ -7,7 +7,8 @@ import {
   CreateCurrencyRequest,
   Currency,
   FxRate,
-  QuoteFxRateRequest
+  QuoteFxRateRequest,
+  UpdateCurrencyRequest
 } from './currency-admin.models';
 
 @Injectable({ providedIn: 'root' })
@@ -21,6 +22,10 @@ export class CurrencyAdminService {
 
   createCurrency(request: CreateCurrencyRequest): Observable<Currency> {
     return unwrap(this.http.post<ApiResponse<Currency>>(`${this.base}/currencies`, request));
+  }
+
+  updateCurrency(code: string, request: UpdateCurrencyRequest): Observable<Currency> {
+    return unwrap(this.http.patch<ApiResponse<Currency>>(`${this.base}/currencies/${code}`, request));
   }
 
   enableCurrency(code: string): Observable<Currency> {

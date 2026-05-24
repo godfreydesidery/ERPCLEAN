@@ -2,7 +2,9 @@ package com.orbix.engine.modules.admin.service;
 
 import com.orbix.engine.modules.admin.domain.dto.FxRateDto;
 import com.orbix.engine.modules.admin.domain.dto.QuoteFxRateRequestDto;
+import com.orbix.engine.modules.admin.domain.entity.Currency;
 import com.orbix.engine.modules.admin.domain.entity.FxRate;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.admin.repository.FxRateRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -47,10 +49,16 @@ class FxRateServiceImplTest {
         return new QuoteFxRateRequestDto(from, to, new BigDecimal(rate), NOW);
     }
 
+    private static Currency currency(String code, AdminStatus status) {
+        Currency c = new Currency(code, code + " name", null, 2);
+        c.setStatus(status);
+        return c;
+    }
+
     @Test
     void quoteRate_savesNewRateRow() {
-        when(currencies.existsById("USD")).thenReturn(true);
-        when(currencies.existsById("UGX")).thenReturn(true);
+        when(currencies.findById("USD")).thenReturn(Optional.of(currency("USD", AdminStatus.ACTIVE)));
+        when(currencies.findById("UGX")).thenReturn(Optional.of(currency("UGX", AdminStatus.ACTIVE)));
         when(rates.save(any(FxRate.class))).thenAnswer(inv -> {
             FxRate r = inv.getArgument(0);
             r.setId(5L);
@@ -90,12 +98,23 @@ class FxRateServiceImplTest {
 
     @Test
     void quoteRate_rejectsUnknownCurrency() {
-        when(currencies.existsById("USD")).thenReturn(true);
-        when(currencies.existsById("XXX")).thenReturn(false);
+        when(currencies.findById("USD")).thenReturn(Optional.of(currency("USD", AdminStatus.ACTIVE)));
+        when(currencies.findById("XXX")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.quoteRate(quote("USD", "XXX", "1.5")))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Unknown currency: XXX");
+        verify(rates, never()).save(any());
+    }
+
+    @Test
+    void quoteRate_rejectsInactiveCurrency() {
+        when(currencies.findById("USD")).thenReturn(Optional.of(currency("USD", AdminStatus.ACTIVE)));
+        when(currencies.findById("UGX")).thenReturn(Optional.of(currency("UGX", AdminStatus.INACTIVE)));
+
+        assertThatThrownBy(() -> service.quoteRate(quote("USD", "UGX", "3800")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not active");
         verify(rates, never()).save(any());
     }
 

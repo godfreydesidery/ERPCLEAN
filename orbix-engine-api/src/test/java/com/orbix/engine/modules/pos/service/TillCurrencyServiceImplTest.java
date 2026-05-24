@@ -2,6 +2,7 @@ package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.admin.domain.entity.Company;
 import com.orbix.engine.modules.admin.domain.entity.Currency;
+import com.orbix.engine.modules.admin.domain.enums.AdminStatus;
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.admin.repository.CurrencyRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
@@ -98,6 +99,18 @@ class TillCurrencyServiceImplTest {
         assertThatThrownBy(() -> service.add(TILL_ID, "XYZ"))
             .isInstanceOf(NoSuchElementException.class)
             .hasMessageContaining("Currency not found: XYZ");
+    }
+
+    @Test
+    void add_inactiveCurrency_isRejected() {
+        Currency disabled = new Currency("KES", "Kenyan Shilling", "KSh", 2);
+        disabled.setStatus(AdminStatus.INACTIVE);
+        when(currencies.findById("KES")).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> service.add(TILL_ID, "KES"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("not active");
+        verify(tillCurrencies, never()).save(any());
     }
 
     @Test
