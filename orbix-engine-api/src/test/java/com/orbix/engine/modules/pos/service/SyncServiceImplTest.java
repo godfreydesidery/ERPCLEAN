@@ -135,8 +135,8 @@ class SyncServiceImplTest {
         vat.setId(VAT_ID);
         when(vatGroups.findAll()).thenReturn(List.of(vat));
 
-        PriceListItem priceA = new PriceListItem(PRICE_LIST_ID, ITEM_A, UOM_ID, new BigDecimal("100"),
-            LocalDate.of(2026, 1, 1));
+        PriceListItem priceA = new PriceListItem(PRICE_LIST_ID, ITEM_A, UOM_ID, BigDecimal.ZERO,
+            new BigDecimal("100"), LocalDate.of(2026, 1, 1));
         priceA.setId(70L);
         when(priceListItems.findByPriceListIdAndValidToIsNull(PRICE_LIST_ID))
             .thenReturn(List.of(priceA));

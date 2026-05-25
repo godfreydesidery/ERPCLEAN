@@ -10,9 +10,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * A price for one item in one price list and UoM, valid over {@code [validFrom, validTo]}.
- * {@code validTo} null = the currently-effective price. Rows are never edited in place:
- * a price change closes the prior row and inserts a new one. DATA-MODEL.md §3.9.
+ * A price for one item in one price list, UoM and quantity tier, valid over
+ * {@code [validFrom, validTo]}. {@code validTo} null = the row has an open end.
+ * The row effective on a date is the one whose window contains it; for a given
+ * quantity the applicable tier is the highest {@code minQty} not exceeding it.
+ * Rows are never edited in place: a price change closes the prior row and
+ * inserts a new one. DATA-MODEL.md §3.9.
  */
 @Entity
 @Table(name = "price_list_item")
@@ -35,6 +38,10 @@ public class PriceListItem {
     @Column(name = "uom_id", nullable = false)
     private Long uomId;
 
+    /** Quantity-break tier floor. 0 = the base tier that applies to any quantity. */
+    @Column(name = "min_qty", nullable = false, precision = 18, scale = 4)
+    private BigDecimal minQty;
+
     @Column(nullable = false, precision = 18, scale = 4)
     private BigDecimal price;
 
@@ -44,10 +51,12 @@ public class PriceListItem {
     @Column(name = "valid_to")
     private LocalDate validTo;
 
-    public PriceListItem(Long priceListId, Long itemId, Long uomId, BigDecimal price, LocalDate validFrom) {
+    public PriceListItem(Long priceListId, Long itemId, Long uomId, BigDecimal minQty,
+                         BigDecimal price, LocalDate validFrom) {
         this.priceListId = priceListId;
         this.itemId = itemId;
         this.uomId = uomId;
+        this.minQty = minQty;
         this.price = price;
         this.validFrom = validFrom;
     }

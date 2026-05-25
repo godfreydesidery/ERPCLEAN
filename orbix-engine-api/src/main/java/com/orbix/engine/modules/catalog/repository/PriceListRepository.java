@@ -10,6 +10,8 @@ public interface PriceListRepository extends JpaRepository<PriceList, Long> {
 
     Optional<PriceList> findByUid(String uid);
 
+    Optional<PriceList> findByCompanyIdAndCode(Long companyId, String code);
+
     List<PriceList> findByCompanyId(Long companyId);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
