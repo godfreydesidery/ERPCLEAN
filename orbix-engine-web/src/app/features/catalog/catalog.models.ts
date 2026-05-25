@@ -194,7 +194,11 @@ export interface PriceListItem {
   id: string;
   priceListId: string;
   itemId: string;
+  itemCode: string | null;
+  itemName: string | null;
   uomId: string;
+  uomCode: string | null;
+  minQty: number;
   price: number;
   validFrom: string;
   validTo: string | null;
@@ -203,16 +207,42 @@ export interface PriceListItem {
 export interface SetPriceRequest {
   itemId: string;
   uomId: string;
+  minQty: number | null;
   price: number;
   effectiveFrom: string;
   reason: string | null;
+  approverId: string | null;
+}
+
+export interface DiscontinuePriceRequest {
+  itemId: string;
+  uomId: string;
+  minQty: number | null;
+  effectiveFrom: string;
+  reason: string | null;
+}
+
+export interface CopyPricesRequest {
+  sourcePriceListUid: string;
+  adjustPct: number | null;
+  effectiveFrom: string;
+  reason: string | null;
+  approverId: string | null;
+}
+
+export interface AdjustPricesRequest {
+  adjustPct: number;
+  effectiveFrom: string;
+  reason: string | null;
+  approverId: string | null;
 }
 
 export interface PriceChangeLog {
   id: string;
   priceListItemId: string;
   oldPrice: number | null;
-  newPrice: number;
+  /** null records a discontinuation (the price was withdrawn). */
+  newPrice: number | null;
   effectiveFrom: string;
   changedAt: string;
   changedBy: string;

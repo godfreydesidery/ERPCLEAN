@@ -19,7 +19,13 @@ import { PriceChangeLog } from '../catalog.models';
           <tr>
             <td>{{ change.effectiveFrom | date:'mediumDate' }}</td>
             <td class="text-end">{{ change.oldPrice ?? '—' }}</td>
-            <td class="text-end">{{ change.newPrice }}</td>
+            <td class="text-end">
+              @if (change.newPrice === null) {
+                <span class="badge text-bg-light text-secondary">discontinued</span>
+              } @else {
+                {{ change.newPrice }}
+              }
+            </td>
             <td>{{ change.reason ?? '' }}</td>
             <td>{{ change.changedAt | date:'short' }}</td>
           </tr>
