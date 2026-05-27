@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
+import { SalesService } from '../sales/sales.service';
+import { ArSummary } from '../sales/sales.models';
 import { StockService } from '../stock/stock.service';
 
 /**
@@ -24,6 +26,7 @@ import { StockService } from '../stock/stock.service';
 export class DashboardService {
   private readonly http = inject(HttpClient);
   private readonly stock = inject(StockService);
+  private readonly sales = inject(SalesService);
   private readonly base = environment.apiUrl;
 
   // ---- LIVE metrics (real endpoints) ----------------------------------------
@@ -43,26 +46,20 @@ export class DashboardService {
     );
   }
 
+  /**
+   * AR rollup for the dashboard tiles. {@code branchId} null returns
+   * a company-wide total. Backed by the Slice C
+   * {@code GET /sales/reports/ar-summary} endpoint.
+   */
+  arSummary(branchId: string | null): Observable<ArSummary> {
+    return this.sales.getArSummary(branchId);
+  }
+
   // ---- STUB metrics (no aggregate endpoint yet) -----------------------------
   // Sample values so the dashboard depicts a populated environment. Replace each
   // `of(...)` with the real call when the endpoint exists.
 
-  /** TODO connect: GET /reports/ar-summary?branchId -> openInvoiceCount */
-  openInvoiceCount(): Observable<number> {
-    return of(SAMPLE.openInvoiceCount);
-  }
-
-  /** TODO connect: GET /reports/ar-summary?branchId -> outstanding (company currency) */
-  arOutstanding(): Observable<number> {
-    return of(SAMPLE.arOutstanding);
-  }
-
-  /** TODO connect: GET /reports/ar-summary?branchId -> overdueCount (dueDate < today, unpaid) */
-  overdueInvoiceCount(): Observable<number> {
-    return of(SAMPLE.overdueInvoiceCount);
-  }
-
-  /** TODO connect: GET /reports/approvals-pending?branchId -> count of LPO in PENDING_APPROVAL */
+  /** Connect: GET /reports/approvals-pending?branchId -> count of LPO in PENDING_APPROVAL */
   lposPendingApproval(): Observable<number> {
     return of(SAMPLE.lposPendingApproval);
   }
@@ -72,17 +69,14 @@ export class DashboardService {
 export const DASHBOARD_LIVE = {
   todaysSales: true,
   stockAlertCount: true,
-  openInvoiceCount: false,
-  arOutstanding: false,
-  overdueInvoiceCount: false,
+  openInvoiceCount: true,
+  arOutstanding: true,
+  overdueInvoiceCount: true,
   lposPendingApproval: false,
 } as const;
 
 /** Depicted values for metrics whose backend resource doesn't exist yet. */
 const SAMPLE = {
-  openInvoiceCount: 8,
-  arOutstanding: 4_250_000,
-  overdueInvoiceCount: 3,
   lposPendingApproval: 2,
 } as const;
 

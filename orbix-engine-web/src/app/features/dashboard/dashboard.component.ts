@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
@@ -355,14 +356,19 @@ export class DashboardComponent implements OnInit {
   protected readonly arOutstanding = signal<number | null>(null);
   protected readonly overdueInvoices = signal<number | null>(null);
   protected readonly lposPending = signal<number | null>(null);
+  /** AR tiles show "Permission required" when the caller lacks SALES.REPORT.AR_SUMMARY. */
+  protected readonly arPermissionDenied = signal<boolean>(false);
 
   protected readonly kpis = computed<Kpi[]>(() => {
     const ccy = this.currencyCode();
+    const arDenied = this.arPermissionDenied();
+    const arValue = arDenied ? 'Permission required' : this.money(this.arOutstanding(), ccy);
+    const openValue = arDenied ? 'Permission required' : this.count(this.openInvoices());
     return [
       { label: "Today's sales",  value: this.money(this.todaysSales(), ccy), icon: 'bi-cash-coin', tint: 'green', live: DASHBOARD_LIVE.todaysSales },
       { label: 'Stock alerts',   value: this.count(this.stockAlerts()),      icon: 'bi-box-seam',  tint: 'amber', live: DASHBOARD_LIVE.stockAlertCount },
-      { label: 'Open invoices',  value: this.count(this.openInvoices()),     icon: 'bi-receipt',   tint: 'blue',  live: DASHBOARD_LIVE.openInvoiceCount },
-      { label: 'AR outstanding', value: this.money(this.arOutstanding(), ccy), icon: 'bi-people',   tint: 'rose',  live: DASHBOARD_LIVE.arOutstanding },
+      { label: 'Open invoices',  value: openValue,                            icon: 'bi-receipt',   tint: 'blue',  live: DASHBOARD_LIVE.openInvoiceCount },
+      { label: 'AR outstanding', value: arValue,                              icon: 'bi-people',    tint: 'rose',  live: DASHBOARD_LIVE.arOutstanding },
     ];
   });
 
@@ -443,10 +449,11 @@ export class DashboardComponent implements OnInit {
       error: () => { /* keep default */ },
     });
 
-    // Stub metrics don't depend on a branch — load them regardless.
-    this.dashboard.openInvoiceCount().subscribe(v => this.openInvoices.set(v));
-    this.dashboard.arOutstanding().subscribe(v => this.arOutstanding.set(v));
-    this.dashboard.overdueInvoiceCount().subscribe(v => this.overdueInvoices.set(v));
+    // AR tiles — live via /sales/reports/ar-summary. Branch-scoped when an
+    // active branch is set; company-wide otherwise. 403 surfaces as the
+    // "Permission required" state on the tiles.
+    this.loadArSummary();
+
     this.dashboard.lposPendingApproval().subscribe(v => this.lposPending.set(v));
 
     const branchId = this.branch.activeBranchId();
@@ -469,6 +476,35 @@ export class DashboardComponent implements OnInit {
     this.dashboard.stockAlertCount(branchId).subscribe({
       next: v => this.stockAlerts.set(v),
       error: () => this.stockAlerts.set(null),
+    });
+  }
+
+  private loadArSummary(): void {
+    const branchId = this.branch.activeBranchId();
+    this.dashboard.arSummary(branchId).subscribe({
+      next: summary => {
+        this.arPermissionDenied.set(false);
+        const outstandingNum = Number(summary.arOutstanding);
+        this.arOutstanding.set(Number.isFinite(outstandingNum) ? outstandingNum : null);
+        this.overdueInvoices.set(summary.overdueInvoices);
+        this.openInvoices.set(summary.openInvoices);
+        // The summary carries its own currency code (company default) — adopt
+        // it so AR-tile formatting matches the backend's currency.
+        if (summary.currencyCode) this.currencyCode.set(summary.currencyCode);
+      },
+      error: err => {
+        if (err instanceof HttpErrorResponse && err.status === 403) {
+          this.arPermissionDenied.set(true);
+          this.arOutstanding.set(null);
+          this.overdueInvoices.set(null);
+          this.openInvoices.set(null);
+        } else {
+          // Other errors leave the tiles in the "—" state; don't crash.
+          this.arOutstanding.set(null);
+          this.overdueInvoices.set(null);
+          this.openInvoices.set(null);
+        }
+      }
     });
   }
 
