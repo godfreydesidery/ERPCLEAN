@@ -102,6 +102,19 @@ public class CashPickupServiceImpl implements CashPickupService {
             .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public CashPickupDto getCashPickupByUid(String uid) {
+        Long companyId = context.companyId();
+        CashPickup pickup = pickups.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Cash pickup not found: " + uid));
+        if (!Objects.equals(pickup.getCompanyId(), companyId)) {
+            throw new NoSuchElementException("Cash pickup not found: " + uid);
+        }
+        branchScope.requireAccess(pickup.getBranchId());
+        return CashPickupDto.from(pickup);
+    }
+
     private TillSession requireOpenSession(Long sessionId, Long companyId) {
         TillSession session = sessions.findById(sessionId)
             .orElseThrow(() -> new NoSuchElementException("Till session not found: " + sessionId));

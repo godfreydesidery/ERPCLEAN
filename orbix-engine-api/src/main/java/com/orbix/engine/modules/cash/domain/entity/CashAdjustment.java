@@ -2,6 +2,7 @@ package com.orbix.engine.modules.cash.domain.entity;
 
 import com.orbix.engine.modules.cash.domain.enums.CashAccount;
 import com.orbix.engine.modules.cash.domain.enums.CashDirection;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
@@ -17,13 +18,23 @@ import java.time.LocalDate;
  * Supervisor cash adjustment (F6.3). Standalone audit-doc with a mandatory
  * reason; pairs 1:1 with a {@code cash_entry} whose {@code ref_id} is this
  * row's id and {@code gl_category = ADJUSTMENT}.
+ *
+ * <p>Slice D — uid + reversal lifecycle: archiving a posted adjustment
+ * stamps {@code reversedAt} / {@code reversedBy} / {@code reversedByEntryId}
+ * and posts a compensating {@code cash_entry} under a new
+ * {@code CASH_ADJUSTMENT_REVERSAL} ref_type.
  */
 @Entity
-@Table(name = "cash_adjustment")
+@Table(
+    name = "cash_adjustment",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_cash_adjustment_uid", columnNames = {"uid"})
+    }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CashAdjustment {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CashAdjustment extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cash_adjustment_seq")
@@ -67,6 +78,15 @@ public class CashAdjustment {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "reversed_at")
+    private Instant reversedAt;
+
+    @Column(name = "reversed_by")
+    private Long reversedBy;
+
+    @Column(name = "reversed_by_entry_id")
+    private Long reversedByEntryId;
+
     @SuppressWarnings("java:S107")
     public CashAdjustment(Long companyId, Long branchId, LocalDate businessDate,
                           CashAccount account, CashDirection direction, BigDecimal amount,
@@ -85,5 +105,25 @@ public class CashAdjustment {
         this.at = at;
         this.postedBy = postedBy;
         this.createdAt = Instant.now();
+    }
+
+    /** {@code true} once {@link #markReversed(Long, Long)} has stamped the row. */
+    public boolean isReversed() {
+        return reversedAt != null;
+    }
+
+    /**
+     * Stamp the reversal columns. Called once, in the same transaction as the
+     * compensating {@code cash_entry} insert. Throws if the row has already
+     * been reversed (idempotency guard — the controller / service surface
+     * the same exception type as Day's override archive).
+     */
+    public void markReversed(Long actorId, Long reversingEntryId) {
+        if (isReversed()) {
+            throw new IllegalStateException("Cash adjustment is already reversed: " + getUid());
+        }
+        this.reversedAt = Instant.now();
+        this.reversedBy = actorId;
+        this.reversedByEntryId = reversingEntryId;
     }
 }

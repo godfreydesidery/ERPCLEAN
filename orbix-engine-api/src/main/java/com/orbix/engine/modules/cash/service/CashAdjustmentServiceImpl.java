@@ -2,8 +2,10 @@ package com.orbix.engine.modules.cash.service;
 
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.cash.domain.dto.CashAdjustmentDto;
+import com.orbix.engine.modules.cash.domain.dto.CashEntryDto;
 import com.orbix.engine.modules.cash.domain.dto.PostCashAdjustmentRequestDto;
 import com.orbix.engine.modules.cash.domain.entity.CashAdjustment;
+import com.orbix.engine.modules.cash.domain.enums.CashDirection;
 import com.orbix.engine.modules.cash.domain.enums.CashRefType;
 import com.orbix.engine.modules.cash.domain.enums.GlCategory;
 import com.orbix.engine.modules.cash.repository.CashAdjustmentRepository;
@@ -20,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -61,13 +65,16 @@ public class CashAdjustmentServiceImpl implements CashAdjustmentService {
             CashRefType.CASH_ADJUSTMENT, saved.getId(),
             GlCategory.ADJUSTMENT, request.reason(), actorId);
 
-        events.publish("CashAdjustmentPosted.v1", AGG, String.valueOf(saved.getId()),
-            Map.of("cashAdjustmentId", saved.getId(),
-                "branchId", saved.getBranchId(),
-                "account", saved.getAccount(),
-                "direction", saved.getDirection(),
-                "amount", saved.getAmount(),
-                "businessDate", saved.getBusinessDate()));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("cashAdjustmentUid", saved.getUid());
+        payload.put("cashAdjustmentId", saved.getId());
+        payload.put("branchId", saved.getBranchId());
+        payload.put("account", saved.getAccount());
+        payload.put("direction", saved.getDirection());
+        payload.put("amount", saved.getAmount());
+        payload.put("currencyCode", saved.getCurrencyCode());
+        payload.put("businessDate", saved.getBusinessDate());
+        events.publish("CashAdjustmentPosted.v1", AGG, String.valueOf(saved.getId()), payload);
         return CashAdjustmentDto.from(saved);
     }
 
@@ -78,6 +85,69 @@ public class CashAdjustmentServiceImpl implements CashAdjustmentService {
         return adjustments.findByBranchIdAndBusinessDateOrderByAtAsc(branchId, businessDate).stream()
             .map(CashAdjustmentDto::from)
             .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CashAdjustmentDto getCashAdjustmentByUid(String uid) {
+        return CashAdjustmentDto.from(requireCashAdjustmentByUid(uid));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ARCHIVE", entityType = AGG)
+    public CashAdjustmentDto archiveCashAdjustmentByUid(String uid) {
+        CashAdjustment original = requireCashAdjustmentByUid(uid);
+        if (original.isReversed()) {
+            throw new IllegalArgumentException(
+                "Cash adjustment is already reversed: " + original.getUid());
+        }
+        Long actorId = context.userId();
+
+        // Compensating entry: opposite direction, same account / amount / currency.
+        // New ref_type avoids the (ref_type, ref_id, direction) UNIQUE on
+        // cash_entry (the original posting already occupies that triple) and
+        // keeps the reversal trivially queryable.
+        CashDirection opposite = original.getDirection() == CashDirection.IN
+            ? CashDirection.OUT : CashDirection.IN;
+        CashEntryDto reversingEntry = cashLedger.post(
+            Instant.now(),
+            original.getCompanyId(),
+            original.getBranchId(),
+            original.getBusinessDate(),
+            original.getAccount(),
+            opposite,
+            original.getAmount(),
+            BigDecimal.ONE,
+            original.getCurrencyCode(),
+            CashRefType.CASH_ADJUSTMENT_REVERSAL,
+            original.getId(),
+            GlCategory.ADJUSTMENT,
+            "REVERSAL: " + original.getReason(),
+            actorId
+        );
+
+        original.markReversed(actorId, reversingEntry.id());
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("cashAdjustmentUid", original.getUid());
+        payload.put("cashAdjustmentId", original.getId());
+        payload.put("reversingCashEntryId", reversingEntry.id());
+        payload.put("reversedBy", actorId);
+        payload.put("branchId", original.getBranchId());
+        payload.put("businessDate", original.getBusinessDate());
+        events.publish("CashAdjustmentReversed.v1", AGG, String.valueOf(original.getId()), payload);
+        return CashAdjustmentDto.from(original);
+    }
+
+    private CashAdjustment requireCashAdjustmentByUid(String uid) {
+        CashAdjustment adjustment = adjustments.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Cash adjustment not found: " + uid));
+        if (!Objects.equals(adjustment.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Cash adjustment not found: " + uid);
+        }
+        branchScope.requireAccess(adjustment.getBranchId());
+        return adjustment;
     }
 
     private String requireCompanyCurrency(Long companyId) {

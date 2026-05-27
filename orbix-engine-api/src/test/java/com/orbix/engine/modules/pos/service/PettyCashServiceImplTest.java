@@ -9,6 +9,7 @@ import com.orbix.engine.modules.cash.domain.enums.GlCategory;
 import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -26,13 +27,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -80,6 +85,7 @@ class PettyCashServiceImplTest {
         lenient().when(payouts.save(any(PettyCash.class))).thenAnswer(inv -> {
             PettyCash p = inv.getArgument(0);
             p.setId(nextId.getAndIncrement());
+            ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
             return p;
         });
     }
@@ -89,6 +95,15 @@ class PettyCashServiceImplTest {
             new BigDecimal("50000"));
         s.setId(SESSION_ID);
         return s;
+    }
+
+    private static PettyCash payout(Long companyId, Long branchId) {
+        PettyCash p = new PettyCash(SESSION_ID, companyId, branchId, BUSINESS_DATE,
+            new BigDecimal("2000"), Instant.now(), PettyCashCategory.TRANSPORT,
+            "Driver Sam", ACTOR_ID, SUPERVISOR_ID, "Courier", null);
+        p.setId(6500L);
+        ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
+        return p;
     }
 
     @Test
@@ -133,5 +148,33 @@ class PettyCashServiceImplTest {
             .isInstanceOf(AccessDeniedException.class)
             .hasMessageContaining("POS.PETTY_CASH");
         verify(payouts, never()).save(any());
+    }
+
+    // ---- uid entry points --------------------------------------------------
+
+    @Test
+    void getByUid_returnsPayoutWhenTenantMatches() {
+        PettyCash p = payout(COMPANY_ID, BRANCH_ID);
+        when(payouts.findByUid(p.getUid())).thenReturn(Optional.of(p));
+
+        assertThat(service.getPettyCashByUid(p.getUid()).uid()).isEqualTo(p.getUid());
+    }
+
+    @Test
+    void getByUid_throwsWhenNotFound() {
+        when(payouts.findByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getPettyCashByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F"))
+            .isInstanceOf(NoSuchElementException.class)
+            .hasMessageContaining("Petty cash not found");
+    }
+
+    @Test
+    void getByUid_throwsWhenCrossTenant() {
+        PettyCash foreign = payout(999L, BRANCH_ID);
+        when(payouts.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.getPettyCashByUid(foreign.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }
