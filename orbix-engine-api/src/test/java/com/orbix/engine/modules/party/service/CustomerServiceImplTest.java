@@ -96,24 +96,35 @@ class CustomerServiceImplTest {
     }
 
     @Test
-    void deactivateCustomer_delegatesToPartyService() {
+    void archiveCustomer_delegatesToPartyService() {
         Party party = party(100L, "CUST0001");
         when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(customers.findById(100L)).thenReturn(java.util.Optional.of(new Customer(100L)));
 
-        service.deactivateCustomerByPartyUid(party.getUid());
+        service.archiveCustomerByPartyUid(party.getUid());
 
-        verify(partyService).deactivate(100L);
+        verify(partyService).archive(100L);
     }
 
     @Test
-    void deactivateCustomer_whenNotACustomer_throwsNotFound() {
+    void archiveCustomer_whenNotACustomer_throwsNotFound() {
         Party party = party(100L, "CUST0001");
         when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(customers.findById(100L)).thenReturn(java.util.Optional.empty());
 
-        assertThatThrownBy(() -> service.deactivateCustomerByPartyUid(party.getUid()))
+        assertThatThrownBy(() -> service.archiveCustomerByPartyUid(party.getUid()))
             .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    void activateCustomer_delegatesToPartyService() {
+        Party party = party(100L, "CUST0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
+        when(customers.findById(100L)).thenReturn(java.util.Optional.of(new Customer(100L)));
+
+        service.activateCustomerByPartyUid(party.getUid());
+
+        verify(partyService).activate(100L);
     }
 
     @Test

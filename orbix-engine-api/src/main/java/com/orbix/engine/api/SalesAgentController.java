@@ -15,11 +15,14 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
 
-/** Sales-agent management (F1.7). Gated by {@code PARTY.MANAGE_AGENTS}. */
+/**
+ * Sales-agent management (F1.7). Per-action permissions:
+ * {@code SALES_AGENT.CREATE}, {@code SALES_AGENT.UPDATE}, {@code SALES_AGENT.ARCHIVE}
+ * (archive perm also gates re-activation, the inverse of archive).
+ */
 @RestController
 @RequestMapping("/api/v1/sales-agents")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('PARTY.MANAGE_AGENTS')")
 @Validated
 public class SalesAgentController {
 
@@ -36,6 +39,7 @@ public class SalesAgentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SALES_AGENT.CREATE')")
     public ResponseEntity<SalesAgentResponseDto> createSalesAgent(
             @Valid @RequestBody CreateSalesAgentRequestDto request) {
         SalesAgentResponseDto agent = service.createSalesAgent(request);
@@ -44,18 +48,21 @@ public class SalesAgentController {
     }
 
     @PatchMapping("/uid/{partyUid}")
+    @PreAuthorize("hasAuthority('SALES_AGENT.UPDATE')")
     public SalesAgentResponseDto updateSalesAgent(@PathVariable @ValidUlid String partyUid,
                                                   @Valid @RequestBody UpdateSalesAgentRequestDto request) {
         return service.updateSalesAgentByPartyUid(partyUid, request);
     }
 
-    @PostMapping("/uid/{partyUid}/deactivate")
-    public ResponseEntity<Void> deactivateSalesAgent(@PathVariable @ValidUlid String partyUid) {
-        service.deactivateSalesAgentByPartyUid(partyUid);
+    @PostMapping("/uid/{partyUid}/archive")
+    @PreAuthorize("hasAuthority('SALES_AGENT.ARCHIVE')")
+    public ResponseEntity<Void> archiveSalesAgent(@PathVariable @ValidUlid String partyUid) {
+        service.archiveSalesAgentByPartyUid(partyUid);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/uid/{partyUid}/activate")
+    @PreAuthorize("hasAuthority('SALES_AGENT.ARCHIVE')")
     public ResponseEntity<Void> activateSalesAgent(@PathVariable @ValidUlid String partyUid) {
         service.activateSalesAgentByPartyUid(partyUid);
         return ResponseEntity.noContent().build();

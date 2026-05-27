@@ -105,13 +105,34 @@ class SupplierServiceImplTest {
     }
 
     @Test
-    void deactivateSupplier_delegatesToPartyService() {
+    void archiveSupplier_delegatesToPartyService() {
         Party party = party(100L, "SUP0001");
         when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
         when(suppliers.findById(100L)).thenReturn(java.util.Optional.of(new Supplier(100L)));
 
-        service.deactivateSupplierByPartyUid(party.getUid());
+        service.archiveSupplierByPartyUid(party.getUid());
 
-        verify(partyService).deactivate(100L);
+        verify(partyService).archive(100L);
+    }
+
+    @Test
+    void archiveSupplier_whenNotASupplier_throwsNotFound() {
+        Party party = party(100L, "SUP0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
+        when(suppliers.findById(100L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> service.archiveSupplierByPartyUid(party.getUid()))
+            .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    void activateSupplier_delegatesToPartyService() {
+        Party party = party(100L, "SUP0001");
+        when(partyService.requireInCompanyByUid(party.getUid())).thenReturn(party);
+        when(suppliers.findById(100L)).thenReturn(java.util.Optional.of(new Supplier(100L)));
+
+        service.activateSupplierByPartyUid(party.getUid());
+
+        verify(partyService).activate(100L);
     }
 }

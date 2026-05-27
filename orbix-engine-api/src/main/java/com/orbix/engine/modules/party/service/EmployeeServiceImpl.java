@@ -103,12 +103,12 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     @Transactional
-    @Auditable(action = "DEACTIVATE", entityType = "Employee")
-    public void deactivateEmployeeByPartyUid(String partyUid) {
+    @Auditable(action = "ARCHIVE", entityType = "Employee")
+    public void archiveEmployeeByPartyUid(String partyUid) {
         Party party = partyService.requireInCompanyByUid(partyUid);
         employees.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_AN_EMPLOYEE + partyUid));
-        partyService.deactivate(party.getId());
+        partyService.archive(party.getId());
     }
 
     @Override

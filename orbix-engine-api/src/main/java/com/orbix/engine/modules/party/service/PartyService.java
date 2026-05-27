@@ -44,9 +44,9 @@ public interface PartyService {
     /** Loads a party by its uid, asserting it belongs to the caller's company. */
     Party requireInCompanyByUid(String partyUid);
 
-    /** Marks the party (and therefore every role on it) INACTIVE. */
-    void deactivate(Long partyId);
+    /** Marks the party (and therefore every role on it) ARCHIVED. */
+    void archive(Long partyId);
 
-    /** Marks the party (and therefore every role on it) ACTIVE. */
+    /** Restores an archived party (and therefore every role on it) to ACTIVE. */
     void activate(Long partyId);
 }

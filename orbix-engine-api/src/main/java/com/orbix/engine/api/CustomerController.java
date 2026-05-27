@@ -17,11 +17,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
-/** Customer management (F1.7). Gated by {@code PARTY.MANAGE_CUSTOMERS}. */
+/**
+ * Customer management (F1.7). Per-action permissions:
+ * {@code CUSTOMER.CREATE}, {@code CUSTOMER.UPDATE}, {@code CUSTOMER.ARCHIVE}
+ * (archive perm also gates re-activation, the inverse of archive).
+ */
 @RestController
 @RequestMapping("/api/v1/customers")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('PARTY.MANAGE_CUSTOMERS')")
 @Validated
 public class CustomerController {
 
@@ -42,6 +45,7 @@ public class CustomerController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('CUSTOMER.CREATE')")
     public ResponseEntity<CustomerResponseDto> createCustomer(
             @Valid @RequestBody CreateCustomerRequestDto request) {
         CustomerResponseDto customer = service.createCustomer(request);
@@ -50,18 +54,21 @@ public class CustomerController {
     }
 
     @PatchMapping("/uid/{partyUid}")
+    @PreAuthorize("hasAuthority('CUSTOMER.UPDATE')")
     public CustomerResponseDto updateCustomer(@PathVariable @ValidUlid String partyUid,
                                               @Valid @RequestBody UpdateCustomerRequestDto request) {
         return service.updateCustomerByPartyUid(partyUid, request);
     }
 
-    @PostMapping("/uid/{partyUid}/deactivate")
-    public ResponseEntity<Void> deactivateCustomer(@PathVariable @ValidUlid String partyUid) {
-        service.deactivateCustomerByPartyUid(partyUid);
+    @PostMapping("/uid/{partyUid}/archive")
+    @PreAuthorize("hasAuthority('CUSTOMER.ARCHIVE')")
+    public ResponseEntity<Void> archiveCustomer(@PathVariable @ValidUlid String partyUid) {
+        service.archiveCustomerByPartyUid(partyUid);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/uid/{partyUid}/activate")
+    @PreAuthorize("hasAuthority('CUSTOMER.ARCHIVE')")
     public ResponseEntity<Void> activateCustomer(@PathVariable @ValidUlid String partyUid) {
         service.activateCustomerByPartyUid(partyUid);
         return ResponseEntity.noContent().build();

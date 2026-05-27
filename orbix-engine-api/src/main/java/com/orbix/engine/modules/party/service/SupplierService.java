@@ -18,8 +18,9 @@ public interface SupplierService {
 
     SupplierResponseDto updateSupplierByPartyUid(String partyUid, UpdateSupplierRequestDto request);
 
-    void deactivateSupplierByPartyUid(String partyUid);
+    /** Archives the underlying party (affects every role on it). */
+    void archiveSupplierByPartyUid(String partyUid);
 
-    /** Reactivates the underlying party (affects every role on it). */
+    /** Restores the underlying party to ACTIVE (affects every role on it). */
     void activateSupplierByPartyUid(String partyUid);
 }

@@ -6,6 +6,7 @@ import com.orbix.engine.modules.party.domain.dto.PartyDetailsDto;
 import com.orbix.engine.modules.party.domain.dto.PartyResponseDto;
 import com.orbix.engine.modules.party.domain.entity.Party;
 import com.orbix.engine.modules.party.domain.entity.PartyCodeSequence;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
 import com.orbix.engine.modules.party.repository.PartyCodeSequenceRepository;
 import com.orbix.engine.modules.party.repository.PartyRepository;
 import lombok.RequiredArgsConstructor;
@@ -113,10 +114,13 @@ public class PartyServiceImpl implements PartyService {
 
     @Override
     @Transactional
-    public void deactivate(Long partyId) {
+    public void archive(Long partyId) {
         Party party = requireInCompany(partyId);
-        party.deactivate(context.userId());
-        events.publish("PartyDeactivated.v1", "Party", party.getUid(),
+        if (party.getStatus() == PartyStatus.ARCHIVED) {
+            throw new IllegalArgumentException("Party is already archived: " + party.getUid());
+        }
+        party.archive(context.userId());
+        events.publish("PartyArchived.v1", "Party", party.getUid(),
             Map.of("partyUid", party.getUid()));
     }
 
@@ -124,6 +128,9 @@ public class PartyServiceImpl implements PartyService {
     @Transactional
     public void activate(Long partyId) {
         Party party = requireInCompany(partyId);
+        if (party.getStatus() == PartyStatus.ACTIVE) {
+            throw new IllegalArgumentException("Party is already active: " + party.getUid());
+        }
         party.activate(context.userId());
         events.publish("PartyReactivated.v1", "Party", party.getUid(),
             Map.of("partyUid", party.getUid()));

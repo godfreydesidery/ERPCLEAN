@@ -99,12 +99,12 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional
-    @Auditable(action = "DEACTIVATE", entityType = "Customer")
-    public void deactivateCustomerByPartyUid(String partyUid) {
+    @Auditable(action = "ARCHIVE", entityType = "Customer")
+    public void archiveCustomerByPartyUid(String partyUid) {
         Party party = partyService.requireInCompanyByUid(partyUid);
         customers.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
-        partyService.deactivate(party.getId());
+        partyService.archive(party.getId());
     }
 
     @Override

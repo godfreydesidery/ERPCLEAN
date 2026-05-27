@@ -18,8 +18,9 @@ public interface EmployeeService {
 
     EmployeeResponseDto updateEmployeeByPartyUid(String partyUid, UpdateEmployeeRequestDto request);
 
-    void deactivateEmployeeByPartyUid(String partyUid);
+    /** Archives the underlying party (affects every role on it). */
+    void archiveEmployeeByPartyUid(String partyUid);
 
-    /** Reactivates the underlying party (affects every role on it). */
+    /** Restores the underlying party to ACTIVE (affects every role on it). */
     void activateEmployeeByPartyUid(String partyUid);
 }
