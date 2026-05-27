@@ -4,6 +4,7 @@
 
 CREATE TABLE business_day_override (
     id                   BIGINT      NOT NULL PRIMARY KEY,
+    uid                  CHAR(26)    NOT NULL,
     branch_id            BIGINT      NOT NULL,
     target_business_date DATE        NOT NULL,
     entity_type          VARCHAR(40) NOT NULL,
@@ -11,7 +12,8 @@ CREATE TABLE business_day_override (
     reason               TEXT        NOT NULL,
     authorised_by        BIGINT      NOT NULL,
     at                   TIMESTAMP   NOT NULL,
-    CONSTRAINT fk_business_day_override_branch FOREIGN KEY (branch_id) REFERENCES branch (id)
+    CONSTRAINT fk_business_day_override_branch FOREIGN KEY (branch_id) REFERENCES branch (id),
+    CONSTRAINT uk_business_day_override_uid UNIQUE (uid)
 );
 CREATE INDEX ix_business_day_override_branch_date
     ON business_day_override (branch_id, target_business_date);

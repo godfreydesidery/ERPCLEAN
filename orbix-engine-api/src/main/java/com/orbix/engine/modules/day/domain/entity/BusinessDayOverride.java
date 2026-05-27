@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.day.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -12,13 +13,21 @@ import java.time.LocalDate;
 /**
  * Audit record written whenever a supervisor back-dates a posting into a
  * closed business day. Rare and tightly scoped. DATA-MODEL.md §11.2.
+ *
+ * <p>Surrogate-Long PK; uid is the external URL handle (Slice D — overrides
+ * are linkable from audit views).
  */
 @Entity
-@Table(name = "business_day_override")
+@Table(
+    name = "business_day_override",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_business_day_override_uid", columnNames = {"uid"})
+    }
+)
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class BusinessDayOverride {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class BusinessDayOverride extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "business_day_override_seq")
