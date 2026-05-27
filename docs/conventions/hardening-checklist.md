@@ -77,7 +77,7 @@
   INSERT INTO role_permission (role_id, permission_id)
   SELECT 1, p.id FROM permission p WHERE p.id IN (<ids>);
   ```
-- [ ] **Permission ids are hard-coded** in a range that cannot collide with `permission_seq` (bumped past 100 in `V4_1`).
+- [ ] **Permission ids are hard-coded** in a range that cannot collide with `permission_seq` (bumped past 100 in `V4_1`) **and** does not collide with any other seed migration's band. Verify with `grep -EHn "^\s*\([0-9]+, '" orbix-engine-api/src/main/resources/db/migration/common/V*permission*.sql` before picking the range — pick a free block above the current high-water mark.
 - [ ] **Constants added to `com.orbix.engine.modules.iam.domain.enums.Permissions`** in the right module section (see how catalog adds `UOM_MANAGE`, `PRICE_LIST_*`, `PRICE_SET`, `PRICE_APPROVE`).
 - [ ] **Permission codes follow `MODULE.ACTION`** convention, all-caps, underscores in action.
 
