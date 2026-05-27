@@ -54,19 +54,19 @@ import { StockService } from './stock.service';
               <legend class="form-fieldset__legend"><i class="bi bi-sliders text-secondary"></i> Item &amp; quantity</legend>
               <div class="row g-2">
                 <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="itemIdModel"
+                  <label for="adj-itemId" class="form-label small fw-semibold text-secondary">Item ID</label>
+                  <input id="adj-itemId" class="form-control" type="number" [(ngModel)]="itemIdModel"
                          (ngModelChange)="itemId.set($event)" name="itemId" required>
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label small fw-semibold text-secondary">Signed qty</label>
-                  <input class="form-control text-end" type="number" step="0.0001"
+                  <label for="adj-qty" class="form-label small fw-semibold text-secondary">Signed qty</label>
+                  <input id="adj-qty" class="form-control text-end" type="number" step="0.0001"
                          [(ngModel)]="qtyModel" (ngModelChange)="qty.set($event)" name="qty" required>
                   <small class="form-text text-secondary">+ inbound, − shrinkage / outbound</small>
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label small fw-semibold text-secondary">Unit cost <span class="text-muted">(in only)</span></label>
-                  <input class="form-control text-end" type="number" step="0.0001"
+                  <label for="adj-unitCost" class="form-label small fw-semibold text-secondary">Unit cost <span class="text-muted">(in only)</span></label>
+                  <input id="adj-unitCost" class="form-control text-end" type="number" step="0.0001"
                          [(ngModel)]="unitCostModel" (ngModelChange)="unitCost.set($event)" name="unitCost">
                 </div>
               </div>
@@ -76,23 +76,23 @@ import { StockService } from './stock.service';
               <legend class="form-fieldset__legend"><i class="bi bi-clipboard-data text-secondary"></i> Context</legend>
               <div class="row g-2">
                 <div class="col-12">
-                  <label class="form-label small fw-semibold text-secondary">Reason</label>
-                  <input class="form-control" type="text" [(ngModel)]="reasonModel"
+                  <label for="adj-reason" class="form-label small fw-semibold text-secondary">Reason</label>
+                  <input id="adj-reason" class="form-control" type="text" [(ngModel)]="reasonModel"
                          (ngModelChange)="reason.set($event)" name="reason" required placeholder="e.g. weekly cycle count variance">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Section ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" [(ngModel)]="sectionIdModel"
+                  <label for="adj-sectionId" class="form-label small fw-semibold text-secondary">Section ID <span class="text-muted">(opt)</span></label>
+                  <input id="adj-sectionId" class="form-control" type="number" [(ngModel)]="sectionIdModel"
                          (ngModelChange)="sectionId.set($event)" name="sectionId">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" [(ngModel)]="batchIdModel"
+                  <label for="adj-batchId" class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
+                  <input id="adj-batchId" class="form-control" type="number" [(ngModel)]="batchIdModel"
                          (ngModelChange)="batchId.set($event)" name="batchId">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="authoriserModel"
+                  <label for="adj-authoriser" class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
+                  <input id="adj-authoriser" class="form-control" type="number" [(ngModel)]="authoriserModel"
                          (ngModelChange)="authorisedByUserId.set($event)" name="authoriser">
                   <small class="form-text text-secondary">Required above threshold</small>
                 </div>
