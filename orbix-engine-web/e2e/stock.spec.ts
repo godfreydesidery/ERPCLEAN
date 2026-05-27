@@ -505,11 +505,9 @@ test.describe('Stock · adjustment over threshold with authoriser', () => {
 test.describe('Stock · negative-stock guard without OVERSELL', () => {
   // stock-controller does not hold STOCK.OVERSELL — the gate must reject.
   test.use({ persona: 'stock-controller' as Persona });
-  // Backend gap (Slice E1 task): the rejection today comes from the
-  // dual-control "authoriser required" path, not the OVERSELL-hint path.
-  // Backend will reorder the guards so the negative-stock case is named
-  // explicitly and mentions STOCK.OVERSELL. Until then, test.fail.
-  test.fail();
+  // Slice E1 backend reordered the guards so negative-stock surfaces the
+  // STOCK.OVERSELL hint explicitly (AdjustmentServiceImpl pre-checks the
+  // OVERSELL guard before dual-control).
   test('outbound that would drive negative without allowOversell is rejected with STOCK.OVERSELL hint', async ({ page }) => {
     const r0 = requireRefs();
     // Read current balance; choose qty that pushes it negative.
@@ -756,10 +754,10 @@ test.describe('Stock · transfer issue and receive', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Stock · dashboard negative-stock alert', () => {
-  // TODO depends on QA#2 persona — `stock-controller-oversell` so the
-  // setup oversell actually persists a negative balance for this branch.
+  // stock-controller-oversell can persist a negative balance; the new
+  // Negative-stock tile sources from /api/v1/reports/stock-negative.
   test.use({ persona: 'stock-controller-oversell' as Persona });
-  test.fail('dashboard tile "Negative stock" reports the negative on-hand items count', async ({ page }) => {
+  test('dashboard tile "Negative stock" reports the negative on-hand items count', async ({ page }) => {
     const r0 = requireRefs();
     const approverId = userIdByUsername('qa.stock.approver');
 
