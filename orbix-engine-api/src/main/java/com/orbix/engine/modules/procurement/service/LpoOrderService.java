@@ -37,4 +37,11 @@ public interface LpoOrderService {
     PageDto<LpoOrderDto> list(Long branchId, Pageable pageable);
 
     LpoOrderDto get(String uid);
+
+    /**
+     * Count of LPOs sitting in PENDING_APPROVAL for a branch (or company-wide
+     * when {@code branchId} is null). Used by the dashboard's "Approvals
+     * pending" tile.
+     */
+    long countPendingApproval(Long branchId);
 }

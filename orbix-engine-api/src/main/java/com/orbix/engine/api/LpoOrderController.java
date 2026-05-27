@@ -8,6 +8,7 @@ import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.service.LpoOrderService;
 import jakarta.validation.Valid;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,16 @@ public class LpoOrderController {
     @PreAuthorize("hasAuthority('PROCUREMENT.MANAGE_LPO')")
     public LpoOrderDto get(@PathVariable @ValidUlid String uid) {
         return service.get(uid);
+    }
+
+    /**
+     * Count of LPOs in PENDING_APPROVAL — backs the dashboard
+     * "Approvals pending" tile. {@code branchId} optional; null = company-wide.
+     */
+    @GetMapping("/pending-approval/count")
+    @PreAuthorize("hasAnyAuthority('PROCUREMENT.MANAGE_LPO', 'PROCUREMENT.APPROVE_LPO', 'PROCUREMENT.MANAGE_LPO.READ')")
+    public Map<String, Long> pendingApprovalCount(@RequestParam(required = false) Long branchId) {
+        return Map.of("count", service.countPendingApproval(branchId));
     }
 
     @PostMapping
