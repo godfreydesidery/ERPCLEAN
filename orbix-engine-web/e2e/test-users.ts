@@ -80,13 +80,14 @@ export const TEST_USERS: Record<Persona, TestUser> = {
     permissions: [
       'POS.SALE_POST',
       'POS.SALE_VOID',
-      'SALES_INVOICE.READ',
-      'SALES_INVOICE.POST',
-      'SALES_RECEIPT.READ',
-      'SALES_RECEIPT.POST',
-      // Slice-C-pending perm — bootstrap drops it gracefully if absent
+      // The seeded coarse codes from V28 — invoice + receipt CRUD are bundled
+      // into a single MANAGE_* perm each. Slice C does NOT split these.
+      'SALES.MANAGE_INVOICE',
+      'SALES.MANAGE_RECEIPT',
+      // Slice-C-pending perms — bootstrap drops them gracefully if absent
       // (mirrors supervisor's PROCUREMENT.CANCEL_LPO / GRN.CANCEL pattern).
       'SALES_INVOICE.OVERRIDE_CREDIT',
+      'SALES_INVOICE.REPRINT',
     ],
   },
   'store-manager': {
@@ -178,10 +179,12 @@ export const TEST_USERS: Record<Persona, TestUser> = {
     defaultBranchId: HQ_BRANCH,
     permissions: [
       'POS.SALE_POST',
-      'SALES_INVOICE.READ',
-      'SALES_INVOICE.POST',
-      'SALES_RECEIPT.READ',
-      'SALES_RECEIPT.POST',
+      // Coarse codes from V28 — bundle invoice + receipt CRUD. Slice C does
+      // NOT split. The sales-clerk gets these so they can attempt the
+      // over-limit POST (gate must fire) and the AR-summary GET (perm must
+      // 403 — they don't carry SALES.REPORT.AR_SUMMARY).
+      'SALES.MANAGE_INVOICE',
+      'SALES.MANAGE_RECEIPT',
     ],
   },
 };
