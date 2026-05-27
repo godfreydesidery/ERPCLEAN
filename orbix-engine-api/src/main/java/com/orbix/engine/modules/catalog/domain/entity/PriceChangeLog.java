@@ -12,6 +12,7 @@ import java.time.LocalDate;
 
 /**
  * Append-only audit of every price change. Never updated, never deleted.
+ * {@code newPrice} null records a discontinuation (the price was withdrawn).
  * DATA-MODEL.md §3.10.
  */
 @Entity
@@ -32,7 +33,7 @@ public class PriceChangeLog {
     @Column(name = "old_price", precision = 18, scale = 4)
     private BigDecimal oldPrice;
 
-    @Column(name = "new_price", nullable = false, precision = 18, scale = 4)
+    @Column(name = "new_price", precision = 18, scale = 4)
     private BigDecimal newPrice;
 
     @Column(name = "effective_from", nullable = false)

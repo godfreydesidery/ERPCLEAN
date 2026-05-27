@@ -21,25 +21,57 @@ The four documents at repo root — `PRD.md`, `ARCHITECTURE.md`, `DATA-MODEL.md`
 
 ## Common commands
 
-### Infrastructure (run once per dev session)
+### Default: start local in QA parity (use this when running the app)
+
+The remote QA box runs a single self-contained image (API + MariaDB + Redis + Angular bundle) built from `orbix-engine-infra/qa/Dockerfile` and bootstrapped from `orbix.env`. **Local runs should mirror it** so we exercise the same image, profile (`mysql,qa`), and env-driven bootstrap as production-shaped QA. Use the dev-mode commands further down only when you need fast iteration (hot reload).
+
+```powershell
+# Build once per code change to the API or web (re-runs npm install + maven package inside the image)
+docker build -f orbix-engine-infra/qa/Dockerfile -t orbix:qa .
+
+# Start (idempotent — removes any stale container of the same name first)
+docker rm -f orbix 2>$null
+docker volume create orbix-data-local | Out-Null
+docker run -d --name orbix --restart unless-stopped `
+  -p 8081:8081 `
+  -v orbix-data-local:/var/lib/mysql `
+  --env-file orbix-engine-infra/qa/orbix.env `
+  orbix:qa
+
+# Watch boot
+docker logs -f orbix
+```
+
+- URL: `http://localhost:8081/` (both Angular bundle and `/api/v1`)
+- Health: `http://localhost:8081/actuator/health` → `{"status":"UP"}` once Flyway + Tomcat are up (~30–60 s first run)
+- Login: `rootadmin` / `ORBIX_BOOTSTRAP_ADMIN_PASSWORD` from `orbix-engine-infra/qa/orbix.env` (gitignored; see `CREDENTIALS.local.md` in the same folder for the current value)
+- **Wipe to start with fresh data**:
+  ```powershell
+  docker rm -f orbix; docker volume rm orbix-data-local
+  # then re-run the `docker run` above — Flyway re-runs from scratch and env bootstrap re-creates org/company/branch/rootadmin
+  ```
+- The local `docker-compose.yml` (MariaDB :3307, Postgres :5432, Redis :6379, Meili :7700, MinIO :9000–9001, phpMyAdmin :8090) is **only** for dev-mode iteration below; leave it down when running the QA-parity container.
+
+### Dev mode (only when you need hot reload)
+
 ```powershell
 docker compose up -d                                  # MariaDB on :3307, Postgres :5432, Redis :6379, Meilisearch :7700, MinIO :9000-9001, phpMyAdmin :8090
 docker compose down
 ```
-Data persists under `./infra/local-data/` (gitignored). MariaDB (not vanilla MySQL) is used because Flyway migrations rely on native `CREATE SEQUENCE`.
+Data persists under `./infra/local-data/` (gitignored). MariaDB (not vanilla MySQL) is used because Flyway migrations rely on native `CREATE SEQUENCE`. Dev mode uses the `local` profile, which seeds an `admin`/`orbix` user (see [DevSeed.java](orbix-engine-api/src/main/java/com/orbix/engine/modules/iam/service/DevSeed.java)) — that account does **not** exist in the QA-parity container.
 
-### Backend (`orbix-engine-api/`)
+#### Backend (`orbix-engine-api/`)
 ```powershell
-./mvnw spring-boot:run                                                  # default profile: local,mysql — http://localhost:8081
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local,postgres        # switch DB engine
-./mvnw test                                                             # full test suite (unit + ArchUnit + smoke)
-./mvnw test -Dtest=ItemServiceImplTest                                  # single test class
-./mvnw test -Dtest=ItemServiceImplTest#createItem_persistsAndReturnsDto # single test method
-./mvnw -pl orbix-engine-api spring-boot:run                             # if invoked from repo root
+mvn spring-boot:run                                                  # default profile: local,mysql — http://localhost:8081
+mvn spring-boot:run -Dspring-boot.run.profiles=local,postgres        # switch DB engine
+mvn test                                                             # full test suite (unit + ArchUnit + smoke)
+mvn test -Dtest=ItemServiceImplTest                                  # single test class
+mvn test -Dtest=ItemServiceImplTest#createItem_persistsAndReturnsDto # single test method
+mvn -pl orbix-engine-api spring-boot:run                             # if invoked from repo root
 ```
-Swagger UI: `http://localhost:8081/swagger-ui.html`.
+Swagger UI: `http://localhost:8081/swagger-ui.html`. No `mvnw` wrapper — use the system `mvn`.
 
-### Frontend (`orbix-engine-web/`)
+#### Frontend (`orbix-engine-web/`)
 ```powershell
 npm install
 npm start             # ng serve on :4200; expects API on http://localhost:8081/api/v1

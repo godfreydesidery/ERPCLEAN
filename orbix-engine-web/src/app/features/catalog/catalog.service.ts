@@ -4,12 +4,15 @@ import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import {
+  AdjustPricesRequest,
+  CopyPricesRequest,
   CreateItemBarcodeRequest,
   CreateItemGroupRequest,
   CreateItemRequest,
   CreatePriceListRequest,
   CreateUomRequest,
   CreateVatGroupRequest,
+  DiscontinuePriceRequest,
   Item,
   ItemBarcode,
   ItemGroup,
@@ -172,9 +175,27 @@ export class CatalogService {
     return this.http.post(`${this.base}/price-lists/uid/${uid}/activate`, {}).pipe(map(() => void 0));
   }
 
-  listPrices(priceListUid: string): Observable<PriceListItem[]> {
+  listPrices(priceListUid: string, asOf?: string): Observable<PriceListItem[]> {
+    let params = new HttpParams();
+    if (asOf) {
+      params = params.set('asOf', asOf);
+    }
     return unwrap(this.http.get<ApiResponse<PriceListItem[]>>(
-      `${this.base}/price-lists/uid/${priceListUid}/items`
+      `${this.base}/price-lists/uid/${priceListUid}/items`, { params }
+    ));
+  }
+
+  resolvePrice(priceListUid: string, itemId: string, uomId: string,
+               qty?: number, asOf?: string): Observable<PriceListItem> {
+    let params = new HttpParams().set('itemId', itemId).set('uomId', uomId);
+    if (qty != null) {
+      params = params.set('qty', qty);
+    }
+    if (asOf) {
+      params = params.set('asOf', asOf);
+    }
+    return unwrap(this.http.get<ApiResponse<PriceListItem>>(
+      `${this.base}/price-lists/uid/${priceListUid}/items/resolve`, { params }
     ));
   }
 
@@ -182,6 +203,24 @@ export class CatalogService {
     return unwrap(this.http.put<ApiResponse<PriceListItem>>(
       `${this.base}/price-lists/uid/${priceListUid}/items`, request
     ));
+  }
+
+  discontinuePrice(priceListUid: string, request: DiscontinuePriceRequest): Observable<void> {
+    return this.http.delete(
+      `${this.base}/price-lists/uid/${priceListUid}/items`, { body: request }
+    ).pipe(map(() => void 0));
+  }
+
+  copyPrices(priceListUid: string, request: CopyPricesRequest): Observable<number> {
+    return unwrap(this.http.post<ApiResponse<{ rowsWritten: number }>>(
+      `${this.base}/price-lists/uid/${priceListUid}/items/copy-from`, request
+    )).pipe(map(r => r.rowsWritten));
+  }
+
+  adjustPrices(priceListUid: string, request: AdjustPricesRequest): Observable<number> {
+    return unwrap(this.http.post<ApiResponse<{ rowsWritten: number }>>(
+      `${this.base}/price-lists/uid/${priceListUid}/items/adjust`, request
+    )).pipe(map(r => r.rowsWritten));
   }
 
   priceHistory(itemUid: string): Observable<PriceChangeLog[]> {

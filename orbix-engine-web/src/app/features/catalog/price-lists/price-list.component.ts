@@ -1,4 +1,4 @@
-﻿import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,7 +8,7 @@ import { ApiResponse } from '../../../core/api/api-response';
 import { Currency, CurrencyService } from '../../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
 import { CatalogService } from '../catalog.service';
-import { PriceList, PriceListItem } from '../catalog.models';
+import { Item, PriceList, PriceListItem, Uom } from '../catalog.models';
 
 @Component({
   selector: 'orbix-price-list',
@@ -33,6 +33,13 @@ import { PriceList, PriceListItem } from '../catalog.models';
         <i class="bi bi-exclamation-triangle-fill"></i>
         <span class="flex-grow-1">{{ error() }}</span>
         <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i>
+        <span class="flex-grow-1">{{ notice() }}</span>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="notice.set(null)"></button>
       </div>
     }
 
@@ -223,6 +230,7 @@ import { PriceList, PriceListItem } from '../catalog.models';
             </div>
           </div>
 
+          @if (list.status === 'ACTIVE') {
           <!-- Set price form -->
           <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom p-3">
@@ -231,29 +239,41 @@ import { PriceList, PriceListItem } from '../catalog.models';
             </div>
             <div class="card-body p-3">
               <form (ngSubmit)="submitPrice(list)" #pf="ngForm" class="row g-2 align-items-end">
-                <div class="col-6 col-md-2">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" name="iid"
-                         [(ngModel)]="priceForm.itemId" required>
+                <div class="col-12 col-md-4">
+                  <label class="form-label small fw-semibold text-secondary">Item</label>
+                  <orbix-search-select name="iid" [options]="itemOptions()"
+                                       [(ngModel)]="priceForm.itemId" placeholder="Select an item…" required>
+                  </orbix-search-select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">UoM</label>
+                  <orbix-search-select name="uid" [options]="uomOptions()"
+                                       [(ngModel)]="priceForm.uomId" placeholder="Select…" required>
+                  </orbix-search-select>
                 </div>
                 <div class="col-6 col-md-2">
-                  <label class="form-label small fw-semibold text-secondary">UoM ID</label>
-                  <input class="form-control" type="number" name="uid"
-                         [(ngModel)]="priceForm.uomId" required>
+                  <label class="form-label small fw-semibold text-secondary">Min qty <span class="text-muted">(tier)</span></label>
+                  <input class="form-control text-end" type="number" step="0.0001" min="0" name="mq"
+                         [(ngModel)]="priceForm.minQty" placeholder="0">
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Price</label>
                   <input class="form-control text-end" type="number" step="0.0001" name="prc"
                          [(ngModel)]="priceForm.price" required>
                 </div>
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Effective from</label>
                   <input class="form-control" type="date" name="eff"
                          [(ngModel)]="priceForm.effectiveFrom" required>
                 </div>
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-md-5">
                   <label class="form-label small fw-semibold text-secondary">Reason <span class="text-muted">(optional)</span></label>
                   <input class="form-control" name="rsn" [(ngModel)]="priceForm.reason" placeholder="e.g. cost rise">
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
+                  <input class="form-control" type="number" name="apr" [(ngModel)]="priceForm.approverId"
+                         placeholder="for large changes">
                 </div>
                 <div class="col-12">
                   <button class="btn btn-primary d-inline-flex align-items-center gap-2"
@@ -264,6 +284,79 @@ import { PriceList, PriceListItem } from '../catalog.models';
               </form>
             </div>
           </div>
+
+          <!-- Bulk operations -->
+          <div class="card border-0 shadow-sm mb-3">
+            <button type="button"
+                    class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between w-100 border-0 text-start"
+                    (click)="showBulk.set(!showBulk())">
+              <h3 class="h6 fw-bold mb-0 text-dark"><i class="bi bi-stack me-2"></i>Bulk price changes</h3>
+              <i class="bi" [class.bi-chevron-down]="!showBulk()" [class.bi-chevron-up]="showBulk()"></i>
+            </button>
+            @if (showBulk()) {
+              <div class="card-body p-3 d-flex flex-column gap-4">
+                <!-- Adjust all -->
+                <form (ngSubmit)="submitAdjust(list)" #af="ngForm" class="row g-2 align-items-end">
+                  <div class="col-12"><span class="small fw-semibold text-dark">Shift every current price by a percentage</span></div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary">Adjust %</label>
+                    <input class="form-control text-end" type="number" step="0.01" name="apct"
+                           [(ngModel)]="adjustForm.adjustPct" required placeholder="e.g. 5 or -10">
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-secondary">Effective from</label>
+                    <input class="form-control" type="date" name="aeff" [(ngModel)]="adjustForm.effectiveFrom" required>
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Reason <span class="text-muted">(optional)</span></label>
+                    <input class="form-control" name="arsn" [(ngModel)]="adjustForm.reason" placeholder="e.g. annual uplift">
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
+                    <input class="form-control" type="number" name="aapr" [(ngModel)]="adjustForm.approverId">
+                  </div>
+                  <div class="col-12">
+                    <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
+                            [disabled]="busy() || af.invalid">
+                      <i class="bi bi-percent"></i> Apply to all prices
+                    </button>
+                  </div>
+                </form>
+
+                <!-- Copy from another list -->
+                <form (ngSubmit)="submitCopy(list)" #cf="ngForm" class="row g-2 align-items-end border-top pt-3">
+                  <div class="col-12"><span class="small fw-semibold text-dark">Copy prices from another list</span></div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label small fw-semibold text-secondary">Source list</label>
+                    <orbix-search-select name="src" [options]="sourceListOptions()"
+                                         [(ngModel)]="copyForm.sourcePriceListUid" placeholder="Select a list…" required>
+                    </orbix-search-select>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary">Adjust % <span class="text-muted">(opt)</span></label>
+                    <input class="form-control text-end" type="number" step="0.01" name="cpct"
+                           [(ngModel)]="copyForm.adjustPct" placeholder="0">
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-secondary">Effective from</label>
+                    <input class="form-control" type="date" name="ceff" [(ngModel)]="copyForm.effectiveFrom" required>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
+                    <input class="form-control" type="number" name="capr" [(ngModel)]="copyForm.approverId">
+                  </div>
+                  <div class="col-12">
+                    <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
+                            [disabled]="busy() || cf.invalid">
+                      <i class="bi bi-files"></i> Copy prices here
+                    </button>
+                    <span class="small text-secondary ms-2">Source must share this list's currency ({{ list.currencyCode }}).</span>
+                  </div>
+                </form>
+              </div>
+            }
+          </div>
+          }
 
           <!-- Current prices -->
           <div class="card border-0 shadow-sm overflow-hidden">
@@ -281,18 +374,31 @@ import { PriceList, PriceListItem } from '../catalog.models';
                 <table class="table table-hover align-middle mb-0 simple-table">
                   <thead>
                     <tr>
-                      <th>Item ID</th><th>UoM ID</th>
+                      <th>Item</th><th>UoM</th><th class="text-end">Tier (min qty)</th>
                       <th class="text-end">Price ({{ list.currencyCode }})</th>
                       <th>Valid from</th>
+                      @if (list.status === 'ACTIVE') { <th class="text-end">Actions</th> }
                     </tr>
                   </thead>
                   <tbody>
                     @for (row of prices(); track row.id) {
                       <tr>
-                        <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ row.itemId }}</span></td>
-                        <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ row.uomId }}</span></td>
+                        <td>
+                          <span class="fw-semibold text-dark">{{ row.itemCode ?? ('#' + row.itemId) }}</span>
+                          @if (row.itemName) { <span class="small text-secondary d-block">{{ row.itemName }}</span> }
+                        </td>
+                        <td><span class="badge text-bg-light border text-secondary">{{ row.uomCode ?? ('#' + row.uomId) }}</span></td>
+                        <td class="text-end small text-secondary">{{ row.minQty > 0 ? (row.minQty | number:'1.0-4') : 'any' }}</td>
                         <td class="text-end fw-semibold text-dark">{{ row.price | number:'1.2-4' }}</td>
                         <td class="small text-secondary">{{ row.validFrom | date:'mediumDate' }}</td>
+                        @if (list.status === 'ACTIVE') {
+                          <td class="text-end">
+                            <button class="btn btn-sm btn-outline-danger" (click)="discontinue(list, row)" [disabled]="busy()"
+                                    title="Discontinue this price">
+                              <i class="bi bi-x-circle"></i>
+                            </button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -385,11 +491,26 @@ export class PriceListComponent implements OnInit {
       .map(c => ({ id: c.code, label: `${c.code} · ${c.name}` }))
   );
 
+  protected readonly items = signal<Item[]>([]);
+  protected readonly uoms = signal<Uom[]>([]);
+  protected readonly itemOptions = computed<SearchSelectOption[]>(() =>
+    this.items().map(i => ({ id: i.id, label: `${i.code} · ${i.name}` })));
+  protected readonly uomOptions = computed<SearchSelectOption[]>(() =>
+    this.uoms().map(u => ({ id: u.id, label: `${u.code} · ${u.name}` })));
+  protected readonly sourceListOptions = computed<SearchSelectOption[]>(() => {
+    const current = this.selected();
+    return this.priceLists()
+      .filter(l => l.uid !== current?.uid && l.currencyCode === current?.currencyCode)
+      .map(l => ({ id: l.uid, label: `${l.code} · ${l.name}` }));
+  });
+
   protected readonly priceLists = signal<PriceList[]>([]);
   protected readonly selected = signal<PriceList | null>(null);
   protected readonly prices = signal<PriceListItem[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly notice = signal<string | null>(null);
+  protected readonly showBulk = signal(false);
 
   protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
   protected readonly archivedCount = computed(() =>
@@ -403,12 +524,22 @@ export class PriceListComponent implements OnInit {
 
   protected listForm = blankListForm();
   protected priceForm = blankPriceForm();
+  protected adjustForm = blankAdjustForm();
+  protected copyForm = blankCopyForm();
 
   ngOnInit(): void {
     this.loadLists();
     this.currencyService.listCurrencies().subscribe({
       next: list => this.currencies.set(list),
       error: () => this.currencies.set([])
+    });
+    this.catalog.listItems('ACTIVE', 0, 1000).subscribe({
+      next: page => this.items.set(page.content),
+      error: () => this.items.set([])
+    });
+    this.catalog.listUoms().subscribe({
+      next: list => this.uoms.set(list.filter(u => u.status === 'ACTIVE')),
+      error: () => this.uoms.set([])
     });
   }
 
@@ -484,15 +615,67 @@ export class PriceListComponent implements OnInit {
   }
 
   submitPrice(list: PriceList): void {
+    if (!this.priceForm.itemId || !this.priceForm.uomId) {
+      return;
+    }
     this.run(this.catalog.setPrice(list.uid, {
-      itemId: String(this.priceForm.itemId),
-      uomId: String(this.priceForm.uomId),
+      itemId: this.priceForm.itemId,
+      uomId: this.priceForm.uomId,
+      minQty: this.priceForm.minQty != null ? Number(this.priceForm.minQty) : null,
       price: Number(this.priceForm.price),
       effectiveFrom: this.priceForm.effectiveFrom,
-      reason: this.priceForm.reason.trim() || null
+      reason: this.priceForm.reason.trim() || null,
+      approverId: this.priceForm.approverId ? String(this.priceForm.approverId) : null
     }), () => {
       this.priceForm = blankPriceForm();
       this.loadPrices(list.uid);
+      this.notice.set('Price set.');
+    });
+  }
+
+  discontinue(list: PriceList, row: PriceListItem): void {
+    if (!confirm(`Discontinue the price for ${row.itemCode ?? row.itemId} (${row.uomCode ?? row.uomId}) from today?`)) {
+      return;
+    }
+    this.run(this.catalog.discontinuePrice(list.uid, {
+      itemId: row.itemId,
+      uomId: row.uomId,
+      minQty: row.minQty,
+      effectiveFrom: today(),
+      reason: null
+    }), () => {
+      this.loadPrices(list.uid);
+      this.notice.set('Price discontinued.');
+    });
+  }
+
+  submitAdjust(list: PriceList): void {
+    this.run(this.catalog.adjustPrices(list.uid, {
+      adjustPct: Number(this.adjustForm.adjustPct),
+      effectiveFrom: this.adjustForm.effectiveFrom,
+      reason: this.adjustForm.reason.trim() || null,
+      approverId: this.adjustForm.approverId ? String(this.adjustForm.approverId) : null
+    }), count => {
+      this.adjustForm = blankAdjustForm();
+      this.loadPrices(list.uid);
+      this.notice.set(`Adjusted ${count} price${count === 1 ? '' : 's'}.`);
+    });
+  }
+
+  submitCopy(list: PriceList): void {
+    if (!this.copyForm.sourcePriceListUid) {
+      return;
+    }
+    this.run(this.catalog.copyPrices(list.uid, {
+      sourcePriceListUid: this.copyForm.sourcePriceListUid,
+      adjustPct: this.copyForm.adjustPct != null ? Number(this.copyForm.adjustPct) : null,
+      effectiveFrom: this.copyForm.effectiveFrom,
+      reason: null,
+      approverId: this.copyForm.approverId ? String(this.copyForm.approverId) : null
+    }), count => {
+      this.copyForm = blankCopyForm();
+      this.loadPrices(list.uid);
+      this.notice.set(`Copied ${count} price${count === 1 ? '' : 's'}.`);
     });
   }
 
@@ -513,6 +696,7 @@ export class PriceListComponent implements OnInit {
   private run<T>(source: Observable<T>, onSuccess: (value: T) => void): void {
     this.busy.set(true);
     this.error.set(null);
+    this.notice.set(null);
     source.subscribe({
       next: value => { this.busy.set(false); onSuccess(value); },
       error: err => { this.busy.set(false); this.showError(err); }
@@ -529,20 +713,44 @@ export class PriceListComponent implements OnInit {
   }
 }
 
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function blankListForm() {
   return {
     code: '', name: '', currencyCode: 'TZS',
-    validFrom: new Date().toISOString().slice(0, 10), validTo: '',
+    validFrom: today(), validTo: '',
     isDefault: false, taxInclusive: false
   };
 }
 
 function blankPriceForm() {
   return {
-    itemId: null as number | null,
-    uomId: null as number | null,
+    itemId: null as string | null,
+    uomId: null as string | null,
+    minQty: null as number | null,
     price: null as number | null,
-    effectiveFrom: new Date().toISOString().slice(0, 10),
-    reason: ''
+    effectiveFrom: today(),
+    reason: '',
+    approverId: null as number | null
+  };
+}
+
+function blankAdjustForm() {
+  return {
+    adjustPct: null as number | null,
+    effectiveFrom: today(),
+    reason: '',
+    approverId: null as number | null
+  };
+}
+
+function blankCopyForm() {
+  return {
+    sourcePriceListUid: null as string | null,
+    adjustPct: null as number | null,
+    effectiveFrom: today(),
+    approverId: null as number | null
   };
 }

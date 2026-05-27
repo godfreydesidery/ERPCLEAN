@@ -5,24 +5,33 @@ import com.orbix.engine.modules.catalog.domain.entity.PriceListItem;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/** A price row, enriched with the item / UoM codes so callers need not re-fetch them. */
 public record PriceListItemDto(
     Long id,
     Long priceListId,
     Long itemId,
+    String itemCode,
+    String itemName,
     Long uomId,
+    String uomCode,
+    BigDecimal minQty,
     BigDecimal price,
     LocalDate validFrom,
     LocalDate validTo
 ) {
-    public static PriceListItemDto from(PriceListItem item) {
+    public static PriceListItemDto of(PriceListItem row, String itemCode, String itemName, String uomCode) {
         return new PriceListItemDto(
-            item.getId(),
-            item.getPriceListId(),
-            item.getItemId(),
-            item.getUomId(),
-            item.getPrice(),
-            item.getValidFrom(),
-            item.getValidTo()
+            row.getId(),
+            row.getPriceListId(),
+            row.getItemId(),
+            itemCode,
+            itemName,
+            row.getUomId(),
+            uomCode,
+            row.getMinQty(),
+            row.getPrice(),
+            row.getValidFrom(),
+            row.getValidTo()
         );
     }
 }

@@ -32,6 +32,12 @@ public final class Permissions {
     public static final String ITEM_ARCHIVE = "ITEM.ARCHIVE";
     public static final String UOM_MANAGE   = "UOM.MANAGE";
 
+    public static final String PRICE_LIST_CREATE  = "PRICE_LIST.CREATE";
+    public static final String PRICE_LIST_UPDATE  = "PRICE_LIST.UPDATE";
+    public static final String PRICE_LIST_ARCHIVE = "PRICE_LIST.ARCHIVE";
+    public static final String PRICE_SET          = "PRICE.SET";
+    public static final String PRICE_APPROVE      = "PRICE.APPROVE";
+
     // ---- party -------------------------------------------------------------
     public static final String PARTY_MANAGE_CUSTOMERS = "PARTY.MANAGE_CUSTOMERS";
     public static final String PARTY_MANAGE_SUPPLIERS = "PARTY.MANAGE_SUPPLIERS";

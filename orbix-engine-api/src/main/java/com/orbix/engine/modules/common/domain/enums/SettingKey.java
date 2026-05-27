@@ -15,6 +15,10 @@ public enum SettingKey {
         "Discount approval threshold (%)",
         "Discount % above which supervisor approval is required.", "10"),
 
+    PRICING_CHANGE_APPROVAL_PCT("orbix.pricing.change-approval-pct", SettingType.PERCENT, "Pricing",
+        "Price change approval threshold (%)",
+        "Absolute price change % above which an authoriser holding PRICE.APPROVE is required (0 disables).", "0"),
+
     STOCK_ADJUSTMENT_THRESHOLD("orbix.stock.adjustment-threshold", SettingType.MONEY, "Stock",
         "Stock adjustment approval threshold",
         "Adjustment value above which approval is required.", "50000"),
