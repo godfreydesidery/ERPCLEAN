@@ -17,8 +17,11 @@ import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.PostSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.ReprintInvoiceRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesInvoiceDto;
 import com.orbix.engine.modules.sales.domain.dto.VoidSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.enums.ReprintReason;
 import com.orbix.engine.modules.sales.domain.entity.SalesInvoice;
 import com.orbix.engine.modules.sales.domain.entity.SalesInvoiceLine;
 import com.orbix.engine.modules.sales.domain.enums.PaymentTerms;
@@ -26,11 +29,9 @@ import com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceLineRepository;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceRepository;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
+import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
-import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
-import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
-import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,7 +77,6 @@ class SalesInvoiceServiceImplTest {
     @Mock private ItemRepository items;
     @Mock private VatGroupRepository vatGroups;
     @Mock private CustomerRepository customers;
-    @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
     @Mock private DayGuard dayGuard;
@@ -153,30 +153,36 @@ class SalesInvoiceServiceImplTest {
     }
 
     @Test
-    void createDraft_creditExceedingLimit_isRejected() {
+    void createDraft_creditExceedingLimit_isAllowed_gateFireOnPost() {
+        // Slice C design intent: drafts are NEVER rejected on credit limit.
+        // The gate fires at POST time (with SALES_INVOICE.OVERRIDE_CREDIT as
+        // the off-ramp). Drafts are a negotiation surface — they can sit at
+        // any total without committing the customer to the debt.
         Customer customer = new Customer(CUSTOMER_ID);
         customer.setCreditLimitAmount(new BigDecimal("500"));
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
-        // 10 * 100 + tax = 1180 > 500 → reject
         CreateSalesInvoiceRequestDto request = draft("SI-CR", PaymentTerms.CREDIT,
             new BigDecimal("10"), new BigDecimal("100"), BigDecimal.ZERO, null);
-        assertThatThrownBy(() -> service.createDraft(request))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("credit limit");
+        SalesInvoiceDto dto = service.createDraft(request);
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.DRAFT);
+        assertThat(dto.totalAmount()).isEqualByComparingTo("1180");
     }
 
     @Test
-    void createDraft_creditWithZeroLimit_rejected() {
+    void createDraft_creditWithZeroLimit_isAllowed_gateFireOnPost() {
+        // Same intent: a customer with zero credit limit can still have a
+        // draft created against them. POST is where the gate runs.
         Customer customer = new Customer(CUSTOMER_ID);
         customer.setCreditLimitAmount(BigDecimal.ZERO);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
         CreateSalesInvoiceRequestDto request = draft("SI-NOC", PaymentTerms.CREDIT,
             new BigDecimal("1"), new BigDecimal("100"), BigDecimal.ZERO, null);
-        assertThatThrownBy(() -> service.createDraft(request))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("no credit limit");
+        SalesInvoiceDto dto = service.createDraft(request);
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.DRAFT);
     }
 
     @Test
@@ -234,12 +240,12 @@ class SalesInvoiceServiceImplTest {
         SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
         when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
         when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
-            .thenReturn(Optional.of(balanceRow(new BigDecimal("75"))));
+        when(stockMoveService.findBalance(ITEM_ID, BRANCH_ID))
+            .thenReturn(Optional.of(balanceDto(new BigDecimal("75"))));
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        SalesInvoiceDto dto = service.post(invoice.getUid());
+        SalesInvoiceDto dto = service.post(invoice.getUid(), PostSalesInvoiceRequestDto.empty());
 
         assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.POSTED);
         assertThat(dto.postedBusinessDate()).isEqualTo(LocalDate.of(2026, 5, 13));
@@ -273,7 +279,7 @@ class SalesInvoiceServiceImplTest {
         BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID);
         when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
 
-        service.post(invoice.getUid());
+        service.post(invoice.getUid(), PostSalesInvoiceRequestDto.empty());
 
         // 4*70 + 6*80 = 280 + 480 = 760; 760 / 10 = 76 weighted avg
         assertThat(line.getCostAmount()).isEqualByComparingTo("76");
@@ -293,7 +299,8 @@ class SalesInvoiceServiceImplTest {
             .thenThrow(new IllegalStateException("No open business day"));
 
         String uid = invoice.getUid();
-        assertThatThrownBy(() -> service.post(uid))
+        PostSalesInvoiceRequestDto empty = PostSalesInvoiceRequestDto.empty();
+        assertThatThrownBy(() -> service.post(uid, empty))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -371,6 +378,166 @@ class SalesInvoiceServiceImplTest {
         verify(events).publish(eq("SalesInvoiceCancelled.v1"), any(), any(), any());
     }
 
+    // ---------------------------------------------------------------------
+    // Slice C — credit-limit override at POST (GAP 3.A / 7.A)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void post_creditExceedingLimit_withoutOverridePerm_isRejected() {
+        Customer low = new Customer(CUSTOMER_ID);
+        low.setCreditLimitAmount(new BigDecimal("500"));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(low));
+
+        SalesInvoice invoice = postableInvoice("SI-OVR-NP", PaymentTerms.CREDIT, new BigDecimal("1180"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID)).thenReturn(Set.of());
+
+        String uid = invoice.getUid();
+        PostSalesInvoiceRequestDto withReason = new PostSalesInvoiceRequestDto("manager override");
+        assertThatThrownBy(() -> service.post(uid, withReason))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("credit limit");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void post_creditExceedingLimit_withOverridePermAndReason_succeeds() {
+        Customer low = new Customer(CUSTOMER_ID);
+        low.setCreditLimitAmount(new BigDecimal("500"));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(low));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of(SalesInvoiceServiceImpl.OVERRIDE_CREDIT_PERMISSION));
+
+        SalesInvoice invoice = postableInvoice("SI-OVR", PaymentTerms.CREDIT, new BigDecimal("1180"));
+        SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
+        when(stockMoveService.findBalance(ITEM_ID, BRANCH_ID))
+            .thenReturn(Optional.of(balanceDto(new BigDecimal("75"))));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+
+        SalesInvoiceDto dto = service.post(invoice.getUid(),
+            new PostSalesInvoiceRequestDto("Approved by manager"));
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.POSTED);
+        assertThat(dto.creditOverride()).isTrue();
+        assertThat(dto.creditOverrideBy()).isEqualTo(ACTOR_ID);
+        assertThat(dto.creditOverrideReason()).isEqualTo("Approved by manager");
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publish(eq("SalesInvoicePosted.v1"), any(), any(), payloadCaptor.capture());
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> payload = (java.util.Map<String, Object>) payloadCaptor.getValue();
+        assertThat(payload).containsEntry("creditOverride", true);
+        assertThat(payload).containsEntry("creditOverrideReason", "Approved by manager");
+        assertThat(payload).containsKey("lines");
+    }
+
+    @Test
+    void post_creditExceedingLimit_withOverridePermButBlankReason_isRejected() {
+        Customer low = new Customer(CUSTOMER_ID);
+        low.setCreditLimitAmount(new BigDecimal("500"));
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(low));
+
+        SalesInvoice invoice = postableInvoice("SI-OVR-NR", PaymentTerms.CREDIT, new BigDecimal("1180"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+        // Reason absent → override not exercised even if the perm is present.
+        String uid = invoice.getUid();
+        PostSalesInvoiceRequestDto blank = new PostSalesInvoiceRequestDto("   ");
+        assertThatThrownBy(() -> service.post(uid, blank))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("credit limit");
+    }
+
+    @Test
+    void post_creditExceedingLimit_zeroLimitCustomer_isRejected_evenWithOverridePerm() {
+        Customer zero = new Customer(CUSTOMER_ID);
+        zero.setCreditLimitAmount(BigDecimal.ZERO);
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(zero));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of(SalesInvoiceServiceImpl.OVERRIDE_CREDIT_PERMISSION));
+
+        SalesInvoice invoice = postableInvoice("SI-OVR-Z", PaymentTerms.CREDIT, new BigDecimal("100"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+
+        String uid = invoice.getUid();
+        PostSalesInvoiceRequestDto withReason = new PostSalesInvoiceRequestDto("anyway");
+        assertThatThrownBy(() -> service.post(uid, withReason))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("no credit limit");
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice C — void event widening (GAP 9 / e2e contract)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void voidInvoice_emitsCompensatingPayload() {
+        SalesInvoice invoice = postableInvoice("SI-VWP", PaymentTerms.CASH, new BigDecimal("1180"));
+        invoice.post(LocalDate.of(2026, 5, 13), ACTOR_ID);
+        SalesInvoiceLine line = lineRow(invoice, new BigDecimal("10"), new BigDecimal("100"));
+        line.setCostAmount(new BigDecimal("75"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenReturn(new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 13), ACTOR_ID));
+
+        service.voidInvoice(invoice.getUid(), new VoidSalesInvoiceRequestDto("operator error"));
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publish(eq("SalesInvoiceVoided.v1"), any(), any(), captor.capture());
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> payload = (java.util.Map<String, Object>) captor.getValue();
+        assertThat(payload).containsEntry("compensating", true);
+        assertThat(payload).containsEntry("reason", "operator error");
+        assertThat(payload).containsEntry("priorStatus", "POSTED");
+        assertThat(payload).containsKey("voidedAt");
+        assertThat(payload).containsEntry("voidedBy", ACTOR_ID);
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice C — reprint audit (GAP 3.B / 9.B)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void reprint_postedInvoice_incrementsCount_andEmitsEvent() {
+        SalesInvoice invoice = postableInvoice("SI-RPR", PaymentTerms.CASH, new BigDecimal("1180"));
+        invoice.post(LocalDate.of(2026, 5, 13), ACTOR_ID);
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+
+        SalesInvoiceDto dto = service.reprint(invoice.getUid(),
+            new ReprintInvoiceRequestDto(ReprintReason.DUPLICATE, "Customer lost original"));
+
+        assertThat(dto.reprintCount()).isEqualTo(1);
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publish(eq("SalesInvoiceReprinted.v1"), any(), any(), captor.capture());
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> payload = (java.util.Map<String, Object>) captor.getValue();
+        assertThat(payload).containsEntry("reason", "DUPLICATE");
+        assertThat(payload).containsEntry("notes", "Customer lost original");
+        assertThat(payload).containsEntry("reprintCount", 1);
+    }
+
+    @Test
+    void reprint_draftInvoice_isRejected() {
+        SalesInvoice invoice = postableInvoice("SI-RPRD", PaymentTerms.CASH, new BigDecimal("100"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+
+        String uid = invoice.getUid();
+        ReprintInvoiceRequestDto req = new ReprintInvoiceRequestDto(ReprintReason.OTHER, null);
+        assertThatThrownBy(() -> service.reprint(uid, req))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Cannot reprint");
+    }
+
     private SalesInvoice postableInvoice(String number, PaymentTerms terms, BigDecimal total) {
         SalesInvoice invoice = new SalesInvoice(number, COMPANY_ID, BRANCH_ID, CUSTOMER_ID, null,
             LocalDate.of(2026, 5, 13), null, terms, "TZS", PRICE_LIST_ID,
@@ -389,10 +556,11 @@ class SalesInvoiceServiceImplTest {
         return line;
     }
 
-    private ItemBranchBalance balanceRow(BigDecimal avgCost) {
-        ItemBranchBalance b = new ItemBranchBalance(ITEM_ID, BRANCH_ID);
-        b.setQtyOnHand(new BigDecimal("100"));
-        b.setAvgCost(avgCost);
-        return b;
+    private ItemBranchBalanceDto balanceDto(BigDecimal avgCost) {
+        return new ItemBranchBalanceDto(
+            ITEM_ID, BRANCH_ID,
+            new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
+            avgCost, avgCost,
+            null, null, null, null);
     }
 }

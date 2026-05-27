@@ -48,6 +48,9 @@ class SalesInvoiceDtoJsonTest {
             new BigDecimal("0.0000"),
             SalesInvoiceStatus.DRAFT,
             null, null, null, null, null, null,
+            null,
+            false, null, null,
+            0,
             null, null,
             List.of()
         );
@@ -61,7 +64,36 @@ class SalesInvoiceDtoJsonTest {
         assertThat(json).contains("\"customerId\":\"540\"");
         assertThat(json).contains("\"salesAgentId\":\"7\"");
         assertThat(json).contains("\"priceListId\":\"9\"");
+        // Slice C — override + reprint fields are present on the wire shape.
+        assertThat(json).contains("\"creditOverride\":false");
+        assertThat(json).contains("\"reprintCount\":0");
+        assertThat(json).contains("\"creditOverrideBy\":null");
         // Genuine numerics untouched.
         assertThat(json).contains("\"totalAmount\":1180.0000");
+    }
+
+    @Test
+    void creditOverride_fields_serialise_when_set() throws Exception {
+        SalesInvoiceDto dto = new SalesInvoiceDto(
+            42L, "01HZ8X7M3K9PJK2D7Q5BCN8W4F", "SI-OVR", 2L, 5L, 540L, null,
+            LocalDate.of(2026, 5, 13), LocalDate.of(2026, 5, 13),
+            PaymentTerms.CREDIT, "TZS", 9L,
+            new BigDecimal("1000.0000"), new BigDecimal("0.0000"),
+            new BigDecimal("180.0000"), new BigDecimal("1180.0000"),
+            new BigDecimal("0.0000"), SalesInvoiceStatus.POSTED,
+            null, null, null, null, null, null,
+            null,
+            true, 7L, "Approved by manager",
+            2,
+            null, null,
+            List.of()
+        );
+
+        String json = mapper.writeValueAsString(dto);
+
+        assertThat(json).contains("\"creditOverride\":true");
+        assertThat(json).contains("\"creditOverrideBy\":\"7\"");
+        assertThat(json).contains("\"creditOverrideReason\":\"Approved by manager\"");
+        assertThat(json).contains("\"reprintCount\":2");
     }
 }

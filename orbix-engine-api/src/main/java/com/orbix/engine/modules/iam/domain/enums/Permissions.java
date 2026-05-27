@@ -94,4 +94,14 @@ public final class Permissions {
     public static final String GRN_DIRECT                    = "GRN.DIRECT";
     public static final String GRN_READ                      = "GRN.READ";
     public static final String GRN_CANCEL                    = "GRN.CANCEL";
+
+    // ---- sales (Slice C — invoice + receipt + AR-summary hardening) -------
+    public static final String SALES_MANAGE_INVOICE          = "SALES.MANAGE_INVOICE";
+    public static final String SALES_DISCOUNT_APPROVE        = "SALES.DISCOUNT_APPROVE";
+    public static final String SALES_MANAGE_RECEIPT          = "SALES.MANAGE_RECEIPT";
+    public static final String SALES_MANAGE_RETURN           = "SALES.MANAGE_RETURN";
+    public static final String SALES_MANAGE_PACKING          = "SALES.MANAGE_PACKING";
+    public static final String SALES_INVOICE_OVERRIDE_CREDIT = "SALES_INVOICE.OVERRIDE_CREDIT";
+    public static final String SALES_INVOICE_REPRINT         = "SALES_INVOICE.REPRINT";
+    public static final String SALES_REPORT_AR_SUMMARY       = "SALES.REPORT.AR_SUMMARY";
 }

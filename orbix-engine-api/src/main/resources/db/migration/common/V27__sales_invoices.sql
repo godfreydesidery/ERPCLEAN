@@ -29,6 +29,11 @@ CREATE TABLE sales_invoice (
     voided_at           TIMESTAMP,
     voided_by           BIGINT,
     void_reason         VARCHAR(200),
+    cancellation_reason VARCHAR(500),
+    credit_override     BOOLEAN        NOT NULL DEFAULT FALSE,
+    credit_override_by  BIGINT,
+    credit_override_reason VARCHAR(500),
+    reprint_count       INT            NOT NULL DEFAULT 0,
     reference           VARCHAR(80),
     notes               VARCHAR(2000),
     version             INT            NOT NULL DEFAULT 0,
@@ -47,6 +52,11 @@ CREATE TABLE sales_invoice (
 CREATE INDEX ix_sales_invoice_company_status ON sales_invoice (company_id, status);
 CREATE INDEX ix_sales_invoice_customer       ON sales_invoice (customer_id);
 CREATE INDEX ix_sales_invoice_branch_date    ON sales_invoice (branch_id, invoice_date);
+-- Slice C — AR-summary tile (GAP 1.B / 4.A).
+CREATE INDEX ix_sales_invoice_branch_status
+    ON sales_invoice (company_id, branch_id, status);
+CREATE INDEX ix_sales_invoice_branch_due
+    ON sales_invoice (company_id, branch_id, due_date, status);
 
 CREATE TABLE sales_invoice_line (
     id                 BIGINT         NOT NULL PRIMARY KEY,

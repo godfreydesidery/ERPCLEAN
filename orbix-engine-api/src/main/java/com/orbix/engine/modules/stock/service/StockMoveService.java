@@ -7,6 +7,7 @@ import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The stock ledger (F2.2). {@code stock_move} is append-only and the source of
@@ -27,4 +28,14 @@ public interface StockMoveService {
 
     /** Stock card: every move for an item in a branch, oldest first. */
     PageDto<StockMoveDto> stockCard(Long itemId, Long branchId, Pageable pageable);
+
+    /**
+     * Cross-module read of the (item, branch) balance row — for callers that
+     * need the moving-average cost without crossing the boundary into
+     * {@code stock.domain.entity..} or {@code stock.repository..}
+     * (ADR-0004 §5: cross-module reaches stay on the {@code *Service}
+     * interface seam). Empty when no balance row exists yet (e.g. first
+     * sale of a non-batch item).
+     */
+    Optional<ItemBranchBalanceDto> findBalance(Long itemId, Long branchId);
 }

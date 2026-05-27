@@ -3,6 +3,8 @@ package com.orbix.engine.api;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.PostSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.ReprintInvoiceRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesInvoiceDto;
 import com.orbix.engine.modules.sales.domain.dto.VoidSalesInvoiceRequestDto;
 import com.orbix.engine.modules.sales.service.SalesInvoiceService;
@@ -17,7 +19,8 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 
 /**
- * Back-office sales invoices (F4.2). Gated by {@code SALES.MANAGE_INVOICE}.
+ * Back-office sales invoices (F4.2). Gated by {@code SALES.MANAGE_INVOICE}
+ * with the per-action override / reprint perms layered on top (Slice C).
  * Invoices are addressed externally by their {@code uid} (a ULID) via the
  * literal {@code /uid/{uid}} segment; the numeric {@code id} stays in the body.
  */
@@ -50,9 +53,16 @@ public class SalesInvoiceController {
             .body(invoice);
     }
 
+    /**
+     * DRAFT → POSTED. Body is optional; supply
+     * {@code { "overrideReason": "..." }} when the caller holds
+     * {@code SALES_INVOICE.OVERRIDE_CREDIT} and the customer's credit limit
+     * would otherwise block the post (Slice C GAP 3.A / 5.B).
+     */
     @PostMapping("/uid/{uid}/post")
-    public SalesInvoiceDto post(@PathVariable @ValidUlid String uid) {
-        return service.post(uid);
+    public SalesInvoiceDto post(@PathVariable @ValidUlid String uid,
+                                @Valid @RequestBody(required = false) PostSalesInvoiceRequestDto request) {
+        return service.post(uid, request != null ? request : PostSalesInvoiceRequestDto.empty());
     }
 
     @PostMapping("/uid/{uid}/void")
@@ -64,5 +74,17 @@ public class SalesInvoiceController {
     @PostMapping("/uid/{uid}/cancel")
     public SalesInvoiceDto cancel(@PathVariable @ValidUlid String uid) {
         return service.cancel(uid);
+    }
+
+    /**
+     * Slice C — reprint audit. Increments {@code reprint_count}, emits
+     * {@code SalesInvoiceReprinted.v1}, returns the updated DTO. No state
+     * mutation beyond the counter.
+     */
+    @PostMapping("/uid/{uid}/reprint")
+    @PreAuthorize("hasAuthority('SALES_INVOICE.REPRINT')")
+    public SalesInvoiceDto reprint(@PathVariable @ValidUlid String uid,
+                                   @Valid @RequestBody ReprintInvoiceRequestDto request) {
+        return service.reprint(uid, request);
     }
 }

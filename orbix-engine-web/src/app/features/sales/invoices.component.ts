@@ -8,6 +8,7 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
+import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
 import { CatalogService } from '../catalog/catalog.service';
@@ -19,6 +20,9 @@ import {
   CreateSalesInvoiceLine,
   PAYMENT_TERMS,
   PaymentTerms,
+  REPRINT_REASON_LABELS,
+  REPRINT_REASONS,
+  ReprintReason,
   SalesInvoice
 } from './sales.models';
 
@@ -32,7 +36,7 @@ interface LineRow {
 @Component({
   selector: 'orbix-sales-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, HasPermissionDirective],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -52,14 +56,14 @@ interface LineRow {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i>
         <span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
       </div>
     }
     @if (info()) {
       <div class="alert alert-success d-flex align-items-center gap-2 py-2">
         <i class="bi bi-check-circle-fill"></i>
         <span class="flex-grow-1">{{ info() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -67,7 +71,7 @@ interface LineRow {
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Draft invoice</h2>
-          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
+          <button class="btn-close btn-sm" aria-label="Close" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3">
           <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
@@ -205,13 +209,25 @@ interface LineRow {
                 <li>
                   <button type="button" class="inv-row"
                           [class.is-active]="selected()?.id === inv.id"
+                          [title]="inv.creditOverride && inv.creditOverrideReason ? ('Credit override: ' + inv.creditOverrideReason) : null"
                           (click)="select(inv)">
                     <div class="flex-grow-1 min-w-0">
-                      <div class="d-flex align-items-center gap-2 mb-1">
+                      <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                         <span class="badge text-bg-light border text-secondary font-monospace">{{ inv.number }}</span>
                         <span class="status-badge status-badge--{{ inv.status.toLowerCase() }}">
                           <span class="status-badge__dot"></span>{{ statusLabel(inv.status) }}
                         </span>
+                        @if (inv.creditOverride) {
+                          <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle small">
+                            <i class="bi bi-shield-exclamation me-1"></i>Credit override
+                          </span>
+                        }
+                        @if (inv.reprintCount > 0) {
+                          <span class="badge text-bg-light text-secondary border small"
+                                [title]="'Reprinted ' + inv.reprintCount + ' time' + (inv.reprintCount === 1 ? '' : 's')">
+                            <i class="bi bi-printer me-1"></i>{{ inv.reprintCount }}
+                          </span>
+                        }
                       </div>
                       <p class="small text-secondary mb-0">
                         Customer #{{ inv.customerId }} · {{ inv.invoiceDate | date:'mediumDate' }} · {{ inv.paymentTerms }}
@@ -263,6 +279,12 @@ interface LineRow {
                     </button>
                   }
                   @if (inv.status === 'POSTED' || inv.status === 'PARTIALLY_PAID' || inv.status === 'PAID') {
+                    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                            *orbixHasPermission="'SALES_INVOICE.REPRINT'"
+                            [disabled]="busy()" (click)="openReprint(inv)"
+                            title="Reprint this invoice. The reason is recorded for audit and emits an outbox event.">
+                      <i class="bi bi-printer"></i> Reprint
+                    </button>
                     <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
                             [disabled]="busy()" (click)="voidIt(inv)">
                       <i class="bi bi-slash-circle"></i> Void
@@ -270,6 +292,84 @@ interface LineRow {
                   }
                 </div>
               </div>
+
+              @if (creditOverrideTarget()?.id === inv.id) {
+                <form (ngSubmit)="confirmCreditOverride()" #ovf="ngForm" class="override-form mb-3">
+                  <p class="small fw-semibold text-danger mb-2 d-flex align-items-center gap-2">
+                    <i class="bi bi-shield-exclamation"></i>
+                    Credit-limit gate tripped — supply a reason to override.
+                  </p>
+                  <label class="form-label small fw-semibold text-secondary"
+                         [attr.for]="'inv-override-reason-' + inv.id">
+                    Override reason
+                    <span class="text-danger" aria-hidden="true">*</span>
+                    <span class="visually-hidden">required</span>
+                  </label>
+                  <textarea [id]="'inv-override-reason-' + inv.id"
+                            class="form-control" name="overrideReason" rows="2" maxlength="500"
+                            [(ngModel)]="overrideReason" required
+                            placeholder="Why is the credit limit being overridden? (recorded in audit)"></textarea>
+                  <p class="small text-secondary mb-0 mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    The reason is persisted on the invoice and emitted on <span class="font-monospace">SalesInvoicePosted.v1</span>.
+                  </p>
+                  <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1"
+                            [disabled]="busy() || ovf.invalid">
+                      @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                      @else { <i class="bi bi-shield-check"></i> }
+                      Post with override
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            [disabled]="busy()" (click)="closeCreditOverride()">Keep draft</button>
+                  </div>
+                </form>
+              }
+
+              @if (reprintTarget()?.id === inv.id) {
+                <form (ngSubmit)="confirmReprint()" #rpf="ngForm" class="reprint-form mb-3">
+                  <p class="small fw-semibold text-secondary mb-2 d-flex align-items-center gap-2">
+                    <i class="bi bi-printer"></i> Reprint invoice — recorded for audit.
+                  </p>
+                  <div class="row g-2">
+                    <div class="col-md-5">
+                      <label class="form-label small fw-semibold text-secondary"
+                             [attr.for]="'inv-reprint-reason-' + inv.id">
+                        Reason
+                        <span class="text-danger" aria-hidden="true">*</span>
+                        <span class="visually-hidden">required</span>
+                      </label>
+                      <select [id]="'inv-reprint-reason-' + inv.id"
+                              class="form-select" name="reprintReason"
+                              [(ngModel)]="reprintReason" required>
+                        @for (r of reprintReasons; track r) {
+                          <option [ngValue]="r">{{ reprintReasonLabels[r] }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="col-md-7">
+                      <label class="form-label small fw-semibold text-secondary"
+                             [attr.for]="'inv-reprint-notes-' + inv.id">
+                        Notes <span class="text-muted">(optional)</span>
+                      </label>
+                      <textarea [id]="'inv-reprint-notes-' + inv.id"
+                                class="form-control" name="reprintNotes" rows="2" maxlength="500"
+                                [(ngModel)]="reprintNotes"
+                                placeholder="Optional context (e.g. customer lost original)"></textarea>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
+                            [disabled]="busy() || rpf.invalid">
+                      @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                      @else { <i class="bi bi-printer"></i> }
+                      Log reprint
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            [disabled]="busy()" (click)="closeReprint()">Cancel</button>
+                  </div>
+                </form>
+              }
 
               <!-- Totals strip -->
               <div class="row g-2 totals-row mb-3">
@@ -303,6 +403,20 @@ interface LineRow {
                 @if (inv.voidedAt) {
                   <dt class="col-4 text-secondary">Voided</dt>
                   <dd class="col-8 mb-1">by #{{ inv.voidedBy }} — {{ inv.voidReason }}</dd>
+                }
+                @if (inv.cancellationReason) {
+                  <dt class="col-4 text-secondary">Cancellation reason</dt>
+                  <dd class="col-8 mb-1">{{ inv.cancellationReason }}</dd>
+                }
+                @if (inv.creditOverride) {
+                  <dt class="col-4 text-secondary">Credit override</dt>
+                  <dd class="col-8 mb-1">
+                    by #{{ inv.creditOverrideBy }} — {{ inv.creditOverrideReason }}
+                  </dd>
+                }
+                @if (inv.reprintCount > 0) {
+                  <dt class="col-4 text-secondary">Reprints</dt>
+                  <dd class="col-8 mb-1">{{ inv.reprintCount }}</dd>
                 }
               </dl>
             </div>
@@ -426,6 +540,15 @@ interface LineRow {
       background: #e0ecff; color: #1d4ed8; font-size: 1.75rem;
       display: flex; align-items: center; justify-content: center;
     }
+
+    .override-form {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+      padding: 0.875rem 1rem;
+    }
+    .reprint-form {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 0.875rem 1rem;
+    }
   `]
 })
 export class InvoicesComponent implements OnInit {
@@ -471,6 +594,19 @@ export class InvoicesComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
   protected readonly showForm = signal(false);
+
+  // Credit-override + reprint inline-form state (mirrors the procurement
+  // cancel pattern in lpos.component.ts / grns.component.ts).
+  protected readonly creditOverrideTarget = signal<SalesInvoice | null>(null);
+  protected overrideReason = '';
+  protected readonly reprintTarget = signal<SalesInvoice | null>(null);
+  protected reprintReason: ReprintReason = 'DUPLICATE';
+  protected reprintNotes = '';
+  protected readonly reprintReasons = REPRINT_REASONS;
+  protected readonly reprintReasonLabels = REPRINT_REASON_LABELS;
+  protected readonly canOverrideCredit = computed(() =>
+    this.auth.hasPermission('SALES_INVOICE.OVERRIDE_CREDIT')
+  );
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -539,7 +675,11 @@ export class InvoicesComponent implements OnInit {
     this.refresh();
   }
 
-  select(invoice: SalesInvoice): void { this.selected.set(invoice); }
+  select(invoice: SalesInvoice): void {
+    this.selected.set(invoice);
+    if (this.creditOverrideTarget()?.id !== invoice.id) this.closeCreditOverride();
+    if (this.reprintTarget()?.id !== invoice.id) this.closeReprint();
+  }
 
   addLine(): void { this.newLines.push({ itemId: null, qty: null, unitPrice: null, discountPct: null }); }
 
@@ -592,18 +732,116 @@ export class InvoicesComponent implements OnInit {
     this.showForm.set(false);
   }
 
+  /**
+   * Try to post the draft. The backend's credit-limit gate may return 400
+   * — when it does, surface the override form (if the caller has the perm)
+   * or a clear "permission required" alert (otherwise).
+   */
   post(inv: SalesInvoice): void {
-    this.run(this.sales.postInvoice(inv.uid), `Invoice posted.`);
+    this.busy.set(true);
+    this.error.set(null);
+    this.info.set(null);
+    this.sales.postInvoice(inv.uid).subscribe({
+      next: posted => {
+        this.busy.set(false);
+        this.info.set('Invoice posted.');
+        this.selected.set(posted);
+        this.refresh();
+      },
+      error: err => {
+        this.busy.set(false);
+        if (this.isCreditLimitError(err)) {
+          if (this.canOverrideCredit()) {
+            this.openCreditOverride(inv);
+          } else {
+            this.error.set(this.creditLimitMessage(err, inv));
+          }
+        } else {
+          this.showError(err);
+        }
+      }
+    });
+  }
+
+  openCreditOverride(inv: SalesInvoice): void {
+    this.creditOverrideTarget.set(inv);
+    this.overrideReason = '';
+    this.closeReprint();
+  }
+
+  closeCreditOverride(): void {
+    this.creditOverrideTarget.set(null);
+    this.overrideReason = '';
+  }
+
+  confirmCreditOverride(): void {
+    const inv = this.creditOverrideTarget();
+    if (!inv) return;
+    const reason = this.overrideReason.trim();
+    if (reason.length === 0) {
+      this.error.set('A reason is required to override the credit limit.');
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.info.set(null);
+    this.sales.postInvoice(inv.uid, reason).subscribe({
+      next: posted => {
+        this.busy.set(false);
+        this.info.set('Invoice posted with credit override — recorded in audit.');
+        this.selected.set(posted);
+        this.closeCreditOverride();
+        this.refresh();
+      },
+      error: err => {
+        this.busy.set(false);
+        this.showError(err);
+      }
+    });
+  }
+
+  openReprint(inv: SalesInvoice): void {
+    this.reprintTarget.set(inv);
+    this.reprintReason = 'DUPLICATE';
+    this.reprintNotes = '';
+    this.closeCreditOverride();
+  }
+
+  closeReprint(): void {
+    this.reprintTarget.set(null);
+    this.reprintNotes = '';
+  }
+
+  confirmReprint(): void {
+    const inv = this.reprintTarget();
+    if (!inv) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.info.set(null);
+    const notes = this.reprintNotes.trim();
+    this.sales.reprintInvoice(inv.uid, this.reprintReason, notes.length > 0 ? notes : null).subscribe({
+      next: updated => {
+        this.busy.set(false);
+        this.info.set(`Reprint recorded (${updated.reprintCount}${this.ordinalSuffix(updated.reprintCount)} reprint).`);
+        this.selected.set(updated);
+        this.closeReprint();
+        this.refresh();
+      },
+      error: err => {
+        this.busy.set(false);
+        this.showError(err);
+      }
+    });
   }
 
   voidIt(inv: SalesInvoice): void {
-    const reason = window.prompt(`Void ${inv.number} — reason?`);
-    if (!reason || !reason.trim()) return;
+    const reason = globalThis.prompt(`Void ${inv.number} — reason?`);
+    if (!reason?.trim()) return;
     this.run(this.sales.voidInvoice(inv.uid, { reason: reason.trim() }), `Invoice voided.`);
   }
 
   cancel(inv: SalesInvoice): void {
-    if (!window.confirm(`Cancel ${inv.number}?`)) return;
+    if (!globalThis.confirm(`Cancel ${inv.number}?`)) return;
     this.run(this.sales.cancelInvoice(inv.uid), `Invoice cancelled.`);
   }
 
@@ -632,5 +870,36 @@ export class InvoicesComponent implements OnInit {
     } else {
       this.error.set('Unexpected error');
     }
+  }
+
+  /** Detect the backend's credit-limit-exceeded 400 by its message. */
+  private isCreditLimitError(err: unknown): boolean {
+    if (!(err instanceof HttpErrorResponse) || err.status !== 400) return false;
+    const envelope = err.error as ApiResponse<unknown> | null;
+    const msg = envelope?.message ?? '';
+    return /credit limit/i.test(msg);
+  }
+
+  /** Resolve the customer name + over-limit message for the no-perm alert. */
+  private creditLimitMessage(err: unknown, inv: SalesInvoice): string {
+    const envelope = err instanceof HttpErrorResponse
+      ? err.error as ApiResponse<unknown> | null
+      : null;
+    const apiMsg = envelope?.message;
+    const customer = this.customers().find(c => c.partyId === inv.customerId);
+    const customerName = customer?.party.name ?? `Customer #${inv.customerId}`;
+    if (apiMsg) {
+      return `Cannot post — ${apiMsg} (${customerName}).`;
+    }
+    return `Cannot post — credit limit exceeded for ${customerName}.`;
+  }
+
+  private ordinalSuffix(n: number): string {
+    const rem10 = n % 10;
+    const rem100 = n % 100;
+    if (rem10 === 1 && rem100 !== 11) return 'st';
+    if (rem10 === 2 && rem100 !== 12) return 'nd';
+    if (rem10 === 3 && rem100 !== 13) return 'rd';
+    return 'th';
   }
 }

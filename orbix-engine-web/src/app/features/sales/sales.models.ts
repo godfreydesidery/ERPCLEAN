@@ -46,9 +46,44 @@ export interface SalesInvoice {
   voidedAt: string | null;
   voidedBy: string | null;
   voidReason: string | null;
+  cancellationReason: string | null;
+  creditOverride: boolean;
+  creditOverrideBy: string | null;
+  creditOverrideReason: string | null;
+  reprintCount: number;
   reference: string | null;
   notes: string | null;
   lines: SalesInvoiceLine[];
+}
+
+/** Reasons a posted invoice can be reprinted (audit enum, backend-validated). */
+export type ReprintReason = 'DUPLICATE' | 'REISSUE_TO_CUSTOMER' | 'INTERNAL_FILE' | 'OTHER';
+export const REPRINT_REASONS: ReprintReason[] = ['DUPLICATE', 'REISSUE_TO_CUSTOMER', 'INTERNAL_FILE', 'OTHER'];
+export const REPRINT_REASON_LABELS: Record<ReprintReason, string> = {
+  DUPLICATE: 'Duplicate copy',
+  REISSUE_TO_CUSTOMER: 'Re-issued to customer',
+  INTERNAL_FILE: 'Internal file',
+  OTHER: 'Other',
+};
+
+export interface ReprintInvoiceRequest {
+  reason: ReprintReason;
+  notes: string | null;
+}
+
+export interface PostInvoiceRequest {
+  overrideReason?: string;
+}
+
+/**
+ * Aggregate accounts-receivable view fed to the dashboard tiles.
+ * BigDecimal stays a string on the wire (per the established pattern).
+ */
+export interface ArSummary {
+  arOutstanding: string;
+  overdueInvoices: number;
+  openInvoices: number;
+  currencyCode: string;
 }
 
 export interface CreateSalesInvoiceLine {

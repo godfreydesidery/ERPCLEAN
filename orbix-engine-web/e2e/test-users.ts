@@ -29,11 +29,13 @@ import { request as pwRequest, type APIRequestContext } from '@playwright/test';
 
 export type Persona =
   | 'cashier'
+  | 'cashier-with-override' // cashier + sales-invoice/receipt + SALES_INVOICE.OVERRIDE_CREDIT (Slice C)
   | 'store-manager'
   | 'accountant'
   | 'procurement-officer'
   | 'supervisor'      // can cancel POSTED GRNs / LPOs (GRN.CANCEL, PROCUREMENT.CANCEL_LPO)
-  | 'sales-rep';
+  | 'sales-rep'
+  | 'sales-clerk';    // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
 
 export interface TestUser {
   username: string;     // e.g. 'qa.cashier'
@@ -66,6 +68,28 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       'POS.PETTY_CASH.READ',
     ],
   },
+  'cashier-with-override': {
+    // Same POS footprint as `cashier`, plus sales-invoice/receipt + the
+    // SALES_INVOICE.OVERRIDE_CREDIT permission Slice C introduces. Used by
+    // sales.spec.ts to exercise the credit-limit override branch where the
+    // baseline `sales-clerk` is blocked.
+    username: 'qa.cashier.override',
+    password: TEST_PASSWORD,
+    fullName: 'QA Cashier-Override',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'POS.SALE_POST',
+      'POS.SALE_VOID',
+      // The seeded coarse codes from V28 — invoice + receipt CRUD are bundled
+      // into a single MANAGE_* perm each. Slice C does NOT split these.
+      'SALES.MANAGE_INVOICE',
+      'SALES.MANAGE_RECEIPT',
+      // Slice-C-pending perms — bootstrap drops them gracefully if absent
+      // (mirrors supervisor's PROCUREMENT.CANCEL_LPO / GRN.CANCEL pattern).
+      'SALES_INVOICE.OVERRIDE_CREDIT',
+      'SALES_INVOICE.REPRINT',
+    ],
+  },
   'store-manager': {
     username: 'qa.store.manager',
     password: TEST_PASSWORD,
@@ -96,6 +120,9 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       'CASH.ADJUSTMENT.ARCHIVE',
       'CASH.BANK_DEPOSIT.POST',
       'CASH.BANK_DEPOSIT.ARCHIVE',
+      // Slice-C-pending perm — bootstrap drops it gracefully if absent.
+      // The accountant is the only persona who can read AR-summary reports.
+      'SALES.REPORT.AR_SUMMARY',
     ],
   },
   'procurement-officer': {
@@ -138,6 +165,26 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       'CUSTOMER.CREATE',
       'CUSTOMER.UPDATE',
       'SALES_AGENT.CREATE',
+    ],
+  },
+  'sales-clerk': {
+    // Sales-invoice/receipt POST capability WITHOUT the credit-override perm
+    // and WITHOUT AR_SUMMARY. Used by sales.spec.ts to prove (a) the
+    // credit-limit gate actually fires on a non-override persona, and
+    // (b) AR-summary is permission-gated, not open to anyone with
+    // SALES_INVOICE.READ.
+    username: 'qa.sales.clerk',
+    password: TEST_PASSWORD,
+    fullName: 'QA Sales Clerk',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'POS.SALE_POST',
+      // Coarse codes from V28 — bundle invoice + receipt CRUD. Slice C does
+      // NOT split. The sales-clerk gets these so they can attempt the
+      // over-limit POST (gate must fire) and the AR-summary GET (perm must
+      // 403 — they don't carry SALES.REPORT.AR_SUMMARY).
+      'SALES.MANAGE_INVOICE',
+      'SALES.MANAGE_RECEIPT',
     ],
   },
 };
