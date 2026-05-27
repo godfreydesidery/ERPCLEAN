@@ -6,6 +6,9 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
+import com.orbix.engine.modules.iam.service.BranchScope;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
@@ -26,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,6 +54,8 @@ class StockMoveServiceImplTest {
     @Mock private DayGuard dayGuard;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private PermissionResolverService permissions;
 
     @InjectMocks private StockMoveServiceImpl service;
 
@@ -134,20 +140,48 @@ class StockMoveServiceImplTest {
 
         assertThatThrownBy(() -> service.post(req(new BigDecimal("-5"), null, false)))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("STOCK.OVERSELL");
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
         verify(moves, never()).save(any());
+        verify(events).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
     }
 
     @Test
-    void post_outboundBelowZero_isAllowedWithOverride() {
+    void post_outboundBelowZero_isAllowedWithOverrideAndPermission() {
         when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
             .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of(Permissions.STOCK_OVERSELL));
 
         service.post(req(new BigDecimal("-5"), null, true));
 
         ArgumentCaptor<ItemBranchBalance> saved = ArgumentCaptor.forClass(ItemBranchBalance.class);
         verify(balances).save(saved.capture());
         assertThat(saved.getValue().getQtyOnHand()).isEqualByComparingTo("-2");
+        verify(events, never()).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
+    }
+
+    @Test
+    void post_outboundBelowZero_withOverrideButNoPermission_isBlocked() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID)).thenReturn(Set.of());
+
+        assertThatThrownBy(() -> service.post(req(new BigDecimal("-5"), null, true)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
+        verify(moves, never()).save(any());
+        verify(events).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
+    }
+
+    @Test
+    void post_outboundNotNegative_doesNotConsultPermissionResolver() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
+
+        // -4 leaves 6 on-hand; OVERSELL gate must not fire.
+        service.post(req(new BigDecimal("-4"), null, true));
+
+        verify(permissions, never()).resolve(any(), any(), any());
     }
 
     @Test

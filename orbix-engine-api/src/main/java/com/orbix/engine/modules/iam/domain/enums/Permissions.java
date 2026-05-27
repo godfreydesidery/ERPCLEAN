@@ -60,9 +60,14 @@ public final class Permissions {
     public static final String DAY_OVERRIDE_LIST  = "DAY.OVERRIDE_LIST";
 
     // ---- stock -------------------------------------------------------------
-    public static final String STOCK_OVERSELL = "STOCK.OVERSELL";
-    public static final String STOCK_COUNT    = "STOCK.COUNT";
-    public static final String STOCK_TRANSFER = "STOCK.TRANSFER";
+    public static final String STOCK_OVERSELL             = "STOCK.OVERSELL";
+    public static final String STOCK_COUNT                = "STOCK.COUNT";
+    public static final String STOCK_TRANSFER             = "STOCK.TRANSFER";
+    public static final String STOCK_BATCH                = "STOCK.BATCH";
+    public static final String STOCK_ADJUST               = "STOCK.ADJUST";
+    public static final String STOCK_ADJUST_APPROVE       = "STOCK.ADJUST_APPROVE";
+    public static final String STOCK_INTERNAL_CONSUMPTION = "STOCK.INTERNAL_CONSUMPTION";
+    public static final String STOCK_COUNT_APPROVE        = "STOCK.COUNT_APPROVE";
 
     // ---- cash (Slice D — granular codes; coarse CASH.READ/ADJUST/BANKING
     //            stay seeded as group-grants but new write endpoints require

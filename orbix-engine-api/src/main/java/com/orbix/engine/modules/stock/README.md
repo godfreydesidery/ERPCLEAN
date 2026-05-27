@@ -58,22 +58,52 @@ See `DATA-MODEL.md §4` for full attribute tables.
 - `platform/company` — for `company_id` / `branch_id` scoping.
 - `platform/events` — for outbox publication.
 
-**Publishes**
-- `StockMoved.v1` — every successful `stock_move` insert.
-- `BalanceUpdated.v1` — every `item_branch_balance` row update.
-- `StockCountClosed.v1` — when a count transitions to `POSTED`, with the list of generated adjustments.
-- `TransferIssued.v1` — when a `stock_transfer` transitions to `ISSUED`.
-- `TransferReceived.v1` — when it transitions to `RECEIVED`, including variance lines.
-- `LowStockTriggered.v1` — when a balance update crosses below `reorder_min` (rising-edge only).
-- `NegativeStockBlocked.v1` — when an outbound attempt fails the negative-stock guard with no override.
+### 5.1 Published events
 
-**Consumes**
+Versioned `<Aggregate><Action>.v1`. Payload is `Map<String,Object>` with stable keys; emitted inside the same `@Transactional` write as the business state change (per ADR-0004 outbox contract).
+
+| Event | Payload keys | Emitted from |
+|---|---|---|
+| `StockMoved.v1` | `stockMoveId`, `itemId`, `branchId`, `qty` | `StockMoveServiceImpl#post` |
+| `BalanceUpdated.v1` | `itemId`, `branchId`, `qtyOnHand` | `StockMoveServiceImpl#post` |
+| `LowStockTriggered.v1` | `itemId`, `branchId`, `qtyOnHand` | `StockMoveServiceImpl#post` (when `qtyOnHand ≤ reorder_min`) |
+| `NegativeStockBlocked.v1` | `itemId`, `branchId`, `qtyRequested`, `qtyOnHand`, `actorId`, `refType`, `refId` | `StockMoveServiceImpl#enforceOversellGate` (both block paths) |
+| `StockAdjusted.v1` | `stockMoveId`, `itemId`, `branchId`, `qty`, `unitCost`, `direction`, `moveType`, `refType`, `refId`, `reason`, `actorId`, `authorisedByUserId`, `aboveThreshold`, `oversell` | `AdjustmentServiceImpl#postAdjustment` |
+| `StockCountStarted.v1` | `stockCountId`, `uid`, `number`, `branchId`, `lineCount`, `actorId` | `StockCountServiceImpl#startCount` |
+| `StockCountClosed.v1` | `stockCountId`, `uid`, `branchId`, `varianceCount`, `varianceValue`, `actorId` | `StockCountServiceImpl#closeCount` |
+| `StockCountPosted.v1` | `stockCountId`, `uid`, `branchId`, `varianceValue`, `aboveThreshold`, `authorisedByUserId`, `actorId`, `varianceStockMoveIds`, `adjustmentLines` | `StockCountServiceImpl#postCount` |
+| `StockTransferIssued.v1` | `stockTransferId`, `uid`, `number`, `fromBranchId`, `toBranchId`, `totalCost`, `lines`, `actorId` | `StockTransferServiceImpl#issueTransfer` |
+| `StockTransferReceived.v1` | `stockTransferId`, `uid`, `fromBranchId`, `toBranchId`, `lines`, `actorId` | `StockTransferServiceImpl#receiveTransfer` |
+| `StockBatchCreated.v1` | `batchId`, `itemId`, `branchId`, `batchNo`, `qty`, `expiryAt` | `StockBatchServiceImpl#create` |
+| `StockBatchExhausted.v1` | `batchId`, `itemId`, `branchId` | `StockBatchServiceImpl` (FEFO drain) |
+| `StockBatchExpired.v1` | `batchId`, `itemId`, `branchId`, `batchNo`, `qtyOnHand`, `expiryAt` | `StockBatchExpiryJob` |
+| `BatchRecalled.v1` | `batchId`, `itemId`, `branchId`, `batchNo`, `qtyWrittenOff`, `reason` | `StockBatchServiceImpl#recall` |
+| `StockReservationChanged.v1` | `stockMoveId`, `itemId`, `branchId`, `qty`, `refType`, `refId` | `StockReservationServiceImpl` |
+
+No event today is consumed by another module synchronously — the cross-module writes from procurement / sales / pos / orders / production are **direct sync-TX calls** into `StockMoveService` / `StockBatchService` / `StockReservationService` (see §5.3). New events are write-and-forget signals for the future reporting module + the dashboard's negative-stock alert.
+
+### 5.2 Consumes
+
 - `GrnPosted.v1` (from `procurement`) → `GRN` inbound move.
 - `SalesInvoicePosted.v1` (from `sales`) → `SALE` outbound move.
 - `PosSaleClosed.v1` (from `pos`) → `SALE` outbound move (via sync push).
 - `ProductionOutputPosted.v1` / `ProductionConsumePosted.v1` (from `production`, when added) → `PROD_OUTPUT` / `PROD_CONSUME` moves.
 
 Each consumer handler is **idempotent**: the listener computes `(source_doc_type, source_doc_id, line_seq)` (stored as `ref_type`, `ref_id`, plus a derived sequence) and rejects duplicates. The `client_op_id` UUID from sync (per `ARCHITECTURE.md §2.9`) keys the same guarantee end-to-end.
+
+### 5.3 Synchronous callers (ADR-0003 + ADR-0004 named exemptions)
+
+Stock is the **callee** in five named sync-TX exemptions enumerated in [ADR-0003](../../../../../../../../docs/decisions/0003-sync-tx-exemption-procurement-stock.md) and [ADR-0004](../../../../../../../../docs/decisions/0004-sync-tx-exemption-named-cross-module-calls.md). Callers reach in only via the published `StockMoveService` / `StockBatchService` / `StockReservationService` interfaces — never via `*Impl`, `repository..`, or `domain.entity..`. ArchUnit's `ModuleBoundaryTest` pins each pair.
+
+| Caller | Calls into | Purpose |
+|---|---|---|
+| `procurement` | `StockMoveService` | GRN-post inbound move + FEFO batch row on receipt |
+| `sales` | `StockMoveService` | Invoice-post outbound move; compensating move on void |
+| `pos` | `StockMoveService` + `StockBatchService` | Cashier finalise — FEFO drain + outbound move |
+| `orders` | `StockMoveService` + `StockReservationService` | Layby reservation lock + delivery move |
+| `production` | `StockMoveService` + `StockBatchService` | Consume/produce pair, batch moves, reservations |
+
+Slice E1 does not change these — stock remains the callee. No new caller-side rule needed.
 
 ## 6. API surface
 
@@ -140,46 +170,11 @@ From `PRD.md §13` and `DATA-MODEL.md §16`, only the items that materially cons
   - `direction` must match the sign of `qty`; enforced at the domain layer, double-checked by a DB `CHECK` constraint where the dialect supports it.
 - **Multi-tenant.** Every read and write carries `company_id` + `branch_id`. Repositories inherit the base interface from `platform/company` that injects the predicate automatically (`ARCHITECTURE.md §2.6`).
 - **Idempotency.** `(source_doc_type, source_doc_id)` is unique across `stock_move` for sourced moves; the `clientOpId` UUID from sync push is mapped to this pair on entry. Duplicate deliveries from the event bus are absorbed silently.
-- **Outbox.** All published events (`StockMoved.v1`, `BalanceUpdated.v1`, `StockCountClosed.v1`, `TransferIssued.v1`, `TransferReceived.v1`, `LowStockTriggered.v1`, `NegativeStockBlocked.v1`) are written to `domain_event` in the same DB transaction as the business write, per `ARCHITECTURE.md §2.10`. No in-memory Spring events for cross-module signalling.
+- **Outbox.** Every published event in §5.1 is written to `domain_event` in the same DB transaction as the business write, per `ARCHITECTURE.md §2.10`. No in-memory Spring events for cross-module signalling.
 - **Rebuild path.** A maintenance job can truncate `item_branch_balance` and replay `stock_move` in `(item_id, branch_id, at)` order to reconstruct the cache. This path is exercised by a nightly drift-check in non-production environments.
 
 ---
 
 ## 11. Phase 1.1 additions
 
-See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md).
-
-**New table:**
-- `stock_batch` — per-branch batch row carrying `batch_no`, `manufactured_at`, `expiry_at`, `qty_received`, `qty_on_hand`, `cost`, `source_doc_type` (`GRN` / `PRODUCTION_OUTPUT` / `OPENING`), `status` (`ACTIVE` / `EXHAUSTED` / `EXPIRED` / `RECALLED`). UNIQUE `(branch_id, item_id, batch_no)`.
-
-**`stock_move` gains:**
-- `batch_id BIGINT FK → stock_batch` nullable (populated for items with `tracks_batches = true`)
-- `section_id BIGINT FK → section` nullable (stamped on production / section-transfer)
-- `consumption_category VARCHAR(20)` nullable — `CANTEEN` / `DISPLAY` / `SAMPLES` / `DONATION` / `MAINTENANCE` / `OTHER` (required for `INTERNAL_CONSUMPTION`)
-- `authorised_by_user_id BIGINT FK` nullable
-- New `move_type` values: `INTERNAL_CONSUMPTION`, `STAFF_PURCHASE`, `EMPLOYEE_GIFT`, `RESERVED` (layby reservation), `EXPIRY_WRITE_OFF`
-- New `direction` value: `RESERVED` (sits alongside IN / OUT). Reserved stock is on hand but not available; `qty_reserved` tracked on `item_branch_balance`.
-
-**`item_branch_balance` gains:**
-- `qty_reserved DECIMAL(18,4)` — sum of open RESERVED moves
-- Effective availability is `qty_on_hand − qty_reserved`
-
-**FEFO consumption:**
-- For items with `tracks_batches = true`, outbound moves pick the batch with the earliest non-null `expiry_at` (FIFO among same-expiry).
-- Cost flows from the consumed batch, not the moving average.
-- POS / sales / production-consume must call `stock` to resolve the batch at consumption time; offline POS attaches its locally-resolved `batch_id` and the server validates.
-
-**Expired-stock workflow:**
-- Scheduled job marks `ACTIVE` batches with `expiry_at < now` and emits `BatchExpired.v1`.
-- Manual write-off via `stock_move` of type `EXPIRY_WRITE_OFF` (so accountants approve it).
-
-**Internal-consumption rules:**
-- Every `INTERNAL_CONSUMPTION` move requires `authorised_by_user_id` + `consumption_category` + non-empty `reason` (stored in existing `stock_move.notes`).
-- Permission `STOCK.INTERNAL_CONSUMPTION_AUTHORISE`.
-
-**New events:**
-- `BatchCreated.v1`, `BatchExpired.v1`, `BatchRecalled.v1`, `BatchExhausted.v1`
-- `StockReserved.v1`, `StockReservationReleased.v1`
-- `InternalConsumptionPosted.v1`
-
-**New stories:** US-STOCK-011 .. US-STOCK-016 (see USER-STORIES.md Phase 1.1 section).
+Superseded — Phase 1.1 batch / FEFO / internal-consumption surface is now live and documented inline above (§3 model, §5.1 events). See [docs/design/PHASE-1.1-ADDITIONS.md](../../../../../../../../docs/design/PHASE-1.1-ADDITIONS.md) for the original landing plan.
