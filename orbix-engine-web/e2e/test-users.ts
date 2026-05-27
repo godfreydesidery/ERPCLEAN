@@ -35,7 +35,11 @@ export type Persona =
   | 'procurement-officer'
   | 'supervisor'      // can cancel POSTED GRNs / LPOs (GRN.CANCEL, PROCUREMENT.CANCEL_LPO)
   | 'sales-rep'
-  | 'sales-clerk';    // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
+  | 'sales-clerk'     // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
+  | 'stock-controller'          // ADJUST + COUNT + TRANSFER (no APPROVE, no OVERSELL) — Slice E1
+  | 'stock-controller-oversell' // stock-controller + STOCK.OVERSELL — proves the override off-ramp
+  | 'stock-approver'             // STOCK.ADJUST_APPROVE only — second-pair-of-eyes authoriser
+  | 'stock-clerk';               // ADJUST + COUNT only — negative-case persona
 
 export interface TestUser {
   username: string;     // e.g. 'qa.cashier'
@@ -185,6 +189,66 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // 403 — they don't carry SALES.REPORT.AR_SUMMARY).
       'SALES.MANAGE_INVOICE',
       'SALES.MANAGE_RECEIPT',
+    ],
+  },
+  'stock-controller': {
+    // The "stock spine operator": posts adjustments, runs counts, issues +
+    // receives transfers. Deliberately NO STOCK.ADJUST_APPROVE (dual-
+    // control real-world separation — see stock-approver) and NO
+    // STOCK.OVERSELL (separate stock-controller-oversell persona for the
+    // override path so the negative-stock-guard test on this persona
+    // actually fires).
+    username: 'qa.stock.controller',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Controller',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.COUNT',
+      'STOCK.TRANSFER',
+    ],
+  },
+  'stock-controller-oversell': {
+    // stock-controller + STOCK.OVERSELL — the persona that proves the
+    // oversell off-ramp lets a negative-stock write succeed.
+    username: 'qa.stock.controller.oversell',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Controller (Oversell)',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.COUNT',
+      'STOCK.TRANSFER',
+      'STOCK.OVERSELL',
+    ],
+  },
+  'stock-approver': {
+    // Second-pair-of-eyes for above-threshold or oversell adjustments.
+    // Backend enforces "you cannot authorise your own adjustment", so this
+    // is a separate user from stock-controller. Only STOCK.ADJUST_APPROVE
+    // — they don't post, just authorise.
+    username: 'qa.stock.approver',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Approver',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST_APPROVE',
+    ],
+  },
+  'stock-clerk': {
+    // Negative-case persona for the oversell + dual-control gate tests.
+    // Can attempt an adjustment (STOCK.ADJUST) so the above-threshold +
+    // authoriser gates can fire on a real request, plus STOCK.COUNT for
+    // read-capable access on the stock module. Deliberately MISSING
+    // STOCK.ADJUST_APPROVE (cannot authorise — own or anyone's),
+    // STOCK.OVERSELL (cannot drive qty negative), and STOCK.TRANSFER.
+    username: 'qa.stock.clerk',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Clerk',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.COUNT',
     ],
   },
 };

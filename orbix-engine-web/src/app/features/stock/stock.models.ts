@@ -86,6 +86,16 @@ export interface RecordCountsRequest {
   counts: { lineId: string; countedQty: number; note: string | null }[];
 }
 
+/**
+ * Optional body for {@code POST /stock-counts/uid/{uid}/post}. The backend
+ * requires {@code authorisedByUserId} when the count's net variance value
+ * exceeds the dual-control threshold; below it the body is unused. The UI
+ * fills this in unconditionally and lets the backend decide.
+ */
+export interface PostStockCountRequest {
+  authorisedByUserId: string | null;
+}
+
 export type StockTransferStatus = 'DRAFT' | 'ISSUED' | 'IN_TRANSIT' | 'RECEIVED' | 'CLOSED';
 
 export interface StockTransferLine {
@@ -174,4 +184,23 @@ export interface PostInternalConsumptionRequest {
   authorisedByUserId: string;
   reason: string;
   batchId: string | null;
+}
+
+// ---- Slice E1: oversell override + negative-stock report -------------------
+
+/**
+ * Resubmit shape for an adjustment that initially tripped the negative-stock
+ * guard. Same as {@link PostAdjustmentRequest} but with {@code allowOversell:
+ * true} — the caller must hold STOCK.OVERSELL for the backend to honour it.
+ */
+export type OversellResubmit = PostAdjustmentRequest & { allowOversell: true };
+
+/**
+ * Row in the {@code GET /reports/stock-negative} response — one item-branch
+ * pair whose {@code qty_on_hand} is currently below zero.
+ */
+export interface StockNegativeReportRow {
+  itemId: string;
+  branchId: string;
+  qtyOnHand: number;
 }

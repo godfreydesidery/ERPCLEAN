@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockTransferRequestDto;
@@ -21,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -36,6 +39,7 @@ public class StockTransferServiceImpl implements StockTransferService {
     private final StockTransferLineRepository transferLines;
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
+    private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
 
@@ -91,6 +95,8 @@ public class StockTransferServiceImpl implements StockTransferService {
         branchScope.requireAccess(transfer.getFromBranchId());
         transfer.issue();
         List<StockTransferLine> lines = transferLines.findByStockTransferId(transfer.getId());
+        BigDecimal totalCost = BigDecimal.ZERO;
+        List<Map<String, Object>> linePayload = new ArrayList<>();
         for (StockTransferLine line : lines) {
             BigDecimal cost = balances
                 .findById(new ItemBranchBalanceId(line.getItemId(), transfer.getFromBranchId()))
@@ -100,7 +106,24 @@ public class StockTransferServiceImpl implements StockTransferService {
             stockMoveService.post(new PostStockMoveRequestDto(
                 line.getItemId(), transfer.getFromBranchId(), line.getIssuedQty().negate(), cost,
                 StockMoveType.TRANSFER_OUT, "StockTransfer", transfer.getId(), null, false));
+            totalCost = totalCost.add(line.getIssuedQty().multiply(cost));
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("itemId", line.getItemId());
+            entry.put("issuedQty", line.getIssuedQty());
+            entry.put("cost", cost);
+            linePayload.add(entry);
         }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockTransferId", transfer.getId());
+        payload.put("uid", transfer.getUid());
+        payload.put("number", transfer.getNumber());
+        payload.put("fromBranchId", transfer.getFromBranchId());
+        payload.put("toBranchId", transfer.getToBranchId());
+        payload.put("totalCost", totalCost);
+        payload.put("lines", linePayload);
+        payload.put("actorId", context.userId());
+        events.publish("StockTransferIssued.v1", "StockTransfer",
+            String.valueOf(transfer.getId()), payload);
         return StockTransferDto.from(transfer, lines);
     }
 
@@ -115,6 +138,7 @@ public class StockTransferServiceImpl implements StockTransferService {
         }
         Map<Long, StockTransferLine> linesById = transferLines.findByStockTransferId(transfer.getId()).stream()
             .collect(Collectors.toMap(StockTransferLine::getId, Function.identity()));
+        List<Map<String, Object>> linePayload = new ArrayList<>();
         for (ReceiveTransferRequestDto.ReceiveLine entry : request.lines()) {
             StockTransferLine line = linesById.get(entry.lineId());
             if (line == null) {
@@ -127,8 +151,22 @@ public class StockTransferServiceImpl implements StockTransferService {
                     line.getCostAmount(), StockMoveType.TRANSFER_IN, "StockTransfer", transfer.getId(),
                     null, false));
             }
+            Map<String, Object> linkRow = new HashMap<>();
+            linkRow.put("itemId", line.getItemId());
+            linkRow.put("issuedQty", line.getIssuedQty());
+            linkRow.put("receivedQty", entry.receivedQty());
+            linePayload.add(linkRow);
         }
         transfer.receive();
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockTransferId", transfer.getId());
+        payload.put("uid", transfer.getUid());
+        payload.put("fromBranchId", transfer.getFromBranchId());
+        payload.put("toBranchId", transfer.getToBranchId());
+        payload.put("lines", linePayload);
+        payload.put("actorId", context.userId());
+        events.publish("StockTransferReceived.v1", "StockTransfer",
+            String.valueOf(transfer.getId()), payload);
         return StockTransferDto.from(transfer, transferLines.findByStockTransferId(transfer.getId()));
     }
 

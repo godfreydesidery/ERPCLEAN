@@ -1,14 +1,18 @@
 package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.domain.enums.SettingKey;
+import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostAdjustmentRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
+import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
+import com.orbix.engine.modules.stock.domain.enums.StockMoveDirection;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,11 +25,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,6 +52,7 @@ class AdjustmentServiceImplTest {
     @Mock private RequestContext context;
     @Mock private BranchScope branchScope;
     @Mock private SettingsService settings;
+    @Mock private EventPublisher events;
 
     @InjectMocks private AdjustmentServiceImpl service;
 
@@ -55,6 +62,14 @@ class AdjustmentServiceImplTest {
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
         lenient().when(settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD))
             .thenReturn(new BigDecimal("50000"));
+        lenient().when(stockMoveService.post(any())).thenAnswer(inv -> {
+            PostStockMoveRequestDto m = inv.getArgument(0);
+            return new StockMoveDto(1L, Instant.EPOCH, m.itemId(), m.branchId(), COMPANY_ID,
+                m.qty(), m.unitCost() != null ? m.unitCost() : BigDecimal.ZERO,
+                m.qty().signum() >= 0 ? StockMoveDirection.IN : StockMoveDirection.OUT,
+                m.moveType(), m.refType(), m.refId(), ACTOR_ID, m.notes(),
+                m.batchId(), m.sectionId(), m.consumptionCategory(), m.authorisedByUserId());
+        });
     }
 
     private static PostAdjustmentRequestDto req(BigDecimal qty, BigDecimal unitCost,
@@ -76,6 +91,7 @@ class AdjustmentServiceImplTest {
         PostStockMoveRequestDto posted = captor.getValue();
         assert posted.moveType() == StockMoveType.ADJUSTMENT;
         assert posted.authorisedByUserId() == null;
+        verify(events).publish(eq("StockAdjusted.v1"), any(), any(), any());
     }
 
     @Test
@@ -127,6 +143,7 @@ class AdjustmentServiceImplTest {
             ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
         verify(stockMoveService).post(captor.capture());
         assert captor.getValue().authorisedByUserId().equals(AUTHORISER_ID);
+        verify(events).publish(eq("StockAdjusted.v1"), any(), any(), any());
     }
 
     @Test
@@ -158,10 +175,52 @@ class AdjustmentServiceImplTest {
             .hasMessageContaining("authoriser");
     }
 
+    /**
+     * GAP 3.A — the oversell pre-check fires BEFORE the dual-control gate so
+     * the operator's error message names the STOCK.OVERSELL override even when
+     * the adjustment is also above the monetary threshold. Without this, the
+     * "authoriser required" message would win and the operator would never
+     * learn the right override path.
+     */
+    @Test
+    void post_negativeOutbound_withoutOversell_namesStockOversellInsteadOfAuthoriser() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(narrowBalance()));
+
+        // -10 * 1000 (avg) = 10,000 below 50k threshold; but on-hand only 3 →
+        // would-go-negative. allowOversell=false. Expect STOCK.OVERSELL message.
+        PostAdjustmentRequestDto request = req(new BigDecimal("-10"), null, null, false);
+        assertThatThrownBy(() -> service.postAdjustment(request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void post_negativeOutbound_aboveThreshold_namesStockOversell_notAuthoriser() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(narrowBalance()));
+
+        // -100 * 1000 (avg) = 100,000 > 50k threshold; on-hand only 3 → negative.
+        // Without OVERSELL, the message MUST be the STOCK.OVERSELL hint.
+        PostAdjustmentRequestDto request = req(new BigDecimal("-100"), null, null, false);
+        assertThatThrownBy(() -> service.postAdjustment(request))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
+        verify(stockMoveService, never()).post(any());
+    }
+
     private ItemBranchBalance balance(BigDecimal avgCost) {
         ItemBranchBalance b = new ItemBranchBalance(ITEM_ID, BRANCH_ID);
         b.setQtyOnHand(new BigDecimal("500"));
         b.setAvgCost(avgCost);
+        return b;
+    }
+
+    private ItemBranchBalance narrowBalance() {
+        ItemBranchBalance b = new ItemBranchBalance(ITEM_ID, BRANCH_ID);
+        b.setQtyOnHand(new BigDecimal("3"));
+        b.setAvgCost(new BigDecimal("1000"));
         return b;
     }
 }

@@ -7,6 +7,7 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { StockService } from './stock.service';
+import { PostAdjustmentRequest } from './stock.models';
 
 @Component({
   selector: 'orbix-stock-adjust',
@@ -24,13 +25,13 @@ import { StockService } from './stock.service';
     @if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
       </div>
     }
     @if (info()) {
       <div class="alert alert-success d-flex align-items-center gap-2 py-2">
         <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -54,19 +55,19 @@ import { StockService } from './stock.service';
               <legend class="form-fieldset__legend"><i class="bi bi-sliders text-secondary"></i> Item &amp; quantity</legend>
               <div class="row g-2">
                 <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="itemIdModel"
+                  <label for="adj-itemId" class="form-label small fw-semibold text-secondary">Item ID</label>
+                  <input id="adj-itemId" class="form-control" type="number" [(ngModel)]="itemIdModel"
                          (ngModelChange)="itemId.set($event)" name="itemId" required>
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label small fw-semibold text-secondary">Signed qty</label>
-                  <input class="form-control text-end" type="number" step="0.0001"
+                  <label for="adj-qty" class="form-label small fw-semibold text-secondary">Signed qty</label>
+                  <input id="adj-qty" class="form-control text-end" type="number" step="0.0001"
                          [(ngModel)]="qtyModel" (ngModelChange)="qty.set($event)" name="qty" required>
                   <small class="form-text text-secondary">+ inbound, − shrinkage / outbound</small>
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label small fw-semibold text-secondary">Unit cost <span class="text-muted">(in only)</span></label>
-                  <input class="form-control text-end" type="number" step="0.0001"
+                  <label for="adj-unitCost" class="form-label small fw-semibold text-secondary">Unit cost <span class="text-muted">(in only)</span></label>
+                  <input id="adj-unitCost" class="form-control text-end" type="number" step="0.0001"
                          [(ngModel)]="unitCostModel" (ngModelChange)="unitCost.set($event)" name="unitCost">
                 </div>
               </div>
@@ -76,38 +77,56 @@ import { StockService } from './stock.service';
               <legend class="form-fieldset__legend"><i class="bi bi-clipboard-data text-secondary"></i> Context</legend>
               <div class="row g-2">
                 <div class="col-12">
-                  <label class="form-label small fw-semibold text-secondary">Reason</label>
-                  <input class="form-control" type="text" [(ngModel)]="reasonModel"
+                  <label for="adj-reason" class="form-label small fw-semibold text-secondary">Reason</label>
+                  <input id="adj-reason" class="form-control" type="text" [(ngModel)]="reasonModel"
                          (ngModelChange)="reason.set($event)" name="reason" required placeholder="e.g. weekly cycle count variance">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Section ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" [(ngModel)]="sectionIdModel"
+                  <label for="adj-sectionId" class="form-label small fw-semibold text-secondary">Section ID <span class="text-muted">(opt)</span></label>
+                  <input id="adj-sectionId" class="form-control" type="number" [(ngModel)]="sectionIdModel"
                          (ngModelChange)="sectionId.set($event)" name="sectionId">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" [(ngModel)]="batchIdModel"
+                  <label for="adj-batchId" class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
+                  <input id="adj-batchId" class="form-control" type="number" [(ngModel)]="batchIdModel"
                          (ngModelChange)="batchId.set($event)" name="batchId">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="authoriserModel"
+                  <label for="adj-authoriser" class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
+                  <input id="adj-authoriser" class="form-control" type="number" [(ngModel)]="authoriserModel"
                          (ngModelChange)="authorisedByUserId.set($event)" name="authoriser">
                   <small class="form-text text-secondary">Required above threshold</small>
                 </div>
-                <div class="col-12">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="oversell"
-                           [(ngModel)]="allowOversellModel"
-                           (ngModelChange)="allowOversell.set($event)" name="oversell">
-                    <label class="form-check-label small" for="oversell">
-                      Allow oversell <span class="text-muted">(requires STOCK.OVERSELL permission)</span>
-                    </label>
-                  </div>
-                </div>
               </div>
             </fieldset>
+
+            @if (oversellPrompt()) {
+              <div class="oversell-form border border-warning rounded-3 p-3 bg-warning-subtle">
+                <p class="small fw-semibold text-warning-emphasis mb-2 d-flex align-items-center gap-2">
+                  <i class="bi bi-shield-exclamation"></i>
+                  Stock would go negative
+                </p>
+                <p class="small mb-2 text-dark">
+                  This adjustment will drive on-hand stock below zero for this item at this branch.
+                  Re-submit with <span class="font-monospace">allowOversell: true</span> to override —
+                  the move is recorded with the OVERSELL hint for audit.
+                </p>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <button type="button"
+                          class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1"
+                          [disabled]="busy()"
+                          (click)="confirmOversell()">
+                    @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                    @else { <i class="bi bi-shield-check"></i> }
+                    Confirm OVERSELL &amp; re-submit
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          [disabled]="busy()" (click)="cancelOversell()">
+                    Keep draft
+                  </button>
+                </div>
+              </div>
+            }
 
             <div class="d-flex gap-2 pt-2 border-top">
               <button type="submit" class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
@@ -155,7 +174,6 @@ export class AdjustComponent {
   protected readonly sectionId = signal<string | null>(null);
   protected readonly batchId = signal<string | null>(null);
   protected readonly authorisedByUserId = signal<string | null>(null);
-  protected readonly allowOversell = signal<boolean>(false);
 
   // ngModel mirrors
   protected itemIdModel: number | null = null;
@@ -165,11 +183,19 @@ export class AdjustComponent {
   protected sectionIdModel: number | null = null;
   protected batchIdModel: number | null = null;
   protected authoriserModel: number | null = null;
-  protected allowOversellModel = false;
 
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
+
+  /** Inline-collapsible override prompt — set on a 400 + STOCK.OVERSELL hit. */
+  protected readonly oversellPrompt = signal<boolean>(false);
+  /** Last request the user submitted — replayed with allowOversell=true on confirm. */
+  private lastRequest: PostAdjustmentRequest | null = null;
+
+  protected readonly canOverrideOversell = computed(() =>
+    this.auth.hasPermission('STOCK.OVERSELL')
+  );
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -184,10 +210,7 @@ export class AdjustComponent {
       this.error.set('Item, signed qty and reason are required.');
       return;
     }
-    this.error.set(null);
-    this.info.set(null);
-    this.busy.set(true);
-    this.stock.postAdjustment({
+    const request: PostAdjustmentRequest = {
       itemId,
       branchId,
       qty,
@@ -196,23 +219,75 @@ export class AdjustComponent {
       sectionId: this.sectionId(),
       batchId: this.batchId(),
       authorisedByUserId: this.authorisedByUserId(),
-      allowOversell: this.allowOversell()
-    }).subscribe({
+      allowOversell: false
+    };
+    this.submit(request, false);
+  }
+
+  /** Re-submit the last failed adjustment with allowOversell=true. */
+  confirmOversell(): void {
+    if (!this.lastRequest) {
+      this.oversellPrompt.set(false);
+      return;
+    }
+    this.submit(this.lastRequest, true);
+  }
+
+  cancelOversell(): void {
+    this.oversellPrompt.set(false);
+    this.lastRequest = null;
+  }
+
+  private submit(request: PostAdjustmentRequest, allowOversell: boolean): void {
+    this.error.set(null);
+    this.info.set(null);
+    this.busy.set(true);
+    this.stock.postAdjustment(request, allowOversell).subscribe({
       next: move => {
         this.busy.set(false);
-        this.info.set(`Adjustment posted as stock_move #${move.id}.`);
+        this.info.set(allowOversell
+          ? `Adjustment posted with OVERSELL as stock_move #${move.id}.`
+          : `Adjustment posted as stock_move #${move.id}.`);
+        this.oversellPrompt.set(false);
+        this.lastRequest = null;
         this.qty.set(null);
         this.qtyModel = null;
         this.reason.set('');
         this.reasonModel = '';
-        this.allowOversell.set(false);
-        this.allowOversellModel = false;
       },
       error: err => {
         this.busy.set(false);
-        this.showError(err);
+        this.handleError(err, request);
       }
     });
+  }
+
+  /**
+   * Inspect the backend error and either:
+   *  - surface the inline OVERSELL override form (caller has STOCK.OVERSELL), or
+   *  - surface a non-actionable alert (caller does not).
+   */
+  private handleError(err: unknown, attempted: PostAdjustmentRequest): void {
+    if (this.isOversellError(err)) {
+      this.lastRequest = attempted;
+      if (this.canOverrideOversell()) {
+        this.oversellPrompt.set(true);
+        this.error.set(null);
+      } else {
+        this.oversellPrompt.set(false);
+        this.error.set('Stock would go negative. Ask a supervisor to authorise (STOCK.OVERSELL).');
+      }
+      return;
+    }
+    this.oversellPrompt.set(false);
+    this.showError(err);
+  }
+
+  private isOversellError(err: unknown): boolean {
+    if (!(err instanceof HttpErrorResponse) || err.status !== 400) return false;
+    const envelope = err.error as ApiResponse<unknown> | null;
+    const msg = envelope?.message ?? '';
+    return msg.includes('STOCK.OVERSELL');
   }
 
   private showError(err: unknown): void {

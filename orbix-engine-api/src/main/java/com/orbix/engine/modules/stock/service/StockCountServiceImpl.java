@@ -1,12 +1,19 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
 import com.orbix.engine.modules.iam.service.BranchScope;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockCountRequestDto;
+import com.orbix.engine.modules.stock.domain.dto.PostStockCountRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.RecordCountsRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockCountDto;
+import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
 import com.orbix.engine.modules.stock.domain.entity.StockCount;
@@ -17,10 +24,13 @@ import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.repository.StockCountLineRepository;
 import com.orbix.engine.modules.stock.repository.StockCountRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -32,10 +42,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StockCountServiceImpl implements StockCountService {
 
+    static final String APPROVE_PERMISSION = Permissions.STOCK_COUNT_APPROVE;
+
     private final StockCountRepository counts;
     private final StockCountLineRepository countLines;
     private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
+    private final PermissionResolverService permissions;
+    private final SettingsService settings;
+    private final EventPublisher events;
     private final RequestContext context;
     private final BranchScope branchScope;
 
@@ -78,7 +93,8 @@ public class StockCountServiceImpl implements StockCountService {
                 .orElse(BigDecimal.ZERO);
             countLines.save(new StockCountLine(count.getId(), itemId, systemQty));
         }
-        return StockCountDto.from(count, countLines.findByStockCountId(count.getId()));
+        List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
+        return StockCountDto.from(count, lines);
     }
 
     @Override
@@ -87,7 +103,17 @@ public class StockCountServiceImpl implements StockCountService {
     public StockCountDto startCount(String uid) {
         StockCount count = requireCountByUid(uid);
         count.start();
-        return StockCountDto.from(count, countLines.findByStockCountId(count.getId()));
+        List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockCountId", count.getId());
+        payload.put("uid", count.getUid());
+        payload.put("number", count.getNumber());
+        payload.put("branchId", count.getBranchId());
+        payload.put("lineCount", lines.size());
+        payload.put("actorId", context.userId());
+        events.publish("StockCountStarted.v1", "StockCount",
+            String.valueOf(count.getId()), payload);
+        return StockCountDto.from(count, lines);
     }
 
     @Override
@@ -118,16 +144,39 @@ public class StockCountServiceImpl implements StockCountService {
         count.close(context.userId());
         List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
         lines.forEach(StockCountLine::computeVariance);
+        BigDecimal varianceValue = computeVarianceValue(count.getBranchId(), lines);
+        long varianceCount = lines.stream()
+            .map(StockCountLine::getVarianceQty)
+            .filter(v -> v != null && v.signum() != 0)
+            .count();
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockCountId", count.getId());
+        payload.put("uid", count.getUid());
+        payload.put("branchId", count.getBranchId());
+        payload.put("varianceCount", varianceCount);
+        payload.put("varianceValue", varianceValue);
+        payload.put("actorId", context.userId());
+        events.publish("StockCountClosed.v1", "StockCount",
+            String.valueOf(count.getId()), payload);
         return StockCountDto.from(count, lines);
     }
 
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = "StockCount")
-    public StockCountDto postCount(String uid) {
+    public StockCountDto postCount(String uid, PostStockCountRequestDto request) {
         StockCount count = requireCountByUid(uid);
-        count.post();
         List<StockCountLine> lines = countLines.findByStockCountId(count.getId());
+
+        BigDecimal varianceValue = computeVarianceValue(count.getBranchId(), lines);
+        boolean aboveThreshold = varianceValue.compareTo(
+            settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD)) > 0;
+        PostStockCountRequestDto safeRequest = request != null ? request : PostStockCountRequestDto.empty();
+        validateAuthoriser(safeRequest.authorisedByUserId(), context.userId(), aboveThreshold);
+
+        count.post();
+        List<Long> varianceMoveIds = new ArrayList<>();
+        List<Map<String, Object>> adjustmentLines = new ArrayList<>();
         for (StockCountLine line : lines) {
             BigDecimal variance = line.getVarianceQty();
             if (variance == null || variance.signum() == 0) {
@@ -137,11 +186,70 @@ public class StockCountServiceImpl implements StockCountService {
                 .findById(new ItemBranchBalanceId(line.getItemId(), count.getBranchId()))
                 .map(ItemBranchBalance::getAvgCost)
                 .orElse(BigDecimal.ZERO);
-            stockMoveService.post(new PostStockMoveRequestDto(
+            StockMoveDto move = stockMoveService.post(new PostStockMoveRequestDto(
                 line.getItemId(), count.getBranchId(), variance, unitCost,
                 StockMoveType.ADJUSTMENT, "StockCount", count.getId(), line.getNote(), true));
+            varianceMoveIds.add(move.id());
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("itemId", line.getItemId());
+            entry.put("variance", variance);
+            entry.put("cost", unitCost);
+            entry.put("stockMoveId", move.id());
+            adjustmentLines.add(entry);
         }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockCountId", count.getId());
+        payload.put("uid", count.getUid());
+        payload.put("branchId", count.getBranchId());
+        payload.put("varianceValue", varianceValue);
+        payload.put("aboveThreshold", aboveThreshold);
+        payload.put("authorisedByUserId", safeRequest.authorisedByUserId());
+        payload.put("actorId", context.userId());
+        payload.put("varianceStockMoveIds", varianceMoveIds);
+        payload.put("adjustmentLines", adjustmentLines);
+        events.publish("StockCountPosted.v1", "StockCount",
+            String.valueOf(count.getId()), payload);
+
         return StockCountDto.from(count, lines);
+    }
+
+    /**
+     * Signed absolute variance value at the branch's current moving-average cost.
+     * Mirrors {@link AdjustmentServiceImpl#postAdjustment}'s monetary impact
+     * but aggregated across every non-zero variance line on the count.
+     */
+    private BigDecimal computeVarianceValue(Long branchId, List<StockCountLine> lines) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (StockCountLine line : lines) {
+            BigDecimal v = line.getVarianceQty();
+            if (v == null || v.signum() == 0) continue;
+            BigDecimal cost = balances.findById(new ItemBranchBalanceId(line.getItemId(), branchId))
+                .map(ItemBranchBalance::getAvgCost)
+                .orElse(BigDecimal.ZERO);
+            total = total.add(v.abs().multiply(cost));
+        }
+        return total;
+    }
+
+    private void validateAuthoriser(Long authoriserId, Long actorId, boolean required) {
+        if (!required) {
+            return;
+        }
+        if (authoriserId == null) {
+            throw new IllegalArgumentException(
+                "An authoriser holding " + APPROVE_PERMISSION
+                    + " is required to post an above-threshold stock count");
+        }
+        if (Objects.equals(authoriserId, actorId)) {
+            throw new IllegalArgumentException("You cannot authorise your own stock count");
+        }
+        boolean canApprove = permissions.resolve(authoriserId, context.companyId(), null)
+            .contains(APPROVE_PERMISSION);
+        if (!canApprove) {
+            throw new AccessDeniedException(
+                "Authoriser " + authoriserId + " does not hold " + APPROVE_PERMISSION);
+        }
     }
 
     private StockCount requireCountByUid(String uid) {

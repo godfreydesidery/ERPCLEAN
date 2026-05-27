@@ -352,21 +352,28 @@ export class DashboardComponent implements OnInit {
   // Metric values — null until loaded (or when no branch is selected).
   protected readonly todaysSales = signal<number | null>(null);
   protected readonly stockAlerts = signal<number | null>(null);
+  protected readonly negativeStockCount = signal<number | null>(null);
   protected readonly openInvoices = signal<number | null>(null);
   protected readonly arOutstanding = signal<number | null>(null);
   protected readonly overdueInvoices = signal<number | null>(null);
   protected readonly lposPending = signal<number | null>(null);
   /** AR tiles show "Permission required" when the caller lacks SALES.REPORT.AR_SUMMARY. */
   protected readonly arPermissionDenied = signal<boolean>(false);
+  /** Negative-stock tile shows "Permission required" when the caller lacks STOCK.COUNT. */
+  protected readonly negativeStockPermissionDenied = signal<boolean>(false);
 
   protected readonly kpis = computed<Kpi[]>(() => {
     const ccy = this.currencyCode();
     const arDenied = this.arPermissionDenied();
     const arValue = arDenied ? 'Permission required' : this.money(this.arOutstanding(), ccy);
     const openValue = arDenied ? 'Permission required' : this.count(this.openInvoices());
+    const negativeStockValue = this.negativeStockPermissionDenied()
+      ? 'Permission required'
+      : this.count(this.negativeStockCount());
     return [
       { label: "Today's sales",  value: this.money(this.todaysSales(), ccy), icon: 'bi-cash-coin', tint: 'green', live: DASHBOARD_LIVE.todaysSales },
       { label: 'Stock alerts',   value: this.count(this.stockAlerts()),      icon: 'bi-box-seam',  tint: 'amber', live: DASHBOARD_LIVE.stockAlertCount },
+      { label: 'Negative stock', value: negativeStockValue,                   icon: 'bi-exclamation-octagon', tint: 'rose', live: DASHBOARD_LIVE.negativeStockCount },
       { label: 'Open invoices',  value: openValue,                            icon: 'bi-receipt',   tint: 'blue',  live: DASHBOARD_LIVE.openInvoiceCount },
       { label: 'AR outstanding', value: arValue,                              icon: 'bi-people',    tint: 'rose',  live: DASHBOARD_LIVE.arOutstanding },
     ];
@@ -374,26 +381,29 @@ export class DashboardComponent implements OnInit {
 
   protected readonly alerts = computed<Alert[]>(() => {
     const out: Alert[] = [];
-    const stock = this.stockAlerts();
-    if (stock && stock > 0) {
-      out.push({ tint: 'amber', title: `${stock} SKU${stock === 1 ? '' : 's'} at or below reorder level`,
+    this.pushIfPositive(out, this.stockAlerts(), n =>
+      ({ tint: 'amber', title: `${n} SKU${n === 1 ? '' : 's'} at or below reorder level`,
         desc: 'Review balances and raise a purchase order.', link: '/stock/balances', cta: 'Review',
-        live: DASHBOARD_LIVE.stockAlertCount });
-    }
-    const overdue = this.overdueInvoices();
-    if (overdue && overdue > 0) {
-      out.push({ tint: 'rose', title: `${overdue} invoice${overdue === 1 ? '' : 's'} past due`,
+        live: DASHBOARD_LIVE.stockAlertCount }));
+    this.pushIfPositive(out, this.negativeStockCount(), n =>
+      ({ tint: 'rose', title: `${n} item${n === 1 ? '' : 's'} in negative stock`,
+        desc: 'OVERSELL moves have driven on-hand below zero — reconcile soon.',
+        link: '/stock/balances', cta: 'Review',
+        live: DASHBOARD_LIVE.negativeStockCount }));
+    this.pushIfPositive(out, this.overdueInvoices(), n =>
+      ({ tint: 'rose', title: `${n} invoice${n === 1 ? '' : 's'} past due`,
         desc: 'Chase outstanding receivables under Debt.', link: '/debt', cta: 'Chase',
-        live: DASHBOARD_LIVE.overdueInvoiceCount });
-    }
-    const lpo = this.lposPending();
-    if (lpo && lpo > 0) {
-      out.push({ tint: 'blue', title: `${lpo} LPO${lpo === 1 ? '' : 's'} awaiting approval`,
+        live: DASHBOARD_LIVE.overdueInvoiceCount }));
+    this.pushIfPositive(out, this.lposPending(), n =>
+      ({ tint: 'blue', title: `${n} LPO${n === 1 ? '' : 's'} awaiting approval`,
         desc: 'Procurement approvals are pending.', link: '/procurement', cta: 'Open',
-        live: DASHBOARD_LIVE.lposPendingApproval });
-    }
+        live: DASHBOARD_LIVE.lposPendingApproval }));
     return out;
   });
+
+  private pushIfPositive(out: Alert[], n: number | null, build: (n: number) => Alert): void {
+    if (n && n > 0) out.push(build(n));
+  }
 
   protected readonly dayStatus = computed<'OPEN' | 'CLOSING' | 'CLOSED' | 'NONE'>(() => {
     const d = this.currentDay();
@@ -454,6 +464,11 @@ export class DashboardComponent implements OnInit {
     // "Permission required" state on the tiles.
     this.loadArSummary();
 
+    // Negative-stock tile — live via /reports/stock-negative (Slice E1).
+    // Mirrors AR: branch-scoped when active, company-wide on null. 403
+    // surfaces as "Permission required" on the tile.
+    this.loadNegativeStockCount();
+
     this.dashboard.lposPendingApproval().subscribe(v => this.lposPending.set(v));
 
     const branchId = this.branch.activeBranchId();
@@ -476,6 +491,25 @@ export class DashboardComponent implements OnInit {
     this.dashboard.stockAlertCount(branchId).subscribe({
       next: v => this.stockAlerts.set(v),
       error: () => this.stockAlerts.set(null),
+    });
+  }
+
+  private loadNegativeStockCount(): void {
+    const branchId = this.branch.activeBranchId();
+    this.dashboard.negativeStockCount(branchId).subscribe({
+      next: count => {
+        this.negativeStockPermissionDenied.set(false);
+        this.negativeStockCount.set(count);
+      },
+      error: err => {
+        if (err instanceof HttpErrorResponse && err.status === 403) {
+          this.negativeStockPermissionDenied.set(true);
+          this.negativeStockCount.set(null);
+        } else {
+          // Other errors leave the tile in "—" state; don't crash.
+          this.negativeStockCount.set(null);
+        }
+      }
     });
   }
 
