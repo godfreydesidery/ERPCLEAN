@@ -153,30 +153,36 @@ class SalesInvoiceServiceImplTest {
     }
 
     @Test
-    void createDraft_creditExceedingLimit_isRejected() {
+    void createDraft_creditExceedingLimit_isAllowed_gateFireOnPost() {
+        // Slice C design intent: drafts are NEVER rejected on credit limit.
+        // The gate fires at POST time (with SALES_INVOICE.OVERRIDE_CREDIT as
+        // the off-ramp). Drafts are a negotiation surface — they can sit at
+        // any total without committing the customer to the debt.
         Customer customer = new Customer(CUSTOMER_ID);
         customer.setCreditLimitAmount(new BigDecimal("500"));
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
-        // 10 * 100 + tax = 1180 > 500 → reject
         CreateSalesInvoiceRequestDto request = draft("SI-CR", PaymentTerms.CREDIT,
             new BigDecimal("10"), new BigDecimal("100"), BigDecimal.ZERO, null);
-        assertThatThrownBy(() -> service.createDraft(request))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("credit limit");
+        SalesInvoiceDto dto = service.createDraft(request);
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.DRAFT);
+        assertThat(dto.totalAmount()).isEqualByComparingTo("1180");
     }
 
     @Test
-    void createDraft_creditWithZeroLimit_rejected() {
+    void createDraft_creditWithZeroLimit_isAllowed_gateFireOnPost() {
+        // Same intent: a customer with zero credit limit can still have a
+        // draft created against them. POST is where the gate runs.
         Customer customer = new Customer(CUSTOMER_ID);
         customer.setCreditLimitAmount(BigDecimal.ZERO);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
         CreateSalesInvoiceRequestDto request = draft("SI-NOC", PaymentTerms.CREDIT,
             new BigDecimal("1"), new BigDecimal("100"), BigDecimal.ZERO, null);
-        assertThatThrownBy(() -> service.createDraft(request))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("no credit limit");
+        SalesInvoiceDto dto = service.createDraft(request);
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.DRAFT);
     }
 
     @Test

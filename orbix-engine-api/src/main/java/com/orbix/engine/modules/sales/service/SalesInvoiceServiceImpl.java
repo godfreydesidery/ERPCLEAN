@@ -92,7 +92,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             throw new IllegalArgumentException(
                 "Sales invoice number already exists for this branch: " + number);
         }
-        Customer customer = requireCustomer(request.customerId());
+        // Customer must exist (and be in this company) before we accept a draft.
+        // The full Customer record is not used here — the credit gate runs at
+        // POST time (Slice C design intent).
+        requireCustomer(request.customerId());
         validateDiscountApprover(request, actorId, companyId);
         validateLines(request, companyId);
 
@@ -104,11 +107,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         ));
         List<SalesInvoiceLine> savedLines = saveLinesAndRollUp(invoice, request.lines(), companyId);
 
-        if (request.paymentTerms() == PaymentTerms.CREDIT) {
-            // Draft creation enforces credit limit unconditionally (Slice C
-            // GAP 3.A — override is a POST-time decision, not draft-time).
-            checkCreditLimit(customer, invoice.getTotalAmount(), false);
-        }
+        // Slice C design intent: drafts are always allowed even when they
+        // exceed the customer's credit limit (sales-negotiation workflow).
+        // The credit gate fires at POST time, with the
+        // SALES_INVOICE.OVERRIDE_CREDIT off-ramp available there.
 
         events.publish("SalesInvoiceCreated.v1", AGG, String.valueOf(invoice.getId()),
             Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber(),

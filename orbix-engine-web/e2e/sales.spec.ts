@@ -317,22 +317,27 @@ test.describe('Sales · setup', () => {
     }
 
     // 4b) Seed stock so the invoice-post stock-out doesn't drive the balance
-    // negative. POS uses a dedicated rcv endpoint — for sales we just need a
-    // positive on-hand. Tolerate 4xx in case the rcv endpoint is gated to a
-    // different perm shape than rootadmin holds; the post still works
-    // (negative balance is allowed today, just noisy).
-    await apiPost(page, '/api/v1/stock-moves', {
+    // negative. There's no public POST /stock-moves endpoint — stock is
+    // written by the document modules (GRN, sales, adjustments). For an
+    // e2e seed the natural pathway is /api/v1/adjustments which writes a
+    // positive stock_move under ref_type=Adjustment. Tolerate 4xx in case
+    // the adjustment is gated to a different perm than rootadmin holds.
+    // Adjustments above a monetary threshold or oversell require dual
+    // control (authoriser with STOCK.ADJUST_APPROVE). Pick a qty + cost
+    // that stays well below the threshold so rootadmin can self-post.
+    // qty=200 × cost=10 = 2000 TZS, ample stock for all downstream
+    // invoices (CASH_QTY=2, OVER_LIMIT_QTY=5 each, posted multiple times).
+    await apiPost(page, '/api/v1/adjustments', {
       itemId: refs.itemId,
       branchId: BRANCH_ID,
-      qty: '50',
-      unitCost: '2000',
-      type: 'IN',
-      refType: 'E2ESalesSetup',
-      refId: 0,
+      qty: '200',
+      unitCost: '10',
       reason: `e2e sales seed ${RUN_TAG}`,
-      compensating: false,
-      batchId: null
-    }, { acceptStatuses: [200, 201, 400, 403, 404] });
+      sectionId: null,
+      batchId: null,
+      authorisedByUserId: null,
+      allowOversell: false
+    }, { acceptStatuses: [200, 201] });
 
     // 5) Price list (currency TZS, valid from today). The sales-invoice UI
     // requires a price list on every header.
@@ -478,9 +483,10 @@ async function createInvoiceDraft(
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · invoice post (within limit)', () => {
-  // TODO depends on QA#2 expanding the `cashier` persona to include
-  // SALES.MANAGE_INVOICE (the day-1 persona only carries POS perms).
-  test.use({ persona: 'cashier' });
+  // `sales-clerk` carries SALES.MANAGE_INVOICE + SALES.MANAGE_RECEIPT but
+  // NOT SALES_INVOICE.OVERRIDE_CREDIT — exactly the within-limit happy-
+  // path shape.
+  test.use({ persona: 'sales-clerk' });
   test('CASH invoice posts; stock_move + SalesInvoicePosted.v1 emitted', async ({ page }) => {
     const r0 = requireRefs();
     const inv = await createInvoiceDraft(page, 'POST', r0.customerCashId, CASH_QTY, 'CASH');
@@ -521,11 +527,9 @@ test.describe('Sales · invoice post (within limit)', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · credit-limit gate blocks over-limit', () => {
-  // TODO depends on QA#2 expanding the `cashier` persona to include
-  // SALES.MANAGE_INVOICE. The cashier here is intentionally one WITHOUT
+  // `sales-clerk` has SALES.MANAGE_INVOICE but NOT
   // SALES_INVOICE.OVERRIDE_CREDIT — the gate must reject them.
-  test.use({ persona: 'cashier' });
-  test.fail();
+  test.use({ persona: 'sales-clerk' });
   test('CREDIT invoice over the customer limit fails to post with a credit-limit message', async ({ page }) => {
     const r0 = requireRefs();
     // The customer's credit limit is 10_000; this invoice grosses ~25_000.
@@ -580,12 +584,9 @@ test.describe('Sales · credit-limit gate blocks over-limit', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · credit-limit override with permission', () => {
-  // TODO depends on QA#2 adding the `cashier-with-override` persona (with
-  // SALES.MANAGE_INVOICE + the new SALES_INVOICE.OVERRIDE_CREDIT perm)
-  // *and* on the backend seeding SALES_INVOICE.OVERRIDE_CREDIT (plan §6).
-  // Until both land, this test fails at the persona-login layer.
+  // `cashier-with-override` carries SALES_INVOICE.OVERRIDE_CREDIT — the
+  // off-ramp on the POST credit gate.
   test.use({ persona: 'cashier-with-override' as Persona });
-  test.fail();
   test('user with SALES_INVOICE.OVERRIDE_CREDIT posts the over-limit invoice with a reason', async ({ page }) => {
     const r0 = requireRefs();
     const number = `INV-${RUN_TAG}-OVR`;
@@ -640,9 +641,8 @@ test.describe('Sales · credit-limit override with permission', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · receipt allocation', () => {
-  // TODO depends on QA#2 expanding the `cashier` persona to include
-  // SALES.MANAGE_INVOICE + SALES.MANAGE_RECEIPT.
-  test.use({ persona: 'cashier' });
+  // `sales-clerk` carries SALES.MANAGE_INVOICE + SALES.MANAGE_RECEIPT.
+  test.use({ persona: 'sales-clerk' });
   test('receipt posts, allocates against the invoice, cash_entry + SalesReceiptPosted.v1 land', async ({ page }) => {
     const r0 = requireRefs();
     // Provision a fresh CASH-customer invoice + post via API (the UI post
@@ -679,7 +679,7 @@ test.describe('Sales · receipt allocation', () => {
     const postBtn = page.locator('button.btn-primary.btn-sm').filter({ hasText: /Post/i }).first();
     await expect(postBtn).toBeVisible({ timeout: 10_000 });
     await postBtn.click();
-    await expect(page.getByText(/Receipt posted\.|posted/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Receipt posted.').first()).toBeVisible({ timeout: 15_000 });
 
     // DB pins: receipt POSTED, allocation row exists, cash_entry landed,
     // outbox SalesReceiptPosted.v1 emitted, invoice flips to PAID.
@@ -690,7 +690,7 @@ test.describe('Sales · receipt allocation', () => {
     expect(alloc, 'receipt_allocation row links to the invoice').toBeGreaterThanOrEqual(1);
 
     const cash = dbCount(
-      `SELECT COUNT(*) FROM cash_entry WHERE ref_type='SALES_RECEIPT' AND ref_id=${rcptId} AND direction='IN'`
+      `SELECT COUNT(*) FROM cash_entry WHERE ref_type='SalesReceipt' AND ref_id=${rcptId} AND direction='IN'`
     );
     expect(cash, 'cash_entry IN row for CASH receipt').toBeGreaterThanOrEqual(1);
 
@@ -711,10 +711,12 @@ test.describe('Sales · receipt allocation', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · invoice void with compensating entries', () => {
-  // TODO depends on QA#2 adding SALES.MANAGE_INVOICE to the supervisor
-  // persona (the day-1 supervisor only carries procurement perms).
-  test.use({ persona: 'supervisor' });
-  test.fail();
+  // Use `cashier-with-override` — they carry SALES.MANAGE_INVOICE which
+  // gates void at the class level. A real "supervisor with void rights"
+  // would extend supervisor with SALES.MANAGE_INVOICE in a follow-up
+  // persona-roster sweep; here we just need a persona that can post +
+  // void.
+  test.use({ persona: 'cashier-with-override' as Persona });
   test('voiding a posted invoice writes a compensating stock_move + emits SalesInvoiceVoided.v1 with compensating=true', async ({ page }) => {
     const r0 = requireRefs();
     // Fresh CASH invoice, posted via API (no receipt — void requires paidAmount=0).
@@ -755,10 +757,9 @@ test.describe('Sales · invoice void with compensating entries', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · invoice reprint audit', () => {
-  // TODO depends on QA#2 expanding the `cashier` persona to include
-  // SALES.MANAGE_INVOICE + the new SALES_INVOICE.REPRINT perm (plan §2).
-  test.use({ persona: 'cashier' });
-  test.fail();
+  // `cashier-with-override` carries SALES.MANAGE_INVOICE (gates POST +
+  // reprint at the class level) plus the new SALES_INVOICE.REPRINT perm.
+  test.use({ persona: 'cashier-with-override' as Persona });
   test('reprinting a posted invoice writes SalesInvoiceReprinted.v1 with the chosen reason enum', async ({ page }) => {
     const r0 = requireRefs();
     const inv = await createInvoiceDraft(page, 'RPR', r0.customerCashId, CASH_QTY, 'CASH');
@@ -800,10 +801,9 @@ test.describe('Sales · invoice reprint audit', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Sales · AR-summary endpoint', () => {
-  // TODO depends on QA#2 expanding the `accountant` persona to include the
-  // new SALES.REPORT.AR_SUMMARY perm + SALES_INVOICE.READ (plan §2).
+  // accountant carries SALES.REPORT.AR_SUMMARY (added to the persona
+  // roster as part of Slice C).
   test.use({ persona: 'accountant' });
-  test.fail();
   test('GET /api/v1/sales/reports/ar-summary returns aggregate counts + outstanding', async ({ page }) => {
     const r = await apiGet(page, `/api/v1/sales/reports/ar-summary?branchId=${BRANCH_ID}`, {
       acceptStatuses: [200],
@@ -847,7 +847,6 @@ test.describe('Sales · AR-summary permission denial', () => {
   // NOT carry the new SALES.REPORT.AR_SUMMARY perm — this test pins that
   // gate. QA#2 should NOT grant SALES.REPORT.AR_SUMMARY to `cashier`.
   test.use({ persona: 'cashier' });
-  test.fail();
   test('cashier without SALES.REPORT.AR_SUMMARY gets 403 from ar-summary', async ({ page }) => {
     const r = await apiGet(page, `/api/v1/sales/reports/ar-summary?branchId=${BRANCH_ID}`, {
       acceptStatuses: [403],
