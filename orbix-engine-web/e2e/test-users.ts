@@ -36,8 +36,10 @@ export type Persona =
   | 'supervisor'      // can cancel POSTED GRNs / LPOs (GRN.CANCEL, PROCUREMENT.CANCEL_LPO)
   | 'sales-rep'
   | 'sales-clerk'     // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
-  | 'stock-controller' // full stock spine: ADJUST + ADJUST_APPROVE + COUNT + TRANSFER + OVERSELL (Slice E1)
-  | 'stock-clerk';    // ADJUST + COUNT only — negative-case persona for oversell + dual-control gates
+  | 'stock-controller'          // ADJUST + COUNT + TRANSFER (no APPROVE, no OVERSELL) — Slice E1
+  | 'stock-controller-oversell' // stock-controller + STOCK.OVERSELL — proves the override off-ramp
+  | 'stock-approver'             // STOCK.ADJUST_APPROVE only — second-pair-of-eyes authoriser
+  | 'stock-clerk';               // ADJUST + COUNT only — negative-case persona
 
 export interface TestUser {
   username: string;     // e.g. 'qa.cashier'
@@ -190,24 +192,47 @@ export const TEST_USERS: Record<Persona, TestUser> = {
     ],
   },
   'stock-controller': {
-    // Full stock spine for Slice E1: post adjustments, authorise above-
-    // threshold / oversell adjustments (second-pair-of-eyes — backend
-    // enforces "you cannot authorise your own adjustment", so a separate
-    // user from `stock-clerk` is mandatory), run physical counts, and
-    // issue/receive inter-branch transfers. STOCK.OVERSELL is the
-    // Slice-E1-pending bit; bootstrap drops it gracefully if not seeded
-    // yet (mirrors the supervisor pattern from Slice B).
+    // The "stock spine operator": posts adjustments, runs counts, issues +
+    // receives transfers. Deliberately NO STOCK.ADJUST_APPROVE (dual-
+    // control real-world separation — see stock-approver) and NO
+    // STOCK.OVERSELL (separate stock-controller-oversell persona for the
+    // override path so the negative-stock-guard test on this persona
+    // actually fires).
     username: 'qa.stock.controller',
     password: TEST_PASSWORD,
     fullName: 'QA Stock Controller',
     defaultBranchId: HQ_BRANCH,
     permissions: [
       'STOCK.ADJUST',
-      'STOCK.ADJUST_APPROVE',
       'STOCK.COUNT',
       'STOCK.TRANSFER',
-      // Slice-E1-pending perm — bootstrap drops it gracefully if absent.
+    ],
+  },
+  'stock-controller-oversell': {
+    // stock-controller + STOCK.OVERSELL — the persona that proves the
+    // oversell off-ramp lets a negative-stock write succeed.
+    username: 'qa.stock.controller.oversell',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Controller (Oversell)',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.COUNT',
+      'STOCK.TRANSFER',
       'STOCK.OVERSELL',
+    ],
+  },
+  'stock-approver': {
+    // Second-pair-of-eyes for above-threshold or oversell adjustments.
+    // Backend enforces "you cannot authorise your own adjustment", so this
+    // is a separate user from stock-controller. Only STOCK.ADJUST_APPROVE
+    // — they don't post, just authorise.
+    username: 'qa.stock.approver',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Approver',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST_APPROVE',
     ],
   },
   'stock-clerk': {
