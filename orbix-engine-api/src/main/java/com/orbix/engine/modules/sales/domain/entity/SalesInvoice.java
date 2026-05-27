@@ -100,6 +100,23 @@ public class SalesInvoice extends UidEntity {
     @Column(name = "void_reason", length = 200)
     private String voidReason;
 
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
+    /** Slice C — credit-limit override stamped at POST time when caller holds {@code SALES_INVOICE.OVERRIDE_CREDIT}. */
+    @Column(name = "credit_override", nullable = false)
+    private boolean creditOverride = false;
+
+    @Column(name = "credit_override_by")
+    private Long creditOverrideBy;
+
+    @Column(name = "credit_override_reason", length = 500)
+    private String creditOverrideReason;
+
+    /** Slice C — monotonically incremented per {@code POST .../uid/{uid}/reprint}. */
+    @Column(name = "reprint_count", nullable = false)
+    private int reprintCount = 0;
+
     @Column(length = 80)
     private String reference;
 
@@ -162,9 +179,35 @@ public class SalesInvoice extends UidEntity {
         touch(actorId);
     }
 
+    /** Slice C — record that this post exercised the credit-limit override. */
+    public void markCreditOverride(Long actorId, String reason) {
+        this.creditOverride = true;
+        this.creditOverrideBy = actorId;
+        this.creditOverrideReason = reason;
+    }
+
+    /** Slice C — increment the reprint counter; pure audit, no status change. */
+    public int recordReprint(Long actorId) {
+        if (status != SalesInvoiceStatus.POSTED
+                && status != SalesInvoiceStatus.PARTIALLY_PAID
+                && status != SalesInvoiceStatus.PAID
+                && status != SalesInvoiceStatus.VOIDED) {
+            throw new IllegalStateException(
+                "Cannot reprint an invoice in status " + status);
+        }
+        this.reprintCount = this.reprintCount + 1;
+        touch(actorId);
+        return this.reprintCount;
+    }
+
     public void cancel(Long actorId) {
+        cancel(actorId, null);
+    }
+
+    public void cancel(Long actorId, String reason) {
         requireStatus(SalesInvoiceStatus.DRAFT);
         this.status = SalesInvoiceStatus.CANCELLED;
+        this.cancellationReason = reason;
         touch(actorId);
     }
 

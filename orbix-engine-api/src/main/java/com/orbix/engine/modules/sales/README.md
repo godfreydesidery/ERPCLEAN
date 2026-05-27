@@ -47,13 +47,24 @@ Depends on:
 - `day` — posting requires an open business day for the branch.
 
 Publishes (domain events, versioned, in same transaction via outbox):
-- `SalesQuotationRaised.v1`
-- `SalesInvoicePosted.v1`
-- `SalesInvoiceVoided.v1`
-- `SalesReceiptCaptured.v1`
-- `ReceiptAllocated.v1`
-- `CustomerReturnPosted.v1`
-- `PackingListDispatched.v1`
+
+| Event | Payload keys | Emitted from |
+|---|---|---|
+| `SalesInvoiceCreated.v1` | `salesInvoiceId`, `number`, `customerId`, `totalAmount`, `paymentTerms` | `SalesInvoiceServiceImpl#createDraft` |
+| `SalesInvoicePosted.v1` | `salesInvoiceId`, `number`, `customerId`, `branchId`, `totalAmount`, `paymentTerms`, `currencyCode`, `lines[]` (Slice C — per-line breakdown with `salesInvoiceLineId`/`itemId`/`uomId`/`qty`/`unitPrice`/`vatGroupId`/`lineTotal`/`batchId`), `creditOverride` + `creditOverrideBy` + `creditOverrideReason` (when exercised) | `SalesInvoiceServiceImpl#post` |
+| `SalesInvoiceVoided.v1` | `salesInvoiceId`, `number`, `customerId`, `totalAmount`, `reason`, `compensating`, `priorStatus`, `voidedBy`, `voidedAt` | `SalesInvoiceServiceImpl#voidInvoice` |
+| `SalesInvoiceCancelled.v1` | `salesInvoiceId`, `number` | `SalesInvoiceServiceImpl#cancel` |
+| `SalesInvoiceReprinted.v1` | `salesInvoiceId`, `number`, `reason` (enum name), `notes`, `reprintedBy`, `reprintedAt`, `reprintCount` | `SalesInvoiceServiceImpl#reprint` |
+| `SalesReceiptCreated.v1` | `salesReceiptId`, `number`, `customerId`, `totalAmount`, `allocations` (count) | `SalesReceiptServiceImpl#createDraft` |
+| `SalesReceiptPosted.v1` | `salesReceiptId`, `number`, `customerId`, `branchId`, `totalAmount`, `method`, `currencyCode` | `SalesReceiptServiceImpl#post` |
+| `SalesReceiptCancelled.v1` | `salesReceiptId`, `number` | `SalesReceiptServiceImpl#cancel` |
+
+Synchronous callers (named exemptions per ADR-0004):
+- `SalesInvoiceServiceImpl#post` / `#voidInvoice` → `stock.StockMoveService`,
+  `stock.StockBatchService` (FEFO drain + outbound `stock_move`, compensating
+  inbound on void).
+- `SalesReceiptServiceImpl#post` → `cash.CashLedgerService` (cash `IN` entry
+  for CASH / MOBILE_MONEY / BANK / CHEQUE; absent for CARD / STORE_CREDIT).
 
 Consumers (informational): `stock` writes `stock_move`; `cash` writes `cash_entry`; reporting builds margin and ageing.
 
@@ -110,13 +121,39 @@ Hexagonal layering: `domain/` (aggregates, value objects, invariants), `applicat
 
 Invariants enforced inside aggregates:
 - A posted `sales_invoice` is immutable; only `void` is allowed, and only on the same business day it was posted.
-- Reprint copy numbers are strictly monotonic per document.
+- Reprint counts are strictly monotonic per document (`sales_invoice.reprint_count`); each reprint emits `SalesInvoiceReprinted.v1` with the chosen `ReprintReason` (`DUPLICATE`/`REISSUE_TO_CUSTOMER`/`INTERNAL_FILE`/`OTHER`) and optional free-text notes (≤500 chars).
 - `SUM(receipt_allocation.amount) ≤ sales_receipt.total_amount` at all times; surplus is held as customer credit.
-- Credit-limit check on credit-invoice posting is enforced in this module (not in `party`): `customer.open_debt + invoice.total_amount ≤ customer.credit_limit_amount` unless caller holds `SALES_INVOICE.OVERRIDE_CREDIT`.
+- Credit-limit check on credit-invoice posting is enforced in this module (not in `party`): `customer.open_debt + invoice.total_amount ≤ customer.credit_limit_amount`.
 - Per-line discount cannot push unit price below `item.min_sell_price` without override.
 - Cumulative `packing_list_line.qty` across all non-cancelled packing lists for a `sales_invoice_line` must not exceed that line's `qty`.
 
-Multi-tenant: every row carries `company_id` and `branch_id`; `customer` is company-scoped (DATA-MODEL §6 + party module). All queries filter by tenant via a request-scoped interceptor.
+### Credit-limit override (Slice C)
+
+The credit-limit gate runs at POST time on CREDIT-terms invoices. When the
+caller holds `SALES_INVOICE.OVERRIDE_CREDIT` and the post body carries a
+non-blank `overrideReason`, the post proceeds and stamps three columns on
+`sales_invoice`: `credit_override=true`, `credit_override_by=<actorId>`,
+`credit_override_reason=<reason>`. The same triplet is mirrored on the
+`SalesInvoicePosted.v1` payload so the deferred debt module can audit the
+override without re-reading the row. Draft creation always enforces the
+limit unconditionally; the override branch is post-time only. The
+zero-credit-limit branch ("customer has no credit configured") is NOT
+overridable per the locked Slice C decision.
+
+### Reprint audit (Slice C)
+
+`POST /api/v1/sales-invoices/uid/{uid}/reprint` increments
+`sales_invoice.reprint_count` and emits `SalesInvoiceReprinted.v1` carrying
+the `ReprintReason` enum + optional notes + the actor id + reprintCount.
+Pure audit — no state mutation beyond the counter. Permission:
+`SALES_INVOICE.REPRINT`. Eligible source statuses are POSTED / PARTIALLY_PAID
+/ PAID / VOIDED — DRAFT / CANCELLED reprints are rejected with
+`IllegalStateException` (400 via `GlobalExceptionHandler`).
+
+Multi-tenant: every row carries `company_id` and `branch_id` (`sales_invoice_line`
+and `receipt_allocation` inherit the tenant from their parent header — see
+GAP 1.A). `customer` is company-scoped (DATA-MODEL §6 + party module). All
+queries filter by tenant via a request-scoped interceptor.
 
 Idempotency: state-changing endpoints accept `Idempotency-Key`; the application layer caches the outcome for 24h keyed by `(tenant, key)`.
 

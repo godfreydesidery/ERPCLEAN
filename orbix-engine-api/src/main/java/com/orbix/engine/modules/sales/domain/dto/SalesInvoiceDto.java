@@ -35,6 +35,11 @@ public record SalesInvoiceDto(
     Instant voidedAt,
     Long voidedBy,
     String voidReason,
+    String cancellationReason,
+    boolean creditOverride,
+    Long creditOverrideBy,
+    String creditOverrideReason,
+    int reprintCount,
     String reference,
     String notes,
     List<SalesInvoiceLineDto> lines
@@ -48,6 +53,9 @@ public record SalesInvoiceDto(
             s.getTotalAmount(), s.getPaidAmount(), s.getStatus(),
             s.getPostedAt(), s.getPostedBy(), s.getPostedBusinessDate(),
             s.getVoidedAt(), s.getVoidedBy(), s.getVoidReason(),
+            s.getCancellationReason(),
+            s.isCreditOverride(), s.getCreditOverrideBy(), s.getCreditOverrideReason(),
+            s.getReprintCount(),
             s.getReference(), s.getNotes(),
             lines.stream().map(SalesInvoiceLineDto::from).toList()
         );

@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -118,6 +119,14 @@ public class StockMoveServiceImpl implements StockMoveService {
         return PageDto.of(
             moves.findByItemIdAndBranchIdOrderByAtAsc(itemId, branchId, pageable),
             StockMoveDto::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ItemBranchBalanceDto> findBalance(Long itemId, Long branchId) {
+        branchScope.requireAccess(branchId);
+        return balances.findById(new ItemBranchBalanceId(itemId, branchId))
+            .map(ItemBranchBalanceDto::from);
     }
 
     private Item requireItem(Long itemId) {

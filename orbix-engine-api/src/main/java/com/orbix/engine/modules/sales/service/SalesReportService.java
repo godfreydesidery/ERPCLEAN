@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.sales.service;
 
+import com.orbix.engine.modules.sales.domain.dto.ArSummaryDto;
 import com.orbix.engine.modules.sales.domain.dto.DailySalesRowDto;
 import com.orbix.engine.modules.sales.domain.dto.DailySummaryDto;
 import com.orbix.engine.modules.sales.domain.dto.ZHistoryEntryDto;
@@ -29,4 +30,11 @@ public interface SalesReportService {
     DailySummaryDto dailySummary(Long branchId, LocalDate businessDate);
 
     List<ZHistoryEntryDto> zHistory(Long branchId, LocalDate from, LocalDate to);
+
+    /**
+     * Slice C — AR-summary tile feed for the dashboard. {@code branchId}
+     * is optional: null = company-wide aggregate (subject to
+     * {@code BranchScope.requireReadable}).
+     */
+    ArSummaryDto arSummary(Long branchId);
 }

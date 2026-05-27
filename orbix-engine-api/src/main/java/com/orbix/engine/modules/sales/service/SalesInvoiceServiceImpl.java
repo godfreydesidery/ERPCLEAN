@@ -15,6 +15,8 @@ import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.sales.domain.dto.CreateSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.PostSalesInvoiceRequestDto;
+import com.orbix.engine.modules.sales.domain.dto.ReprintInvoiceRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.SalesInvoiceDto;
 import com.orbix.engine.modules.sales.domain.dto.VoidSalesInvoiceRequestDto;
 import com.orbix.engine.modules.sales.domain.entity.SalesInvoice;
@@ -24,11 +26,9 @@ import com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceLineRepository;
 import com.orbix.engine.modules.sales.repository.SalesInvoiceRepository;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
+import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
-import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
-import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
-import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
 import com.orbix.engine.modules.stock.service.StockBatchService;
 import com.orbix.engine.modules.stock.service.StockMoveService;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -55,17 +56,21 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private static final int MONEY_SCALE = 4;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     static final String DISCOUNT_APPROVE_PERMISSION = "SALES.DISCOUNT_APPROVE";
+    static final String OVERRIDE_CREDIT_PERMISSION = "SALES_INVOICE.OVERRIDE_CREDIT";
 
     private static final String AGG = "SalesInvoice";
     private static final String F_ID = "salesInvoiceId";
     private static final String F_NUMBER = "number";
+    private static final String F_CUSTOMER_ID = "customerId";
+    private static final String F_TOTAL_AMOUNT = "totalAmount";
+    private static final String F_BRANCH_ID = "branchId";
+    private static final String F_REASON = "reason";
 
     private final SalesInvoiceRepository invoices;
     private final SalesInvoiceLineRepository lines;
     private final ItemRepository items;
     private final VatGroupRepository vatGroups;
     private final CustomerRepository customers;
-    private final ItemBranchBalanceRepository balances;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
     private final DayGuard dayGuard;
@@ -100,13 +105,15 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         List<SalesInvoiceLine> savedLines = saveLinesAndRollUp(invoice, request.lines(), companyId);
 
         if (request.paymentTerms() == PaymentTerms.CREDIT) {
-            checkCreditLimit(customer, invoice.getTotalAmount(), null);
+            // Draft creation enforces credit limit unconditionally (Slice C
+            // GAP 3.A — override is a POST-time decision, not draft-time).
+            checkCreditLimit(customer, invoice.getTotalAmount(), false);
         }
 
         events.publish("SalesInvoiceCreated.v1", AGG, String.valueOf(invoice.getId()),
             Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber(),
-                "customerId", invoice.getCustomerId(),
-                "totalAmount", invoice.getTotalAmount(),
+                F_CUSTOMER_ID, invoice.getCustomerId(),
+                F_TOTAL_AMOUNT, invoice.getTotalAmount(),
                 "paymentTerms", invoice.getPaymentTerms().name()));
         return SalesInvoiceDto.from(invoice, savedLines);
     }
@@ -114,15 +121,27 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Override
     @Transactional
     @Auditable(action = "POST", entityType = AGG)
-    public SalesInvoiceDto post(String uid) {
+    public SalesInvoiceDto post(String uid, PostSalesInvoiceRequestDto request) {
         SalesInvoice invoice = requireInvoiceByUid(uid);
         Long actorId = context.userId();
+        Long companyId = invoice.getCompanyId();
         BusinessDay day = dayGuard.requireOpenDay(invoice.getBranchId());
 
         // Re-check credit limit at post time (state may have changed since draft).
+        // The override branch (Slice C GAP 3.A) only fires on the limit-exceeded
+        // case — the zero-credit-limit branch stays unconditional.
         if (invoice.getPaymentTerms() == PaymentTerms.CREDIT) {
             Customer customer = requireCustomer(invoice.getCustomerId());
-            checkCreditLimit(customer, invoice.getTotalAmount(), invoice.getId());
+            String overrideReason = request != null ? request.overrideReason() : null;
+            boolean overrideAllowed = false;
+            if (overrideReason != null && !overrideReason.isBlank()) {
+                overrideAllowed = permissions.resolve(actorId, companyId, invoice.getBranchId())
+                    .contains(OVERRIDE_CREDIT_PERMISSION);
+            }
+            boolean breached = checkCreditLimit(customer, invoice.getTotalAmount(), overrideAllowed);
+            if (breached) {
+                invoice.markCreditOverride(actorId, overrideReason.trim());
+            }
         }
 
         List<SalesInvoiceLine> invoiceLines = lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId());
@@ -131,13 +150,37 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
 
         invoice.post(day.getBusinessDate(), actorId);
-        events.publish("SalesInvoicePosted.v1", AGG, String.valueOf(invoice.getId()),
-            Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber(),
-                "customerId", invoice.getCustomerId(),
-                "branchId", invoice.getBranchId(),
-                "totalAmount", invoice.getTotalAmount(),
-                "paymentTerms", invoice.getPaymentTerms().name(),
-                "currencyCode", invoice.getCurrencyCode()));
+
+        Map<String, Object> postedPayload = new HashMap<>();
+        postedPayload.put(F_ID, invoice.getId());
+        postedPayload.put(F_NUMBER, invoice.getNumber());
+        postedPayload.put(F_CUSTOMER_ID, invoice.getCustomerId());
+        postedPayload.put(F_BRANCH_ID, invoice.getBranchId());
+        postedPayload.put(F_TOTAL_AMOUNT, invoice.getTotalAmount());
+        postedPayload.put("paymentTerms", invoice.getPaymentTerms().name());
+        postedPayload.put("currencyCode", invoice.getCurrencyCode());
+        // Slice C GAP 9.A — per-line breakdown so the deferred debt module
+        // can build its sub-ledger without a `.v2` bump later.
+        List<Map<String, Object>> linePayload = new ArrayList<>(invoiceLines.size());
+        for (SalesInvoiceLine line : invoiceLines) {
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("salesInvoiceLineId", line.getId());
+            entry.put("itemId", line.getItemId());
+            entry.put("uomId", line.getUomId());
+            entry.put("qty", line.getQty());
+            entry.put("unitPrice", line.getUnitPrice());
+            entry.put("vatGroupId", line.getVatGroupId());
+            entry.put("lineTotal", line.getLineTotal());
+            entry.put("batchId", null);
+            linePayload.add(entry);
+        }
+        postedPayload.put("lines", linePayload);
+        if (invoice.isCreditOverride()) {
+            postedPayload.put("creditOverride", true);
+            postedPayload.put("creditOverrideBy", invoice.getCreditOverrideBy());
+            postedPayload.put("creditOverrideReason", invoice.getCreditOverrideReason());
+        }
+        events.publish("SalesInvoicePosted.v1", AGG, String.valueOf(invoice.getId()), postedPayload);
         return SalesInvoiceDto.from(invoice, invoiceLines);
     }
 
@@ -146,9 +189,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     @Auditable(action = "VOID", entityType = AGG)
     public SalesInvoiceDto voidInvoice(String uid, VoidSalesInvoiceRequestDto request) {
         SalesInvoice invoice = requireInvoiceByUid(uid);
-        if (invoice.getStatus() != SalesInvoiceStatus.POSTED) {
+        SalesInvoiceStatus priorStatus = invoice.getStatus();
+        if (priorStatus != SalesInvoiceStatus.POSTED) {
             throw new IllegalStateException(
-                "Only POSTED invoices can be voided (was " + invoice.getStatus() + ")");
+                "Only POSTED invoices can be voided (was " + priorStatus + ")");
         }
         BusinessDay day = dayGuard.requireOpenDay(invoice.getBranchId());
         if (!Objects.equals(day.getBusinessDate(), invoice.getPostedBusinessDate())) {
@@ -178,12 +222,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             ));
         }
 
-        invoice.voidInvoice(request.reason(), context.userId());
-        events.publish("SalesInvoiceVoided.v1", AGG, String.valueOf(invoice.getId()),
-            Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber(),
-                "customerId", invoice.getCustomerId(),
-                "totalAmount", invoice.getTotalAmount(),
-                "reason", request.reason()));
+        Long actorId = context.userId();
+        invoice.voidInvoice(request.reason(), actorId);
+
+        // Slice C GAP — widen the voided event so debt-side subscribers can
+        // recognise the compensating action without re-reading the invoice.
+        Map<String, Object> voidedPayload = new HashMap<>();
+        voidedPayload.put(F_ID, invoice.getId());
+        voidedPayload.put(F_NUMBER, invoice.getNumber());
+        voidedPayload.put(F_CUSTOMER_ID, invoice.getCustomerId());
+        voidedPayload.put(F_TOTAL_AMOUNT, invoice.getTotalAmount());
+        voidedPayload.put(F_REASON, request.reason());
+        voidedPayload.put("compensating", true);
+        voidedPayload.put("priorStatus", priorStatus.name());
+        voidedPayload.put("voidedBy", actorId);
+        voidedPayload.put("voidedAt", invoice.getVoidedAt());
+        events.publish("SalesInvoiceVoided.v1", AGG, String.valueOf(invoice.getId()), voidedPayload);
         return SalesInvoiceDto.from(invoice, invoiceLines);
     }
 
@@ -195,6 +249,26 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         invoice.cancel(context.userId());
         events.publish("SalesInvoiceCancelled.v1", AGG, String.valueOf(invoice.getId()),
             Map.of(F_ID, invoice.getId(), F_NUMBER, invoice.getNumber()));
+        return SalesInvoiceDto.from(invoice, lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId()));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "REPRINT", entityType = AGG)
+    public SalesInvoiceDto reprint(String uid, ReprintInvoiceRequestDto request) {
+        SalesInvoice invoice = requireInvoiceByUid(uid);
+        Long actorId = context.userId();
+        int newCount = invoice.recordReprint(actorId);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put(F_ID, invoice.getId());
+        payload.put(F_NUMBER, invoice.getNumber());
+        payload.put(F_REASON, request.reason().name());
+        payload.put("notes", request.notes());
+        payload.put("reprintedBy", actorId);
+        payload.put("reprintedAt", invoice.getUpdatedAt());
+        payload.put("reprintCount", newCount);
+        events.publish("SalesInvoiceReprinted.v1", AGG, String.valueOf(invoice.getId()), payload);
         return SalesInvoiceDto.from(invoice, lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId()));
     }
 
@@ -239,9 +313,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 : BigDecimal.ZERO;
             line.setCostAmount(lineCost);
         } else {
-            BigDecimal avgCost = balances.findById(new ItemBranchBalanceId(line.getItemId(),
-                    invoice.getBranchId()))
-                .map(ItemBranchBalance::getAvgCost)
+            // ADR-0004 §5 — reach into stock only via the *Service interface seam.
+            BigDecimal avgCost = stockMoveService
+                .findBalance(line.getItemId(), invoice.getBranchId())
+                .map(ItemBranchBalanceDto::avgCost)
                 .orElse(BigDecimal.ZERO);
             stockMoveService.post(new PostStockMoveRequestDto(
                 line.getItemId(), invoice.getBranchId(),
@@ -333,24 +408,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return savedLines;
     }
 
-    private void checkCreditLimit(Customer customer, BigDecimal invoiceTotal, Long excludeInvoiceId) {
-        // The repo's sumOutstandingDebt query already filters out DRAFT invoices,
-        // so re-checking on post never double-counts an in-progress invoice.
-        // excludeInvoiceId is unused for now; kept on the signature for future
-        // edits-on-POSTED flows where we'd need to subtract the prior amount.
-        Objects.requireNonNullElse(excludeInvoiceId, 0L);  // suppress unused warning
+    /**
+     * Enforce the customer's credit-limit policy. Returns {@code true} when
+     * the limit was breached AND the caller has been granted override (Slice C
+     * GAP 3.A); the caller stamps the override columns on the invoice in that
+     * case. Throws {@link IllegalArgumentException} on any unrecoverable
+     * violation.
+     *
+     * <p>The repo's {@code sumOutstandingDebt} query already filters out
+     * DRAFT invoices so re-checking on post never double-counts an
+     * in-progress invoice.
+     *
+     * <p>The zero-limit branch ("customer has no credit configured") is NOT
+     * overridable per the locked Slice C decision.
+     */
+    private boolean checkCreditLimit(Customer customer, BigDecimal invoiceTotal,
+                                     boolean overrideAllowed) {
         BigDecimal currentDebt = invoices.sumOutstandingDebt(customer.getPartyId());
         BigDecimal projected = currentDebt.add(invoiceTotal);
         BigDecimal limit = customer.getCreditLimitAmount();
-        if (limit.signum() > 0 && projected.compareTo(limit) > 0) {
-            throw new IllegalArgumentException(
-                "Customer credit limit exceeded: current debt " + currentDebt
-                    + ", new invoice " + invoiceTotal + ", limit " + limit);
-        }
         if (limit.signum() == 0 && invoiceTotal.signum() > 0) {
             throw new IllegalArgumentException(
                 "Customer has no credit limit configured — CREDIT sales are not allowed");
         }
+        if (limit.signum() > 0 && projected.compareTo(limit) > 0) {
+            if (overrideAllowed) {
+                return true;
+            }
+            throw new IllegalArgumentException(
+                "Customer credit limit exceeded: current debt " + currentDebt
+                    + ", new invoice " + invoiceTotal + ", limit " + limit);
+        }
+        return false;
     }
 
     private SalesInvoice requireInvoiceByUid(String uid) {
