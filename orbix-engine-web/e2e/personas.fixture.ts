@@ -2,6 +2,21 @@ import { test as base, type APIRequestContext } from '@playwright/test';
 import { TEST_USERS, type Persona } from './test-users';
 
 /**
+ * Special pseudo-persona that authenticates as `rootadmin` rather than one of
+ * the seeded test personas. Use for setup describes that need cross-module
+ * provisioning permissions (CATALOG / PARTY / SETTINGS / DAY) that no real
+ * persona is intentionally granted.
+ *
+ * Prefer a real persona for everything else — `rootadmin` papers over
+ * permission gating, which is exactly the failure mode the persona harness
+ * exists to surface.
+ */
+export type PersonaOrRoot = Persona | 'rootadmin';
+
+const ROOTADMIN_USER = process.env['ORBIX_QA_USER'] ?? 'rootadmin';
+const ROOTADMIN_PASS = process.env['ORBIX_QA_PASS'] ?? 'SKp315goPN8Nb0yJtMCCD7cm';
+
+/**
  * Persona auth fixture.
  *
  * Drop-in replacement for the rootadmin-only `auth.fixture.ts`. Tests opt in
@@ -35,19 +50,21 @@ type AuthBundle = {
 };
 
 // One auth bundle per persona per worker — avoids re-logging-in for every test.
-const cache = new Map<Persona, AuthBundle>();
+const cache = new Map<PersonaOrRoot, AuthBundle>();
 
-async function loginAs(request: APIRequestContext, persona: Persona): Promise<AuthBundle> {
+async function loginAs(request: APIRequestContext, persona: PersonaOrRoot): Promise<AuthBundle> {
   const cached = cache.get(persona);
   if (cached) return cached;
 
-  const user = TEST_USERS[persona];
+  const creds = persona === 'rootadmin'
+    ? { username: ROOTADMIN_USER, password: ROOTADMIN_PASS }
+    : { username: TEST_USERS[persona].username, password: TEST_USERS[persona].password };
   const resp = await request.post('/api/v1/auth/login', {
-    data: { username: user.username, password: user.password },
+    data: creds,
   });
   if (!resp.ok()) {
     throw new Error(
-      `[personas] login as ${persona} (${user.username}) failed — HTTP ${resp.status()} ${await resp.text()}. ` +
+      `[personas] login as ${persona} (${creds.username}) failed — HTTP ${resp.status()} ${await resp.text()}. ` +
         `Did global-setup run? (e2e/global-setup.ts bootstraps the roster.)`,
     );
   }
@@ -65,7 +82,7 @@ async function loginAs(request: APIRequestContext, persona: Persona): Promise<Au
   return bundle;
 }
 
-export const test = base.extend<{ persona: Persona }>({
+export const test = base.extend<{ persona: PersonaOrRoot }>({
   persona: ['procurement-officer', { option: true }],
   page: async ({ page, request, persona }, use) => {
     const auth = await loginAs(request, persona);

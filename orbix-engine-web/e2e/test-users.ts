@@ -458,8 +458,15 @@ async function grantRoleToUser(
     data: { username, branchId },
   });
   if (!resp.ok()) {
-    // 409 = already granted to this user/branch — that's fine on re-runs.
+    // Already-granted is fine on re-runs. The backend currently surfaces this
+    // as 400 with "User already has role ..."; accept 409 too in case the
+    // mapping is tightened later. Other 4xx/5xx still bubble up.
     if (resp.status() === 409) return;
+    if (resp.status() === 400) {
+      const body = await resp.text();
+      if (/already has role/i.test(body)) return;
+      throw new Error(`[personas] POST /roles/uid/${roleUid}/grants ${username} failed: HTTP 400 ${body}`);
+    }
     throw new Error(`[personas] POST /roles/uid/${roleUid}/grants ${username} failed: HTTP ${resp.status()} ${await resp.text()}`);
   }
 }

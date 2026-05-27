@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { type Page } from '@playwright/test';
-import { test, expect } from './auth.fixture';
+import { test, expect } from './personas.fixture';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -239,6 +239,10 @@ test.beforeEach(async ({ page }) => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · setup', () => {
+  // Setup needs cross-module write perms (SETTINGS, DAY.OPEN, CATALOG.*,
+  // PARTY.*) that no real persona is granted by design. Use rootadmin only
+  // here, for the bootstrap rows the lifecycle tests then consume.
+  test.use({ persona: 'rootadmin' });
   test('provisions reference data and sets the auto-approval threshold', async ({ page }) => {
     // Drive a navigation so the auth fixture is invoked and sessionStorage is writable.
     await page.goto('/dashboard');
@@ -442,6 +446,8 @@ async function createGrnAgainstLpo(
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · LPO submit flow', () => {
+  // Procurement officer can manage + approve LPOs (no cancel rights).
+  test.use({ persona: 'procurement-officer' });
   test('LPO under threshold auto-approves on submit', async ({ page }) => {
     const lpo = await createLpo(page, 'AUTO', SMALL_QTY, SMALL_PRICE);
 
@@ -488,9 +494,13 @@ test.describe('Procurement · LPO submit flow', () => {
     // After approval the button vanishes and a success alert appears.
     await expect(page.getByText(/LPO approved\./)).toBeVisible({ timeout: 15_000 });
 
-    // DB pin: APPROVED + event with autoApproved=false and approvedBy=1 (rootadmin).
+    // DB pin: APPROVED + event with autoApproved=false. approved_by must be
+    // the procurement-officer persona that drove the UI — look the id up
+    // rather than hard-coding it (rootadmin=1 was the legacy assumption).
+    const approverId = dbQuery(`SELECT id FROM app_user WHERE username='qa.procurement' LIMIT 1`);
+    expect(approverId, 'qa.procurement user id').toMatch(/^\d+$/);
     const status = dbQuery(`SELECT status, approved_by FROM lpo_order WHERE id=${lpo.id}`);
-    expect(status).toMatch(/^APPROVED\s+1$/);
+    expect(status).toMatch(new RegExp(`^APPROVED\\s+${approverId}$`));
     const approved = dbCount(
       `SELECT COUNT(*) FROM domain_event WHERE type='LpoOrderApproved.v1' ` +
       `AND aggregate_id='${lpo.id}' AND payload_json LIKE '%"autoApproved":false%'`
@@ -511,7 +521,9 @@ test.describe('Procurement · LPO submit flow', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · LPO cancel after approve', () => {
-  test.fail('APPROVED LPO without a posted GRN cancels with reason and emits LpoOrderCancelled.v1', async ({ page }) => {
+  // Supervisor carries PROCUREMENT.CANCEL_LPO; procurement-officer does not.
+  test.use({ persona: 'supervisor' });
+  test('APPROVED LPO without a posted GRN cancels with reason and emits LpoOrderCancelled.v1', async ({ page }) => {
     // Set up: create + auto-approve a small LPO so it lands APPROVED.
     const lpo = await createLpo(page, 'CXL', SMALL_QTY, SMALL_PRICE);
     await apiPost(page, `/api/v1/lpos/uid/${lpo.uid}/submit`, {}, { expectedStatus: 200 });
@@ -543,6 +555,8 @@ test.describe('Procurement · LPO cancel after approve', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · GRN post against LPO', () => {
+  // Procurement officer can create LPOs and post GRNs — the everyday flow.
+  test.use({ persona: 'procurement-officer' });
   test('Draft GRN with one line posts; LPO flips to RECEIVED; stock_move + GrnPosted.v1 emitted', async ({ page }) => {
     // Auto-approved parent LPO with one line, qty=2, price=1000 → ordered fully received in this GRN.
     const lpo = await createLpo(page, 'POST', SMALL_QTY, SMALL_PRICE);
@@ -594,7 +608,9 @@ test.describe('Procurement · GRN post against LPO', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · GRN cancel after post', () => {
-  test.fail('POSTED GRN cancel-posted writes a compensating stock_move and emits GrnCancelled.v1 with compensating=true', async ({ page }) => {
+  // Supervisor carries GRN.CANCEL; procurement-officer does not.
+  test.use({ persona: 'supervisor' });
+  test('POSTED GRN cancel-posted writes a compensating stock_move and emits GrnCancelled.v1 with compensating=true', async ({ page }) => {
     // Set up: small auto-approved LPO + a posted GRN that draws on it.
     const lpo = await createLpo(page, 'CXLP', SMALL_QTY, SMALL_PRICE);
     await apiPost(page, `/api/v1/lpos/uid/${lpo.uid}/submit`, {}, { expectedStatus: 200 });
@@ -634,7 +650,9 @@ test.describe('Procurement · GRN cancel after post', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · LPO cancel guard', () => {
-  test.fail('APPROVED LPO with a POSTED GRN drawing on it cannot be cancelled', async ({ page }) => {
+  // Supervisor performs the (rejected) cancel attempt.
+  test.use({ persona: 'supervisor' });
+  test('APPROVED LPO with a POSTED GRN drawing on it cannot be cancelled', async ({ page }) => {
     // Set up: small auto-approved LPO + a POSTED GRN, which leaves the LPO in RECEIVED.
     const lpo = await createLpo(page, 'GRD', SMALL_QTY, SMALL_PRICE);
     await apiPost(page, `/api/v1/lpos/uid/${lpo.uid}/submit`, {}, { expectedStatus: 200 });
@@ -646,7 +664,11 @@ test.describe('Procurement · LPO cancel guard', () => {
       acceptStatuses: [400, 409],
     });
     expect([400, 409]).toContain(r.status);
-    expect(r.body, 'error mentions the GRN constraint').toMatch(/GRN|posted|cannot/i);
+    // Once a GRN posts against a single-line LPO it flips to RECEIVED, so
+    // the service's RECEIVED-guard fires (rather than the APPROVED-with-GRN
+    // guard). Either rejection path is valid — both say "you cannot cancel
+    // an LPO that has goods already received".
+    expect(r.body, 'error mentions a rejection reason').toMatch(/GRN|posted|cannot|RECEIVED|not supported/i);
 
     // LPO stays in its receive-progress status (not CANCELLED).
     const status = dbQuery(`SELECT status FROM lpo_order WHERE id=${lpo.id}`);
@@ -656,87 +678,27 @@ test.describe('Procurement · LPO cancel guard', () => {
 });
 
 // -----------------------------------------------------------------------------
-// 7. Permission denial — user without GRN.CANCEL gets 403 (WILL FAIL today)
+// 7. Permission denial — user without GRN.CANCEL gets 403
 // -----------------------------------------------------------------------------
 
-/** Login as the given user against the QA-parity API. */
-async function loginAs(
-  page: Page,
-  username: string,
-  password: string,
-): Promise<{ accessToken: string }> {
-  const r = await page.evaluate(async ({ url, body }) => {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return { status: resp.status, body: await resp.text() };
-  }, { url: '/api/v1/auth/login', body: { username, password } });
-  if (r.status !== 200) {
-    throw new Error(`login as ${username} expected 200 got ${r.status}: ${r.body.slice(0, 200)}`);
-  }
-  const env = JSON.parse(r.body);
-  return { accessToken: env.data.accessToken };
-}
-
 test.describe('Procurement · GRN.CANCEL permission denial', () => {
-  test.fail('user without GRN.CANCEL gets 403 from cancel-posted', async ({ page }) => {
-    // Build a per-run role with only GRN.POST (so the user can list/access GRNs)
-    // but NOT the future GRN.CANCEL — backend task 4 introduces both the
-    // endpoint and the permission. Until then this is expected-fail because
-    // the endpoint resolves to 404, not 403.
-    const roleR = await apiPost(page, '/api/v1/roles', {
-      code: `RG-${RUN_TAG}`,
-      name: `GRN poster ${RUN_TAG}`,
-      description: 'e2e: GRN.POST without cancel rights'
-    });
-    const roleUid = (JSON.parse(roleR.body).data as { uid: string }).uid;
-
-    // GRN.POST has permission id 27 in the seed; pin to that.
-    const grnPostPermId = Number(dbQuery(`SELECT id FROM permission WHERE code='GRN.POST'`));
-    expect(grnPostPermId, 'GRN.POST permission seeded').toBeGreaterThan(0);
-    await apiPut(page, `/api/v1/roles/uid/${roleUid}/permissions`, {
-      permissionIds: [grnPostPermId]
-    });
-
-    // Create a user. The server returns a temporary password we can re-use.
-    const username = `grnposter${RUN_TAG.toLowerCase()}`;
-    const userR = await apiPost(page, '/api/v1/users', {
-      username,
-      displayName: `GRN Poster ${RUN_TAG}`,
-      email: null,
-      phone: null,
-      defaultBranchId: Number(BRANCH_ID),
-      mustChangePassword: false,
-    });
-    const tempPassword = (JSON.parse(userR.body).data as { temporaryPassword?: string; password?: string }).temporaryPassword
-      ?? (JSON.parse(userR.body).data as { temporaryPassword?: string; password?: string }).password!;
-    expect(tempPassword, 'temporaryPassword returned').toBeTruthy();
-
-    await apiPost(page, `/api/v1/roles/uid/${roleUid}/grants`, {
-      username,
-      branchId: Number(BRANCH_ID),
-    });
-
-    // Provision a posted GRN under rootadmin's session so the call has a real target uid.
+  // procurement-officer has MANAGE_LPO + APPROVE_LPO + GRN.POST but NO
+  // GRN.CANCEL — exactly the shape needed for this negative test. Using the
+  // persona harness instead of inline role-and-user provisioning keeps the
+  // test focused on the permission gate behaviour, not the IAM CRUD.
+  test.use({ persona: 'procurement-officer' });
+  test('user without GRN.CANCEL gets 403 from cancel-posted', async ({ page }) => {
+    // Provision a posted GRN using the same procurement-officer token (they
+    // have GRN.POST). The cancel-posted call below should then be denied
+    // because they lack GRN.CANCEL.
     const lpo = await createLpo(page, 'PERM', SMALL_QTY, SMALL_PRICE);
     await apiPost(page, `/api/v1/lpos/uid/${lpo.uid}/submit`, {}, { expectedStatus: 200 });
     const grn = await createGrnAgainstLpo(page, lpo.uid, 'PERM');
     await apiPost(page, `/api/v1/grns/uid/${grn.uid}/post`, {}, { expectedStatus: 200 });
 
-    // Log in as the limited user. Stash the token under a different key so we
-    // don't clobber the rootadmin session that the auth fixture installed.
-    const limited = await loginAs(page, username, tempPassword);
-    await page.evaluate(({ token, key }) => sessionStorage.setItem(key, token), {
-      token: limited.accessToken,
-      key: 'orbix.limited',
-    });
-
-    // Calling cancel-posted with the limited token must return 403 (no GRN.CANCEL).
-    const r = await apiCall(page, 'POST', `/api/v1/grns/uid/${grn.uid}/cancel-posted`, { reason: 'no perm' }, {
+    // Calling cancel-posted must return 403 (no GRN.CANCEL on this persona).
+    const r = await apiPost(page, `/api/v1/grns/uid/${grn.uid}/cancel-posted`, { reason: 'no perm' }, {
       acceptStatuses: [403],
-      tokenKey: 'orbix.limited',
     });
     expect(r.status).toBe(403);
   });
@@ -747,6 +709,9 @@ test.describe('Procurement · GRN.CANCEL permission denial', () => {
 // -----------------------------------------------------------------------------
 
 test.describe('Procurement · a11y sweep', () => {
+  // Read-only nav from a procurement persona — explicit so the implicit
+  // default doesn't drift if the fixture default changes.
+  test.use({ persona: 'procurement-officer' });
   test('procurement landing has no serious axe violations', async ({ page }) => {
     await page.goto('/procurement');
     await expect(page.getByRole('heading', { name: /^Procurement$/ })).toBeVisible({ timeout: 20_000 });

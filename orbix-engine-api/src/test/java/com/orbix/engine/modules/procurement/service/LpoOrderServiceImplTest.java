@@ -261,7 +261,7 @@ class LpoOrderServiceImplTest {
 
         String uid = order.getUid();
         assertThatThrownBy(() -> service.cancel(uid, "shouldn't work"))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("GRN");
         verify(events, never()).publish(eq("LpoOrderCancelled.v1"), any(), any(), any());
     }
@@ -275,7 +275,7 @@ class LpoOrderServiceImplTest {
 
         String uid = order.getUid();
         assertThatThrownBy(() -> service.cancel(uid, "nope"))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("PARTIALLY_RECEIVED");
         verify(grns, never()).existsByLpoOrderId(any());
     }

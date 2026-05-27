@@ -133,12 +133,12 @@ public class LpoOrderServiceImpl implements LpoOrderService {
         // PARTIALLY_RECEIVED / RECEIVED cancel deferred to Slice C.
         if (priorStatus == LpoOrderStatus.PARTIALLY_RECEIVED
                 || priorStatus == LpoOrderStatus.RECEIVED) {
-            throw new IllegalStateException(
+            throw new IllegalArgumentException(
                 "Cancelling an LPO in status " + priorStatus + " is not supported yet");
         }
         // APPROVED cancel is allowed only when no GRN already draws against the LPO.
         if (priorStatus == LpoOrderStatus.APPROVED && grns.existsByLpoOrderId(order.getId())) {
-            throw new IllegalStateException(
+            throw new IllegalArgumentException(
                 "Cannot cancel LPO " + order.getNumber() + " — at least one GRN draws against it");
         }
         order.cancel(reason, context.userId());
