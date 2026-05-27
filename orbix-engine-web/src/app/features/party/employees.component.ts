@@ -180,10 +180,18 @@ import {
       @if (employees().length === 0) {
         <div class="p-5 text-center">
           <div class="empty-icon mx-auto mb-3"><i class="bi bi-person-badge"></i></div>
-          <h2 class="h6 fw-bold mb-1 text-dark">No employees match</h2>
+          <h2 class="h6 fw-bold mb-1 text-dark">
+            @if (searchTerm || statusFilter()) {
+              No employees match
+            } @else {
+              No employees yet
+            }
+          </h2>
           <p class="small text-secondary mb-0">
             @if (searchTerm) {
               Try a different code or name.
+            } @else if (statusFilter()) {
+              Try clearing the status filter.
             } @else {
               Add your first employee to the roster.
             }
@@ -219,14 +227,14 @@ import {
                         <i class="bi bi-pencil"></i>
                       </button>
                       @if (employee.party.status === 'ACTIVE') {
-                        <button class="btn btn-outline-danger" (click)="deactivate(employee)"
-                                [disabled]="busy()" title="Deactivate. Affects every role on the underlying party.">
-                          <i class="bi bi-pause-circle"></i>
+                        <button class="btn btn-outline-danger" (click)="archive(employee)"
+                                [disabled]="busy()" title="Archive. Affects every role on the underlying party.">
+                          <i class="bi bi-archive"></i>
                         </button>
                       } @else {
                         <button class="btn btn-outline-success" (click)="activate(employee)"
                                 [disabled]="busy()" title="Reactivate. Affects every role on the underlying party.">
-                          <i class="bi bi-play-circle"></i>
+                          <i class="bi bi-arrow-up-circle"></i>
                         </button>
                       }
                     </div>
@@ -260,14 +268,14 @@ import {
                   <i class="bi bi-pencil me-1"></i> Edit
                 </button>
                 @if (employee.party.status === 'ACTIVE') {
-                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="deactivate(employee)"
+                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="archive(employee)"
                           [disabled]="busy()">
-                    <i class="bi bi-pause-circle me-1"></i> Deactivate
+                    <i class="bi bi-archive me-1"></i> Archive
                   </button>
                 } @else {
                   <button class="btn btn-sm btn-outline-success flex-grow-1" (click)="activate(employee)"
                           [disabled]="busy()">
-                    <i class="bi bi-play-circle me-1"></i> Activate
+                    <i class="bi bi-arrow-up-circle me-1"></i> Activate
                   </button>
                 }
               </div>
@@ -319,8 +327,6 @@ import {
     .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
     .status-badge--active   { background: #d1fae5; color: #047857; }
     .status-badge--active .status-badge__dot   { background: #10b981; }
-    .status-badge--inactive { background: #fef3c7; color: #92400e; }
-    .status-badge--inactive .status-badge__dot { background: #f59e0b; }
     .status-badge--archived { background: #f3f4f6; color: #4b5563; }
     .status-badge--archived .status-badge__dot { background: #9ca3af; }
 
@@ -401,13 +407,12 @@ export class EmployeesComponent implements OnInit {
       : 'Save the new party and assign the employee role in one transaction';
   });
 
-  protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | null>(null);
   protected searchTerm = '';
 
   protected readonly statusOptions = [
     { label: 'All',      value: null },
     { label: 'Active',   value: 'ACTIVE' as const },
-    { label: 'Inactive', value: 'INACTIVE' as const },
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
@@ -477,9 +482,9 @@ export class EmployeesComponent implements OnInit {
     }
   }
 
-  deactivate(employee: Employee): void {
+  archive(employee: Employee): void {
     this.busy.set(true);
-    this.party.deactivateEmployee(employee.party.uid).subscribe({
+    this.party.archiveEmployee(employee.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -553,7 +558,7 @@ export class EmployeesComponent implements OnInit {
     this.searchTimer = setTimeout(() => { this.pageNo.set(0); this.load(); }, 300);
   }
 
-  setFilter(status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null): void {
+  setFilter(status: 'ACTIVE' | 'ARCHIVED' | null): void {
     this.statusFilter.set(status);
     this.pageNo.set(0);
     this.load();

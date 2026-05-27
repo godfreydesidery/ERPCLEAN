@@ -67,8 +67,8 @@ export class PartyService {
     ));
   }
 
-  deactivateCustomer(partyUid: string): Observable<void> {
-    return this.http.post(`${this.base}/customers/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  archiveCustomer(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/customers/uid/${partyUid}/archive`, {}).pipe(map(() => void 0));
   }
 
   activateCustomer(partyUid: string): Observable<void> {
@@ -93,8 +93,8 @@ export class PartyService {
     ));
   }
 
-  deactivateSupplier(partyUid: string): Observable<void> {
-    return this.http.post(`${this.base}/suppliers/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  archiveSupplier(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/suppliers/uid/${partyUid}/archive`, {}).pipe(map(() => void 0));
   }
 
   activateSupplier(partyUid: string): Observable<void> {
@@ -119,8 +119,8 @@ export class PartyService {
     ));
   }
 
-  deactivateEmployee(partyUid: string): Observable<void> {
-    return this.http.post(`${this.base}/employees/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  archiveEmployee(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/employees/uid/${partyUid}/archive`, {}).pipe(map(() => void 0));
   }
 
   activateEmployee(partyUid: string): Observable<void> {
@@ -143,8 +143,8 @@ export class PartyService {
     ));
   }
 
-  deactivateSalesAgent(partyUid: string): Observable<void> {
-    return this.http.post(`${this.base}/sales-agents/uid/${partyUid}/deactivate`, {}).pipe(map(() => void 0));
+  archiveSalesAgent(partyUid: string): Observable<void> {
+    return this.http.post(`${this.base}/sales-agents/uid/${partyUid}/archive`, {}).pipe(map(() => void 0));
   }
 
   activateSalesAgent(partyUid: string): Observable<void> {

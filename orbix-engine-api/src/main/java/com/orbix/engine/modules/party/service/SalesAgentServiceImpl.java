@@ -124,12 +124,12 @@ public class SalesAgentServiceImpl implements SalesAgentService {
 
     @Override
     @Transactional
-    @Auditable(action = "DEACTIVATE", entityType = "SalesAgent")
-    public void deactivateSalesAgentByPartyUid(String partyUid) {
+    @Auditable(action = "ARCHIVE", entityType = "SalesAgent")
+    public void archiveSalesAgentByPartyUid(String partyUid) {
         Party party = partyService.requireInCompanyByUid(partyUid);
         salesAgents.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_AN_AGENT + partyUid));
-        partyService.deactivate(party.getId());
+        partyService.archive(party.getId());
     }
 
     @Override

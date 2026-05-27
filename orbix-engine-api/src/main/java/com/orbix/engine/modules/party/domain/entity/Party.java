@@ -126,8 +126,8 @@ public class Party extends UidEntity {
         touch(actorId);
     }
 
-    public void deactivate(Long actorId) {
-        this.status = PartyStatus.INACTIVE;
+    public void archive(Long actorId) {
+        this.status = PartyStatus.ARCHIVED;
         touch(actorId);
     }
 

@@ -39,10 +39,18 @@ public final class Permissions {
     public static final String PRICE_APPROVE      = "PRICE.APPROVE";
 
     // ---- party -------------------------------------------------------------
-    public static final String PARTY_MANAGE_CUSTOMERS = "PARTY.MANAGE_CUSTOMERS";
-    public static final String PARTY_MANAGE_SUPPLIERS = "PARTY.MANAGE_SUPPLIERS";
-    public static final String PARTY_MANAGE_EMPLOYEES = "PARTY.MANAGE_EMPLOYEES";
-    public static final String PARTY_MANAGE_AGENTS    = "PARTY.MANAGE_AGENTS";
+    public static final String CUSTOMER_CREATE     = "CUSTOMER.CREATE";
+    public static final String CUSTOMER_UPDATE     = "CUSTOMER.UPDATE";
+    public static final String CUSTOMER_ARCHIVE    = "CUSTOMER.ARCHIVE";
+    public static final String SUPPLIER_CREATE     = "SUPPLIER.CREATE";
+    public static final String SUPPLIER_UPDATE     = "SUPPLIER.UPDATE";
+    public static final String SUPPLIER_ARCHIVE    = "SUPPLIER.ARCHIVE";
+    public static final String EMPLOYEE_CREATE     = "EMPLOYEE.CREATE";
+    public static final String EMPLOYEE_UPDATE     = "EMPLOYEE.UPDATE";
+    public static final String EMPLOYEE_ARCHIVE    = "EMPLOYEE.ARCHIVE";
+    public static final String SALES_AGENT_CREATE  = "SALES_AGENT.CREATE";
+    public static final String SALES_AGENT_UPDATE  = "SALES_AGENT.UPDATE";
+    public static final String SALES_AGENT_ARCHIVE = "SALES_AGENT.ARCHIVE";
 
     // ---- day ---------------------------------------------------------------
     public static final String DAY_OPEN     = "DAY.OPEN";

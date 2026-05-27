@@ -116,14 +116,52 @@ class PartyServiceImplTest {
     }
 
     @Test
-    void deactivate_setsInactiveAndEmitsEvent() {
+    void archive_setsArchivedAndEmitsEvent() {
         Party existing = party(50L, COMPANY_ID, "C-1", null);
         ReflectionTestUtils.setField(existing, "uid", "01ARZ3NDEKTSV4RRFFQ69G5FAV");
         when(parties.findById(50L)).thenReturn(Optional.of(existing));
 
-        service.deactivate(50L);
+        service.archive(50L);
 
-        assertThat(existing.getStatus()).isEqualTo(PartyStatus.INACTIVE);
-        verify(events).publish(eq("PartyDeactivated.v1"), any(), any(), any());
+        assertThat(existing.getStatus()).isEqualTo(PartyStatus.ARCHIVED);
+        verify(events).publish(eq("PartyArchived.v1"), any(), any(), any());
+    }
+
+    @Test
+    void archive_alreadyArchived_throws() {
+        Party existing = party(50L, COMPANY_ID, "C-1", null);
+        ReflectionTestUtils.setField(existing, "uid", "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        existing.archive(ACTOR_ID);
+        when(parties.findById(50L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.archive(50L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("already archived");
+        verify(events, never()).publish(any(), any(), any(), any());
+    }
+
+    @Test
+    void activate_setsActiveAndEmitsEvent() {
+        Party existing = party(50L, COMPANY_ID, "C-1", null);
+        ReflectionTestUtils.setField(existing, "uid", "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        existing.archive(ACTOR_ID);
+        when(parties.findById(50L)).thenReturn(Optional.of(existing));
+
+        service.activate(50L);
+
+        assertThat(existing.getStatus()).isEqualTo(PartyStatus.ACTIVE);
+        verify(events).publish(eq("PartyReactivated.v1"), any(), any(), any());
+    }
+
+    @Test
+    void activate_alreadyActive_throws() {
+        Party existing = party(50L, COMPANY_ID, "C-1", null);
+        ReflectionTestUtils.setField(existing, "uid", "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        when(parties.findById(50L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.activate(50L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("already active");
+        verify(events, never()).publish(any(), any(), any(), any());
     }
 }

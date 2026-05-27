@@ -134,7 +134,7 @@ If you add a new cross-module dependency that breaks the rule, fix the design �
   - Controller: URL shape is `/api/v1/<resource>/uid/{uid}` — the literal `uid` segment makes it unambiguous vs. code or id lookups. Validate with `@ValidUlid` (from `modules.common.validation`).
   - Tests: bypass `@PrePersist` by setting via reflection — `ReflectionTestUtils.setField(entity, "uid", UidGenerator.next())`. Pin the wire shape with a small JSON test alongside the DTO (see `ItemResponseDtoJsonTest`).
   - Angular: `id` typed as `string` on the model (since Long-id fields stringify); use uid for navigation/URLs, id for body-level joins. Edit pages track the entity's `uid` (e.g. `editingUid: signal<string | null>`).
-  - Migration of an existing entity touches the entity, DTO, repository, service interface + impl, controller, tests, plus every Angular route / service / component that addressed it by id in URLs. Roll out one aggregate at a time. Catalog (`Item`, `ItemGroup`, `Uom`, `VatGroup`, `ItemBarcode`, `PriceList`) is the reference cohort.
+  - Migration of an existing entity touches the entity, DTO, repository, service interface + impl, controller, tests, plus every Angular route / service / component that addressed it by id in URLs. Roll out one aggregate at a time. Catalog (`Item`, `ItemGroup`, `Uom`, `VatGroup`, `ItemBarcode`, `PriceList`) is the reference cohort. For the full acceptance-testable bar a "harden/<module>-<aggregate>" PR must clear, see [`docs/conventions/hardening-checklist.md`](docs/conventions/hardening-checklist.md).
 
 ### Persistence policy (DB-agnostic by design — ARCHITECTURE.md §2.3)
 The same build must run on MySQL 8 (currently MariaDB 11 locally) **and** PostgreSQL 15+. Concrete rules:

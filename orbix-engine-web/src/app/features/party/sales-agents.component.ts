@@ -222,14 +222,14 @@ import { PartyDetails, PartyResponse, SalesAgent, UpdateSalesAgentRequest, blank
                         <i class="bi bi-pencil"></i>
                       </button>
                       @if (agent.party.status === 'ACTIVE') {
-                        <button class="btn btn-outline-danger" (click)="deactivate(agent)"
-                                [disabled]="busy()" title="Deactivate this agent. Also deactivates every other role on the underlying party (e.g. their customer record).">
-                          <i class="bi bi-pause-circle"></i>
+                        <button class="btn btn-outline-danger" (click)="archive(agent)"
+                                [disabled]="busy()" title="Archive this agent. Also archives every other role on the underlying party (e.g. their customer record).">
+                          <i class="bi bi-archive"></i>
                         </button>
                       } @else {
                         <button class="btn btn-outline-success" (click)="activate(agent)"
                                 [disabled]="busy()" title="Reactivate this agent. Also reactivates every other role on the underlying party.">
-                          <i class="bi bi-play-circle"></i>
+                          <i class="bi bi-arrow-up-circle"></i>
                         </button>
                       }
                     </div>
@@ -266,14 +266,14 @@ import { PartyDetails, PartyResponse, SalesAgent, UpdateSalesAgentRequest, blank
                   <i class="bi bi-pencil me-1"></i> Edit
                 </button>
                 @if (agent.party.status === 'ACTIVE') {
-                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="deactivate(agent)"
+                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="archive(agent)"
                           [disabled]="busy()">
-                    <i class="bi bi-pause-circle me-1"></i> Deactivate
+                    <i class="bi bi-archive me-1"></i> Archive
                   </button>
                 } @else {
                   <button class="btn btn-sm btn-outline-success flex-grow-1" (click)="activate(agent)"
                           [disabled]="busy()">
-                    <i class="bi bi-play-circle me-1"></i> Activate
+                    <i class="bi bi-arrow-up-circle me-1"></i> Activate
                   </button>
                 }
               </div>
@@ -317,8 +317,6 @@ import { PartyDetails, PartyResponse, SalesAgent, UpdateSalesAgentRequest, blank
     .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
     .status-badge--active   { background: #d1fae5; color: #047857; }
     .status-badge--active .status-badge__dot   { background: #10b981; }
-    .status-badge--inactive { background: #fef3c7; color: #92400e; }
-    .status-badge--inactive .status-badge__dot { background: #f59e0b; }
     .status-badge--archived { background: #f3f4f6; color: #4b5563; }
     .status-badge--archived .status-badge__dot { background: #9ca3af; }
 
@@ -393,14 +391,13 @@ export class SalesAgentsComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly showForm = signal(false);
 
-  protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | null>(null);
   protected readonly searchSignal = signal('');
   protected searchTerm = '';
 
   protected readonly statusOptions = [
     { label: 'All',      value: null },
     { label: 'Active',   value: 'ACTIVE' as const },
-    { label: 'Inactive', value: 'INACTIVE' as const },
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
@@ -507,9 +504,9 @@ export class SalesAgentsComponent implements OnInit {
     this.showForm.set(true);
   }
 
-  deactivate(agent: SalesAgent): void {
+  archive(agent: SalesAgent): void {
     this.busy.set(true);
-    this.party.deactivateSalesAgent(agent.party.uid).subscribe({
+    this.party.archiveSalesAgent(agent.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });

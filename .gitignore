@@ -73,3 +73,4 @@ orbix-engine-infra/qa/deploy.env.local
 orbix-engine-infra/qa/orbix.env
 # Human-readable QA credentials record (generated secrets) — never commit
 orbix-engine-infra/qa/CREDENTIALS.local.md
+orbix-engine-web/test-results/

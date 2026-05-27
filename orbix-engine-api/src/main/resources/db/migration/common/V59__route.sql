@@ -25,10 +25,9 @@ CREATE TABLE route (
 );
 CREATE INDEX ix_route_company_status ON route (company_id, status);
 
--- Swap sales_agent.route_code (VARCHAR free-text) for route_id (FK).
--- Clean-build rewrite: pre-existing route_code values are dropped, not
--- migrated. Re-seed via the routes admin page after this migration.
-ALTER TABLE sales_agent DROP COLUMN route_code;
+-- Add sales_agent.route_id FK now that the route table exists. The original
+-- free-text route_code column was dropped from V7's baseline (pre-stable
+-- migrations are edited in place per CLAUDE.md "ephemeral migrations").
 ALTER TABLE sales_agent ADD COLUMN route_id BIGINT;
 ALTER TABLE sales_agent ADD CONSTRAINT fk_sales_agent_route
     FOREIGN KEY (route_id) REFERENCES route (id);

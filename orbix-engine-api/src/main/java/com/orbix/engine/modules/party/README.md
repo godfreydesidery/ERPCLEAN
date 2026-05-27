@@ -48,7 +48,7 @@ Attribute lists, types, and nullability are defined in DATA-MODEL.md §2.x; this
 - **Create supplier (US-PROC-001).** Merchandiser submits name, category, optional TIN, VRN, bank details, payment terms, lead time. Service inserts `party` and `supplier`. If a `party` with matching TIN already exists (already a customer), the UI offers to add the supplier role to the existing party rather than creating a duplicate. Emits `PartyCreated.v1` (if new) and `SupplierCreated.v1`.
 - **Create employee (US-HR-001, US-HR-002).** Admin submits name, employee code, home branch, hire date, optional `app_user_id`. Inserts `party` and `employee`. If linked to an `app_user`, that user becomes attributable for audited actions.
 - **Enrol biometric (US-IAM-011, US-HR-004).** Supervisor authenticates first; service captures the raw template from the client, encrypts with AES-GCM using the per-deployment key, persists only `template_ciphertext`. The raw template never touches disk and is zeroed in memory after encryption. Emits `BiometricEnrolled.v1`.
-- **Deactivate party (US-HR-005 for employees; generic for customer/supplier).** Sets `party.status = 'INACTIVE'`. For employees, also sets `employee.termination_date`, deactivates the linked `app_user`, and revokes refresh tokens (delegated to `platform/security`). Emits `PartyDeactivated.v1`. Transactional history is preserved untouched.
+- **Archive party (US-HR-005 for employees; generic for customer/supplier).** Sets `party.status = 'ARCHIVED'`. For employees, also sets `employee.termination_date`, deactivates the linked `app_user`, and revokes refresh tokens (delegated to `platform/security`). Emits `PartyArchived.v1`. Transactional history is preserved untouched. The state transition is reversible — `POST /uid/{partyUid}/activate` restores an `ARCHIVED` party to `ACTIVE`.
 
 ## 5. Module interactions
 
@@ -62,7 +62,8 @@ Attribute lists, types, and nullability are defined in DATA-MODEL.md §2.x; this
 **Publishes events** (versioned, payload via outbox; JSON serialised as `TEXT`).
 - `PartyCreated.v1` — `{ partyId, companyId, code, name, category, status, occurredAt }`.
 - `PartyUpdated.v1` — `{ partyId, companyId, changedFields[], occurredAt }`.
-- `PartyDeactivated.v1` — `{ partyId, companyId, reason, occurredAt }`.
+- `PartyArchived.v1` — `{ partyUid }`. Emitted when a party (and every role on it) is archived.
+- `PartyReactivated.v1` — `{ partyUid }`. Emitted when an archived party is restored to ACTIVE.
 - `CustomerCreated.v1` — `{ partyId, companyId, creditLimitAmount, creditTermsDays, priceListId, defaultBranchId, isWalkIn, occurredAt }`.
 - `CustomerUpdated.v1` — `{ partyId, changedFields[], occurredAt }`.
 - `SupplierCreated.v1` — `{ partyId, companyId, paymentTermsDays, defaultCurrencyCode, leadTimeDays, occurredAt }`.
@@ -88,16 +89,19 @@ Base path `/api/v1`. All endpoints honour `Authorization` (JWT) and `X-Branch-Id
 | `/api/v1/parties/{id}/addresses/{addrId}` | PATCH, DELETE | |
 | `/api/v1/parties/{id}/contacts` | GET, POST | Add `party_contact`. |
 | `/api/v1/parties/{id}/contacts/{contactId}` | PATCH, DELETE | |
-| `/api/v1/customers` | GET, POST | POST may create the underlying `party` in the same call, or attach the customer role to an existing `partyId`. |
-| `/api/v1/customers/{partyId}` | GET, PATCH | |
-| `/api/v1/customers/{partyId}/deactivate` | POST | |
-| `/api/v1/suppliers` | GET, POST | Same dual mode as `/customers`. |
-| `/api/v1/suppliers/{partyId}` | GET, PATCH | |
-| `/api/v1/employees` | GET, POST | |
-| `/api/v1/employees/{partyId}` | GET, PATCH | |
-| `/api/v1/employees/{partyId}/terminate` | POST | Body: `{ terminationDate, reason }`. |
-| `/api/v1/sales-agents` | GET, POST | |
-| `/api/v1/sales-agents/{partyId}` | GET, PATCH | |
+| `/api/v1/customers` | GET, POST | POST may create the underlying `party` in the same call, or attach the customer role to an existing `partyId`. Gated by `CUSTOMER.CREATE`. |
+| `/api/v1/customers/uid/{partyUid}` | GET, PATCH | Gated by `CUSTOMER.UPDATE` for PATCH. |
+| `/api/v1/customers/uid/{partyUid}/archive` | POST | Gated by `CUSTOMER.ARCHIVE`. |
+| `/api/v1/customers/uid/{partyUid}/activate` | POST | Gated by `CUSTOMER.ARCHIVE` (re-activation is the inverse of archive). |
+| `/api/v1/suppliers` | GET, POST | Same dual mode as `/customers`. Gated by `SUPPLIER.CREATE`. |
+| `/api/v1/suppliers/uid/{partyUid}` | GET, PATCH | Gated by `SUPPLIER.UPDATE` for PATCH. |
+| `/api/v1/suppliers/uid/{partyUid}/{archive,activate}` | POST | Gated by `SUPPLIER.ARCHIVE`. |
+| `/api/v1/employees` | GET, POST | Gated by `EMPLOYEE.CREATE`. |
+| `/api/v1/employees/uid/{partyUid}` | GET, PATCH | Gated by `EMPLOYEE.UPDATE` for PATCH. |
+| `/api/v1/employees/uid/{partyUid}/{archive,activate}` | POST | Gated by `EMPLOYEE.ARCHIVE`. |
+| `/api/v1/sales-agents` | GET, POST | Gated by `SALES_AGENT.CREATE`. |
+| `/api/v1/sales-agents/uid/{partyUid}` | GET, PATCH | Gated by `SALES_AGENT.UPDATE` for PATCH. |
+| `/api/v1/sales-agents/uid/{partyUid}/{archive,activate}` | POST | Gated by `SALES_AGENT.ARCHIVE`. |
 | `/api/v1/biometrics` | POST | Enrol; multipart with encrypted template. Requires supervisor auth token. |
 | `/api/v1/biometrics/{id}/revoke` | POST | Sets `revoked_at`. |
 
