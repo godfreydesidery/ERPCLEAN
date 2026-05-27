@@ -9,6 +9,12 @@ interface NavLink {
   readonly route: string;
   readonly icon: string;
   readonly tooltip: string;
+  /**
+   * Optional permission gate. If set, the item is only rendered when the
+   * current user holds *any* of the listed codes — matches the per-controller
+   * {@code hasAnyAuthority} pattern. Items without this field are always shown.
+   */
+  readonly permissions?: readonly string[];
 }
 
 interface NavGroup {
@@ -128,7 +134,7 @@ interface NavGroup {
       <!-- Sidebar (dark, off-canvas on mobile) -->
       <aside class="sidebar" [ngClass]="{ 'sidebar-open': sidebarOpen() }">
         <nav class="sidebar-nav">
-          @for (group of nav; track group.label) {
+          @for (group of visibleNav(); track group.label) {
             <div class="nav-group">
               <div class="nav-group-label">{{ group.label }}</div>
               @for (item of group.items; track item.route) {
@@ -590,6 +596,11 @@ export class ShellComponent implements OnInit {
       label: 'Finance',
       items: [
         {
+          label: 'Cash', route: '/cash', icon: 'bi-cash-stack',
+          tooltip: 'Cash book, ledger entries, supervisor adjustments, and end-of-day bank deposits. Audit-grade trail for every cash movement.',
+          permissions: ['CASH.BOOK.READ', 'CASH.ENTRY.READ', 'CASH.ADJUSTMENT.POST', 'CASH.BANK_DEPOSIT.POST', 'CASH.READ']
+        },
+        {
           label: 'Debt', route: '/debt', icon: 'bi-credit-card',
           tooltip: 'Ageing of what customers owe you (receivables) and what you owe suppliers (payables), bucketed by current / 30d / 60d / 90d+. Drives collections and payment-run decisions.'
         },
@@ -609,6 +620,19 @@ export class ShellComponent implements OnInit {
       ]
     }
   ] as const;
+
+  readonly visibleNav = computed(() => {
+    // Hide nav items whose permission gate has no match in the current token.
+    // Items without a permission field always render (back-compat).
+    return this.nav
+      .map(group => ({
+        label: group.label,
+        items: group.items.filter(item =>
+          !item.permissions || item.permissions.some(p => this.auth.hasPermission(p))
+        )
+      }))
+      .filter(group => group.items.length > 0);
+  });
 
   ngOnInit(): void {
     this.branchService.listBranches().subscribe({

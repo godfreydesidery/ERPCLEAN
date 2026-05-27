@@ -17,4 +17,7 @@ public interface CashPickupService {
     CashPickupDto post(PostCashPickupRequestDto request);
 
     List<CashPickupDto> listForSession(Long tillSessionId);
+
+    /** uid-keyed read; tenant-checked. */
+    CashPickupDto getCashPickupByUid(String uid);
 }

@@ -98,6 +98,19 @@ public class PettyCashServiceImpl implements PettyCashService {
             .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public PettyCashDto getPettyCashByUid(String uid) {
+        Long companyId = context.companyId();
+        PettyCash payout = payouts.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Petty cash not found: " + uid));
+        if (!Objects.equals(payout.getCompanyId(), companyId)) {
+            throw new NoSuchElementException("Petty cash not found: " + uid);
+        }
+        branchScope.requireAccess(payout.getBranchId());
+        return PettyCashDto.from(payout);
+    }
+
     private TillSession requireOpenSession(Long sessionId, Long companyId) {
         TillSession session = sessions.findById(sessionId)
             .orElseThrow(() -> new NoSuchElementException("Till session not found: " + sessionId));

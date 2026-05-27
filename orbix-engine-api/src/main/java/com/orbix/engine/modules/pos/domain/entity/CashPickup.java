@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.pos.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
@@ -13,14 +14,21 @@ import java.time.LocalDate;
 
 /**
  * Mid-shift cash withdrawal from the till drawer for safety (large notes
- * moved to the back-office safe). DATA-MODEL.md §7.6. Immutable record.
+ * moved to the back-office safe). DATA-MODEL.md §7.6. Immutable record;
+ * Slice D adds {@code uid} (inherited from {@link UidEntity}) as the
+ * external URL handle. No archive lifecycle — pickups are append-only.
  */
 @Entity
-@Table(name = "cash_pickup")
+@Table(
+    name = "cash_pickup",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_cash_pickup_uid", columnNames = {"uid"})
+    }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CashPickup {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CashPickup extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cash_pickup_seq")

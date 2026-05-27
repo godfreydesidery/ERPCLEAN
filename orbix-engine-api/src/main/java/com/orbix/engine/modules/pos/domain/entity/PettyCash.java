@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.pos.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.pos.domain.enums.PettyCashCategory;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -16,14 +17,21 @@ import java.time.LocalDate;
  * Small payout from the till drawer (deliveries, courier, office sundries).
  * DATA-MODEL.md §7.7. {@code till_session_id} may be NULL when the payout
  * came from the main cash book rather than a till, but at MVP we only
- * support till-side petty cash.
+ * support till-side petty cash. Slice D adds {@code uid} (inherited from
+ * {@link UidEntity}) as the external URL handle. No archive lifecycle —
+ * petty-cash payouts are append-only.
  */
 @Entity
-@Table(name = "petty_cash")
+@Table(
+    name = "petty_cash",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_petty_cash_uid", columnNames = {"uid"})
+    }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class PettyCash {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class PettyCash extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "petty_cash_seq")

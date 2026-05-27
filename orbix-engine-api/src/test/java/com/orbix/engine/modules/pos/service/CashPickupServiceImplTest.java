@@ -8,6 +8,7 @@ import com.orbix.engine.modules.cash.domain.enums.CashRefType;
 import com.orbix.engine.modules.cash.service.CashLedgerService;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -25,13 +26,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -80,6 +85,7 @@ class CashPickupServiceImplTest {
         lenient().when(pickups.save(any(CashPickup.class))).thenAnswer(inv -> {
             CashPickup p = inv.getArgument(0);
             p.setId(nextId.getAndIncrement());
+            ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
             return p;
         });
     }
@@ -89,6 +95,14 @@ class CashPickupServiceImplTest {
             new BigDecimal("50000"));
         s.setId(SESSION_ID);
         return s;
+    }
+
+    private static CashPickup pickup(Long companyId, Long branchId) {
+        CashPickup p = new CashPickup(SESSION_ID, companyId, branchId, BUSINESS_DATE,
+            new BigDecimal("10000"), Instant.now(), ACTOR_ID, SUPERVISOR_ID, "Safe drop");
+        p.setId(5500L);
+        ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
+        return p;
     }
 
     @Test
@@ -166,5 +180,33 @@ class CashPickupServiceImplTest {
         assertThatThrownBy(() -> service.post(req))
             .isInstanceOf(IllegalStateException.class);
         verify(pickups, never()).save(any());
+    }
+
+    // ---- uid entry points --------------------------------------------------
+
+    @Test
+    void getByUid_returnsPickupWhenTenantMatches() {
+        CashPickup p = pickup(COMPANY_ID, BRANCH_ID);
+        when(pickups.findByUid(p.getUid())).thenReturn(Optional.of(p));
+
+        assertThat(service.getCashPickupByUid(p.getUid()).uid()).isEqualTo(p.getUid());
+    }
+
+    @Test
+    void getByUid_throwsWhenNotFound() {
+        when(pickups.findByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getCashPickupByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F"))
+            .isInstanceOf(NoSuchElementException.class)
+            .hasMessageContaining("Cash pickup not found");
+    }
+
+    @Test
+    void getByUid_throwsWhenCrossTenant() {
+        CashPickup foreign = pickup(999L, BRANCH_ID);
+        when(pickups.findByUid(foreign.getUid())).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.getCashPickupByUid(foreign.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }

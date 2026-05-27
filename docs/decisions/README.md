@@ -28,3 +28,4 @@ ADRs are **never deleted**. If a decision is reversed, the old ADR keeps its pla
 | # | Title | Status |
 |---|---|---|
 | 0001 | [Modular monolith over microservices](0001-modular-monolith.md) | Accepted |
+| 0002 | [`uid` on composite-PK aggregates (Path A)](0002-uid-on-composite-key-aggregates.md) | Accepted |

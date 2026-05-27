@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.day.service;
 
 import com.orbix.engine.modules.day.domain.dto.BusinessDayDto;
+import com.orbix.engine.modules.day.domain.dto.BusinessDayOverrideDto;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +18,17 @@ import java.util.Optional;
  * day's OPEN row with {@code opened_by = SYSTEM}), and the
  * {@link #endDay} convenience that runs startClosing + closeDay in one
  * idempotent call.
+ *
+ * <p>Slice D layers the uid handle on top of the composite PK (ADR 0002 —
+ * Path A). External entry points take {@code String uid} and resolve to the
+ * composite internally; the composite-key methods are kept because POS /
+ * sales / procurement / the EOD orchestration all hold
+ * {@code (branchId, businessDate)} natively.
+ *
+ * <p>The {@link com.orbix.engine.modules.day.domain.entity.BusinessDayOverride}
+ * aggregate is co-managed here — it is a thin audit record under the day
+ * aggregate, not its own root. Overrides are surrogate-Long PK with a uid
+ * URL handle and a void-before-post archive lifecycle.
  */
 public interface BusinessDayService {
 
@@ -50,4 +62,46 @@ public interface BusinessDayService {
      * stored row without re-emitting events.
      */
     BusinessDayDto endDay(Long branchId, LocalDate businessDate, String eodReportObjectKey);
+
+    // ---- uid entry points (Slice D / ADR 0002) -----------------------------
+
+    /**
+     * External-entry-point read by uid. Tenant predicate enforced via the
+     * parent branch's company; cross-tenant lookups throw
+     * {@link java.util.NoSuchElementException}.
+     */
+    BusinessDayDto getBusinessDayByUid(String uid);
+
+    /** uid-keyed variant of {@link #startClosing}. */
+    BusinessDayDto startClosingByUid(String uid);
+
+    /** uid-keyed variant of {@link #closeDay}. */
+    BusinessDayDto closeDayByUid(String uid, String eodReportObjectKey);
+
+    /** uid-keyed variant of {@link #endDay}. */
+    BusinessDayDto endDayByUid(String uid, String eodReportObjectKey);
+
+    /** uid-keyed variant of {@link #previewBlockers}. */
+    List<EodBlockerDto> previewBlockersByUid(String uid);
+
+    // ---- business-day overrides --------------------------------------------
+
+    /**
+     * Persist a supervisor back-dating override under the day addressed by
+     * uid. Emits {@code BusinessDayOverridden.v1} in the same transaction.
+     */
+    BusinessDayOverrideDto postOverrideByDayUid(String dayUid,
+                                                String entityType,
+                                                Long entityId,
+                                                String reason);
+
+    /**
+     * Void an override before its back-dated post has landed. After the
+     * post succeeds the override is immutable and re-archive throws.
+     * Idempotency: a second archive attempt throws — callers should treat
+     * the first response as the source of truth.
+     */
+    BusinessDayOverrideDto archiveBusinessDayOverrideByUid(String uid);
+
+    List<BusinessDayOverrideDto> listOverrides(Long branchId);
 }

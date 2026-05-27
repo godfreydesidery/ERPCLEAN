@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 
 @Service
@@ -62,5 +63,31 @@ public class CashQueryServiceImpl implements CashQueryService {
                 .thenComparing(com.orbix.engine.modules.cash.domain.entity.CashBook::getAccount))
             .map(CashBookDto::from)
             .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CashEntryDto getCashEntryByUid(String uid) {
+        Long companyId = context.companyId();
+        com.orbix.engine.modules.cash.domain.entity.CashEntry entry = entries.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Cash entry not found: " + uid));
+        if (!Objects.equals(entry.getCompanyId(), companyId)) {
+            throw new NoSuchElementException("Cash entry not found: " + uid);
+        }
+        branchScope.requireAccess(entry.getBranchId());
+        return CashEntryDto.from(entry);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CashBookDto getCashBookByUid(String uid) {
+        Long companyId = context.companyId();
+        com.orbix.engine.modules.cash.domain.entity.CashBook book = books.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Cash book not found: " + uid));
+        if (!Objects.equals(book.getCompanyId(), companyId)) {
+            throw new NoSuchElementException("Cash book not found: " + uid);
+        }
+        branchScope.requireAccess(book.getBranchId());
+        return CashBookDto.from(book);
     }
 }

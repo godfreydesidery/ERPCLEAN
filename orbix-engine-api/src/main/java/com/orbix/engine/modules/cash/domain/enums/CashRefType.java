@@ -35,8 +35,28 @@ public final class CashRefType {
     /** End-of-day banking — paired OUT-CASH_BOX / IN-BANK. */
     public static final String BANK_DEPOSIT = "BankDeposit";
 
+    /**
+     * Compensating entry pair posted when a {@code BankDeposit} is reversed
+     * (archived). Two rows under this ref_type / the deposit's id:
+     *   IN  on CASH_BOX (mirror of original OUT),
+     *   OUT on BANK     (mirror of original IN).
+     * A new ref_type is mandatory here — direction-flip on the original
+     * {@code BANK_DEPOSIT} ref_type would collide with the already-stored
+     * IN+OUT pair on the {@code (ref_type, ref_id, direction)} UNIQUE.
+     */
+    public static final String BANK_DEPOSIT_REVERSAL = "BankDepositReversal";
+
     /** Supervisor cash adjustment — single entry, mandatory reason. */
     public static final String CASH_ADJUSTMENT = "CashAdjustment";
+
+    /**
+     * Compensating entry posted when a {@code CashAdjustment} is reversed
+     * (archived). Direction is the opposite of the original adjustment; the
+     * {@code ref_id} is the original adjustment's id. A separate ref_type
+     * (rather than direction-flip on {@code CASH_ADJUSTMENT}) keeps the
+     * cause-chain queryable and avoids ambiguity with future replays.
+     */
+    public static final String CASH_ADJUSTMENT_REVERSAL = "CashAdjustmentReversal";
 
     /** Gift-card issuance — single IN entry for the load proceeds. */
     public static final String GIFT_CARD_ISSUE = "GiftCardIssue";

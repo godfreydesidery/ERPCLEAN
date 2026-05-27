@@ -17,4 +17,7 @@ public interface PettyCashService {
     PettyCashDto post(PostPettyCashRequestDto request);
 
     List<PettyCashDto> listForSession(Long tillSessionId);
+
+    /** uid-keyed read; tenant-checked. */
+    PettyCashDto getPettyCashByUid(String uid);
 }

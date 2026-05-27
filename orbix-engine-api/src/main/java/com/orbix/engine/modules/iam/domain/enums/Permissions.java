@@ -53,12 +53,34 @@ public final class Permissions {
     public static final String SALES_AGENT_ARCHIVE = "SALES_AGENT.ARCHIVE";
 
     // ---- day ---------------------------------------------------------------
-    public static final String DAY_OPEN     = "DAY.OPEN";
-    public static final String DAY_CLOSE    = "DAY.CLOSE";
-    public static final String DAY_OVERRIDE = "DAY.OVERRIDE";
+    public static final String DAY_OPEN           = "DAY.OPEN";
+    public static final String DAY_CLOSE          = "DAY.CLOSE";
+    public static final String DAY_OVERRIDE       = "DAY.OVERRIDE";
+    public static final String DAY_READ           = "DAY.READ";
+    public static final String DAY_OVERRIDE_LIST  = "DAY.OVERRIDE_LIST";
 
     // ---- stock -------------------------------------------------------------
     public static final String STOCK_OVERSELL = "STOCK.OVERSELL";
     public static final String STOCK_COUNT    = "STOCK.COUNT";
     public static final String STOCK_TRANSFER = "STOCK.TRANSFER";
+
+    // ---- cash (Slice D — granular codes; coarse CASH.READ/ADJUST/BANKING
+    //            stay seeded as group-grants but new write endpoints require
+    //            the per-aggregate code) -------------------------------------
+    public static final String CASH_READ                    = "CASH.READ";
+    public static final String CASH_ADJUST                  = "CASH.ADJUST";
+    public static final String CASH_BANKING                 = "CASH.BANKING";
+    public static final String CASH_ENTRY_READ              = "CASH.ENTRY.READ";
+    public static final String CASH_BOOK_READ               = "CASH.BOOK.READ";
+    public static final String CASH_ADJUSTMENT_POST         = "CASH.ADJUSTMENT.POST";
+    public static final String CASH_ADJUSTMENT_ARCHIVE      = "CASH.ADJUSTMENT.ARCHIVE";
+    public static final String CASH_BANK_DEPOSIT_POST       = "CASH.BANK_DEPOSIT.POST";
+    public static final String CASH_BANK_DEPOSIT_ARCHIVE    = "CASH.BANK_DEPOSIT.ARCHIVE";
+
+    // ---- pos (Slice D — granular read codes alongside the existing write
+    //          codes; writes stay on POS.CASH_PICKUP / POS.PETTY_CASH) -------
+    public static final String POS_CASH_PICKUP        = "POS.CASH_PICKUP";
+    public static final String POS_PETTY_CASH         = "POS.PETTY_CASH";
+    public static final String POS_CASH_PICKUP_READ   = "POS.CASH_PICKUP.READ";
+    public static final String POS_PETTY_CASH_READ    = "POS.PETTY_CASH.READ";
 }

@@ -251,16 +251,20 @@ CREATE TABLE feature_flag_override (
 );
 
 -- Business day (DATA-MODEL.md §11.1)
+-- Composite PK on (branch_id, business_date); uid is the external URL handle
+-- only (ADR 0002 — Path A on composite-PK aggregates).
 CREATE TABLE business_day (
     branch_id              BIGINT      NOT NULL,
     business_date          DATE        NOT NULL,
+    uid                    CHAR(26)    NOT NULL,
     status                 VARCHAR(32) NOT NULL,
     opened_at              TIMESTAMP   NOT NULL,
     opened_by              BIGINT      NOT NULL,
     closed_at              TIMESTAMP,
     closed_by              BIGINT,
     eod_report_object_key  VARCHAR(200),
-    PRIMARY KEY (branch_id, business_date)
+    PRIMARY KEY (branch_id, business_date),
+    CONSTRAINT uk_business_day_uid UNIQUE (uid)
 );
 
 -- Hibernate-managed shared sequences (DB-agnostic via the SEQUENCE strategy)

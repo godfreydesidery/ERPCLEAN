@@ -10,6 +10,9 @@ import java.util.Optional;
 
 public interface BusinessDayRepository extends JpaRepository<BusinessDay, BusinessDayId> {
 
+    /** External lookup by ULID (URL handle, ADR 0002). */
+    Optional<BusinessDay> findByUid(String uid);
+
     /** The single non-closed day for a branch, if one exists (OPEN or CLOSING). */
     Optional<BusinessDay> findFirstByBranchIdAndStatusIn(Long branchId, List<BusinessDayStatus> statuses);
 

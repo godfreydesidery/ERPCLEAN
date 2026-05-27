@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.day.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -14,14 +15,24 @@ import java.time.LocalDate;
  * A branch's logical business day, opened and closed explicitly. Drives posting
  * dates and blocks back-dated entries (except via a supervisor override).
  * At most one row per branch may be OPEN. DATA-MODEL.md §11.1.
+ *
+ * <p>Composite-PK aggregate per ADR 0002 (Path A): the
+ * {@code (branchId, businessDate)} composite stays the database identity and
+ * the join key for every cross-aggregate FK; {@code uid} (inherited from
+ * {@link UidEntity}) is the external URL handle only.
  */
 @Entity
-@Table(name = "business_day")
+@Table(
+    name = "business_day",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_business_day_uid", columnNames = {"uid"})
+    }
+)
 @IdClass(BusinessDayId.class)
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = {"branchId", "businessDate"})
-public class BusinessDay {
+@EqualsAndHashCode(of = {"branchId", "businessDate"}, callSuper = false)
+public class BusinessDay extends UidEntity {
 
     @Id
     @Column(name = "branch_id")

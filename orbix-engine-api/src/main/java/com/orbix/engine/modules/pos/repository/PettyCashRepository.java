@@ -5,8 +5,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 public interface PettyCashRepository extends JpaRepository<PettyCash, Long> {
+
+    /** External lookup by ULID (URL handle). */
+    Optional<PettyCash> findByUid(String uid);
 
     List<PettyCash> findByTillSessionIdOrderByAtAsc(Long tillSessionId);
 

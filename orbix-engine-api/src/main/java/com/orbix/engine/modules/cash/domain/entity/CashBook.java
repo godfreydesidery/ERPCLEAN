@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.cash.domain.entity;
 
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
@@ -17,13 +18,24 @@ import java.time.LocalDate;
  * DATA-MODEL.md §10.3 + Phase 1.1 §202. Amounts are in the row's own
  * {@code currency_code} (the tender currency), so per-currency variance
  * (US-DAY-006) is a direct row read with no FX involved.
+ *
+ * <p>Composite-PK aggregate per ADR 0002 (Path A): the
+ * {@code (branchId, account, currencyCode, businessDate)} composite stays
+ * the database identity and the join key for every cross-aggregate FK;
+ * {@code uid} (inherited from {@link UidEntity}) is the external URL handle
+ * only.
  */
 @Entity
-@Table(name = "cash_book")
+@Table(
+    name = "cash_book",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_cash_book_uid", columnNames = {"uid"})
+    }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CashBook {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CashBook extends UidEntity {
 
     @EmbeddedId
     private CashBookId id;
