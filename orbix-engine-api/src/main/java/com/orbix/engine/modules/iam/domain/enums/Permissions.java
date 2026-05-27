@@ -83,4 +83,15 @@ public final class Permissions {
     public static final String POS_PETTY_CASH         = "POS.PETTY_CASH";
     public static final String POS_CASH_PICKUP_READ   = "POS.CASH_PICKUP.READ";
     public static final String POS_PETTY_CASH_READ    = "POS.PETTY_CASH.READ";
+
+    // ---- procurement (Slice B — LPO + GRN hardening) ----------------------
+    public static final String PROCUREMENT_MANAGE_LPO        = "PROCUREMENT.MANAGE_LPO";
+    public static final String PROCUREMENT_MANAGE_LPO_READ   = "PROCUREMENT.MANAGE_LPO.READ";
+    public static final String PROCUREMENT_APPROVE_LPO       = "PROCUREMENT.APPROVE_LPO";
+    public static final String PROCUREMENT_CANCEL_LPO        = "PROCUREMENT.CANCEL_LPO";
+    public static final String PROCUREMENT_MANAGE_INVOICE    = "PROCUREMENT.MANAGE_INVOICE";
+    public static final String GRN_POST                      = "GRN.POST";
+    public static final String GRN_DIRECT                    = "GRN.DIRECT";
+    public static final String GRN_READ                      = "GRN.READ";
+    public static final String GRN_CANCEL                    = "GRN.CANCEL";
 }

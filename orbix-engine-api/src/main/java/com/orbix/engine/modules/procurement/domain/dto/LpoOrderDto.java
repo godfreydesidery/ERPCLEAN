@@ -25,6 +25,7 @@ public record LpoOrderDto(
     LpoOrderStatus status,
     Long approvedBy,
     Instant approvedAt,
+    String cancellationReason,
     String notes,
     List<LpoOrderLineDto> lines
 ) {
@@ -45,6 +46,7 @@ public record LpoOrderDto(
             order.getStatus(),
             order.getApprovedBy(),
             order.getApprovedAt(),
+            order.getCancellationReason(),
             order.getNotes(),
             lines.stream().map(LpoOrderLineDto::from).toList()
         );

@@ -18,8 +18,16 @@ public interface GrnService {
     /** DRAFT → POSTED: writes stock moves + batches, advances LPO line received_qty + LPO status. */
     GrnDto post(String uid);
 
-    /** DRAFT → CANCELLED. */
-    GrnDto cancel(String uid);
+    /** DRAFT → CANCELLED with an optional reason. Gated by {@code GRN.POST}. */
+    GrnDto cancel(String uid, String reason);
+
+    /**
+     * POSTED → CANCELLED with compensating semantics. Posts opposite-direction
+     * {@code stock_move} rows for every GRN line, rewinds the LPO line
+     * {@code received_qty}, and flips the LPO header status back if appropriate.
+     * Reason is required (validated at the controller). Gated by {@code GRN.CANCEL}.
+     */
+    GrnDto cancelPosted(String uid, String reason);
 
     PageDto<GrnDto> list(Long branchId, Pageable pageable);
 

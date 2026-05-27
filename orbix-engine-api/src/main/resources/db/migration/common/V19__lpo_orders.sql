@@ -17,6 +17,7 @@ CREATE TABLE lpo_order (
     status                  VARCHAR(32)    NOT NULL,
     approved_by             BIGINT,
     approved_at             TIMESTAMP,
+    cancellation_reason     VARCHAR(500),
     notes                   VARCHAR(2000),
     version                 INT            NOT NULL DEFAULT 0,
     created_at              TIMESTAMP      NOT NULL,
@@ -30,9 +31,11 @@ CREATE TABLE lpo_order (
     CONSTRAINT fk_lpo_order_supplier      FOREIGN KEY (supplier_id)   REFERENCES supplier (party_id),
     CONSTRAINT fk_lpo_order_currency      FOREIGN KEY (currency_code) REFERENCES currency (code)
 );
-CREATE INDEX ix_lpo_order_company_status ON lpo_order (company_id, status);
-CREATE INDEX ix_lpo_order_branch_status  ON lpo_order (branch_id,  status);
-CREATE INDEX ix_lpo_order_supplier       ON lpo_order (supplier_id);
+CREATE INDEX ix_lpo_order_company_status     ON lpo_order (company_id, status);
+CREATE INDEX ix_lpo_order_branch_status      ON lpo_order (branch_id,  status);
+CREATE INDEX ix_lpo_order_supplier           ON lpo_order (supplier_id);
+-- Hot query: list LPOs for a supplier filtered by status (audit GAP 1.B).
+CREATE INDEX ix_lpo_order_supplier_status    ON lpo_order (supplier_id, status);
 
 CREATE TABLE lpo_order_line (
     id              BIGINT         NOT NULL PRIMARY KEY,

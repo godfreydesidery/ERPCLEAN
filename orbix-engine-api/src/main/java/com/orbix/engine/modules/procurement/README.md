@@ -98,12 +98,33 @@ These are the canonical happy-paths the module must support. PRD §6.2 (LPO → 
 - `platform` — sequence service, outbox, audit, approvals.
 
 **Publishes (domain events, all v1, written to outbox in the same transaction):**
-- `PurchaseQuotationRaised.v1`
-- `LpoOrderApproved.v1`
-- `GrnPosted.v1` (carries `grn_id`, branch, lines with item/qty/unit_cost — consumed by stock and debt)
+- `PurchaseQuotationRaised.v1` *(future)*
+- LPO lifecycle: `LpoOrderCreated.v1`, `LpoOrderSubmitted.v1`, `LpoOrderApproved.v1`, `LpoOrderCancelled.v1`
+- GRN lifecycle: `GrnCreated.v1`, `GrnPosted.v1`, `GrnCancelled.v1` (see payload table below)
 - `SupplierInvoiceMatched.v1`
 - `SupplierPaymentRecorded.v1` (consumed by cash and debt)
-- `VendorCreditIssued.v1`
+- `VendorCreditIssued.v1` *(future)*
+
+#### Slice B — LPO + GRN payload keys
+
+| Event | Emitted by | Payload keys |
+|---|---|---|
+| `LpoOrderCreated.v1` | `LpoOrderServiceImpl#createDraft` | `lpoOrderId`, `number`, `supplierId`, `totalAmount` |
+| `LpoOrderSubmitted.v1` | `LpoOrderServiceImpl#submit` (above threshold) | `lpoOrderId`, `totalAmount` |
+| `LpoOrderApproved.v1` | `LpoOrderServiceImpl#approve` and `#submit` (auto-approval) | `lpoOrderId`, `number`, `supplierId`, `totalAmount`, `autoApproved` |
+| `LpoOrderCancelled.v1` | `LpoOrderServiceImpl#cancel` | `lpoOrderId`, `number`, `priorStatus`, `reason`, `cancelledBy`, `cancelledAt` |
+| `GrnCreated.v1` | `GrnServiceImpl#createDraft` | `grnId`, `number`, `supplierId`, `lpoOrderId` |
+| `GrnPosted.v1` | `GrnServiceImpl#post` | `grnId`, `number`, `supplierId`, `totalAmount`, `lineCount`, `lpoOrderId`, `lines[]` where each element is `{grnLineId, itemId, uomId, qty, unitCost, vatGroupId, lineTotal, batchId, lpoOrderLineId}` |
+| `GrnCancelled.v1` (DRAFT cancel) | `GrnServiceImpl#cancel` | `grnId`, `number`, `priorStatus="DRAFT"`, `compensating=false`, `reason`, `lpoOrderId`, `cancelledBy`, `cancelledAt` |
+| `GrnCancelled.v1` (POSTED cancel) | `GrnServiceImpl#cancelPosted` | as above with `priorStatus="POSTED"`, `compensating=true`, plus `lpoPriorStatus`, `lpoStatus` when LPO-bound |
+
+#### Synchronous dependencies
+
+GRN posting writes `stock_move` / `stock_batch` rows synchronously in the same transaction via the `stock.service.*Service` interfaces — see [ADR-0003](../../../../../../../docs/decisions/0003-grn-to-stock-synchronous-tx.md). This is the **only** outbox-exempt cross-module call from procurement. The same atomicity contract applies to POSTED-GRN cancel, which posts opposite-direction `stock_move` rows in the same transaction.
+
+#### Multi-tenant scoping (clarification)
+
+Header tables (`lpo_order`, `grn`, `supplier_invoice`) carry `company_id` + `branch_id` directly. Line tables (`lpo_order_line`, `grn_line`, `supplier_invoice_grn`) **inherit** tenant scoping through their parent header — they do **not** denormalise `company_id` / `branch_id` columns. This is a deliberate exception per ARCHITECTURE.md §2.2 for child rows of a tenant-scoped aggregate.
 
 **Consumes:** none in MVP (procurement is a source module). It does subscribe to nothing for its own state transitions.
 

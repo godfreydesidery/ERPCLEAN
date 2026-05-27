@@ -2,6 +2,8 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
+import com.orbix.engine.modules.procurement.domain.dto.CancelPostedGrnRequestDto;
+import com.orbix.engine.modules.procurement.domain.dto.CancelReasonRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
 import com.orbix.engine.modules.procurement.service.GrnService;
@@ -57,9 +59,26 @@ public class GrnController {
         return service.post(uid);
     }
 
+    /** DRAFT → CANCELLED. Body is optional; if present, reason is persisted. */
     @PostMapping("/uid/{uid}/cancel")
-    public GrnDto cancel(@PathVariable @ValidUlid String uid) {
-        return service.cancel(uid);
+    public GrnDto cancel(@PathVariable @ValidUlid String uid,
+                         @Valid @RequestBody(required = false) CancelReasonRequestDto body) {
+        String reason = body != null ? body.reason() : null;
+        return service.cancel(uid, reason);
+    }
+
+    /**
+     * POSTED → CANCELLED with compensating stock + outbox event. Requires the
+     * dedicated {@code GRN.CANCEL} permission (overrides the class-level
+     * {@code GRN.POST} gate via {@code hasAnyAuthority}; either permission is
+     * accepted but the cancel-posted action is meant for the supervisor band).
+     * Reason is mandatory.
+     */
+    @PostMapping("/uid/{uid}/cancel-posted")
+    @PreAuthorize("hasAuthority('GRN.CANCEL')")
+    public GrnDto cancelPosted(@PathVariable @ValidUlid String uid,
+                               @Valid @RequestBody CancelPostedGrnRequestDto body) {
+        return service.cancelPosted(uid, body.reason());
     }
 
     private boolean callerHasAuthority(String authority) {

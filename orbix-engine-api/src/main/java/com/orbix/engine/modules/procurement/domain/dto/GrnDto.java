@@ -25,6 +25,7 @@ public record GrnDto(
     GrnStatus status,
     Instant postedAt,
     Long postedBy,
+    String cancellationReason,
     String notes,
     List<GrnLineDto> lines
 ) {
@@ -45,6 +46,7 @@ public record GrnDto(
             grn.getStatus(),
             grn.getPostedAt(),
             grn.getPostedBy(),
+            grn.getCancellationReason(),
             grn.getNotes(),
             lines.stream().map(GrnLineDto::from).toList()
         );

@@ -40,9 +40,10 @@ class GrnDtoJsonTest {
             new BigDecimal("900.0000"),
             new BigDecimal("162.0000"),
             new BigDecimal("1062.0000"),
-            GrnStatus.DRAFT,
+            GrnStatus.CANCELLED,
             null,
             null,
+            "Wrong supplier delivery; goods refused",
             null,
             List.of()
         );
@@ -57,5 +58,7 @@ class GrnDtoJsonTest {
         assertThat(json).contains("\"lpoOrderId\":\"17\"");
         // Genuine numerics untouched.
         assertThat(json).contains("\"totalAmount\":1062.0000");
+        assertThat(json).contains("\"cancellationReason\":\"Wrong supplier delivery; goods refused\"");
+        assertThat(json).contains("\"status\":\"CANCELLED\"");
     }
 }

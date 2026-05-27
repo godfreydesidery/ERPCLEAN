@@ -15,6 +15,7 @@ import com.orbix.engine.modules.procurement.domain.entity.Grn;
 import com.orbix.engine.modules.procurement.domain.entity.GrnLine;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrder;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrderLine;
+import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
 import com.orbix.engine.modules.procurement.repository.GrnLineRepository;
 import com.orbix.engine.modules.procurement.repository.GrnRepository;
@@ -236,24 +237,137 @@ public class GrnServiceImpl implements GrnService {
         }
 
         grn.post(actorId);
-        events.publish("GrnPosted.v1", AGG, String.valueOf(grn.getId()),
-            Map.of(F_ID, grn.getId(), F_NUMBER, grn.getNumber(),
-                "supplierId", grn.getSupplierId(),
-                "totalAmount", grn.getTotalAmount(),
-                "lineCount", lines.size()));
+
+        List<Map<String, Object>> linePayload = new ArrayList<>(lines.size());
+        for (GrnLine line : lines) {
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("grnLineId", line.getId());
+            entry.put("itemId", line.getItemId());
+            entry.put("uomId", line.getUomId());
+            entry.put("qty", line.getReceivedQty());
+            entry.put("unitCost", line.getUnitCost());
+            entry.put("vatGroupId", line.getVatGroupId());
+            entry.put("lineTotal", line.getLineTotal());
+            entry.put("batchId", null); // batch row is created above when applicable; id not held on line
+            entry.put("lpoOrderLineId", line.getLpoOrderLineId());
+            linePayload.add(entry);
+        }
+        Map<String, Object> postedPayload = new HashMap<>();
+        postedPayload.put(F_ID, grn.getId());
+        postedPayload.put(F_NUMBER, grn.getNumber());
+        postedPayload.put("supplierId", grn.getSupplierId());
+        postedPayload.put("totalAmount", grn.getTotalAmount());
+        postedPayload.put("lineCount", lines.size());
+        postedPayload.put(F_LPO_ID, grn.getLpoOrderId());
+        postedPayload.put("lines", linePayload);
+        events.publish("GrnPosted.v1", AGG, String.valueOf(grn.getId()), postedPayload);
         return GrnDto.from(grn, lines);
     }
 
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public GrnDto cancel(String uid) {
+    public GrnDto cancel(String uid, String reason) {
         Grn grn = requireGrnByUid(uid);
-        grn.cancel(context.userId());
-        events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()),
-            Map.of(F_ID, grn.getId(), F_NUMBER, grn.getNumber()));
+        GrnStatus priorStatus = grn.getStatus();
+        grn.cancel(reason, context.userId());
+        Map<String, Object> payload = new HashMap<>();
+        payload.put(F_ID, grn.getId());
+        payload.put(F_NUMBER, grn.getNumber());
+        payload.put("priorStatus", priorStatus.name());
+        payload.put("compensating", false);
+        payload.put("reason", reason);
+        payload.put(F_LPO_ID, grn.getLpoOrderId());
+        payload.put("cancelledBy", context.userId());
+        payload.put("cancelledAt", grn.getUpdatedAt());
+        events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()), payload);
         return GrnDto.from(grn, grnLines.findByGrnIdOrderByIdAsc(grn.getId()));
     }
+
+    @Override
+    @Transactional
+    @Auditable(action = "CANCEL_POSTED", entityType = AGG)
+    public GrnDto cancelPosted(String uid, String reason) {
+        Grn grn = requireGrnByUid(uid);
+        GrnStatus priorStatus = grn.getStatus();
+        if (priorStatus != GrnStatus.POSTED) {
+            throw new IllegalStateException(
+                "Only a POSTED GRN can be cancel-posted (was " + priorStatus + ")");
+        }
+        Long actorId = context.userId();
+        Long companyId = context.companyId();
+        List<GrnLine> lines = grnLines.findByGrnIdOrderByIdAsc(grn.getId());
+
+        // 1. Post compensating stock moves (opposite direction, same qty + batch) — ADR-0003 sync TX.
+        postCompensatingStockMoves(grn, lines);
+
+        // 2. Rewind LPO line received_qty and recompute LPO header status.
+        LpoRewindResult lpoRewind = rewindLpoIfBound(grn, lines, companyId, actorId);
+
+        // 3. Flip GRN.
+        grn.cancelPosted(reason, actorId);
+
+        // 4. Emit compensating event.
+        Map<String, Object> payload = new HashMap<>();
+        payload.put(F_ID, grn.getId());
+        payload.put(F_NUMBER, grn.getNumber());
+        payload.put("priorStatus", priorStatus.name());
+        payload.put("compensating", true);
+        payload.put("reason", reason);
+        payload.put(F_LPO_ID, grn.getLpoOrderId());
+        if (lpoRewind != null) {
+            payload.put("lpoPriorStatus", lpoRewind.priorStatus().name());
+            payload.put("lpoStatus", lpoRewind.newStatus().name());
+        }
+        payload.put("cancelledBy", actorId);
+        payload.put("cancelledAt", grn.getUpdatedAt());
+        events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()), payload);
+        return GrnDto.from(grn, lines);
+    }
+
+    private void postCompensatingStockMoves(Grn grn, List<GrnLine> lines) {
+        for (GrnLine line : lines) {
+            BigDecimal reverseQty = line.getReceivedQty().negate();
+            stockMoveService.post(new PostStockMoveRequestDto(
+                line.getItemId(), grn.getBranchId(), reverseQty, line.getUnitCost(),
+                StockMoveType.GRN, AGG, grn.getId(), "GRN.CANCEL_POSTED", true, null
+            ));
+        }
+    }
+
+    /** Returns null if the GRN isn't bound to an LPO. */
+    private LpoRewindResult rewindLpoIfBound(Grn grn, List<GrnLine> lines,
+                                             Long companyId, Long actorId) {
+        if (grn.getLpoOrderId() == null) {
+            return null;
+        }
+        LpoOrder lpo = requireLpo(grn.getLpoOrderId(), companyId);
+        LpoOrderStatus priorStatus = lpo.getStatus();
+        Map<Long, LpoOrderLine> lpoLineById = new HashMap<>();
+        for (LpoOrderLine line : lpoLines.findByLpoOrderIdOrderByLineNoAsc(lpo.getId())) {
+            lpoLineById.put(line.getId(), line);
+        }
+        for (GrnLine line : lines) {
+            if (line.getLpoOrderLineId() == null) {
+                continue;
+            }
+            LpoOrderLine lpoLine = lpoLineById.get(line.getLpoOrderLineId());
+            if (lpoLine != null) {
+                lpoLine.setReceivedQty(lpoLine.getReceivedQty().subtract(line.getReceivedQty()));
+            }
+        }
+        boolean anyReceived = lpoLineById.values().stream()
+            .anyMatch(l -> l.getReceivedQty().signum() > 0);
+        LpoOrderStatus newStatus = anyReceived
+            ? LpoOrderStatus.PARTIALLY_RECEIVED
+            : LpoOrderStatus.APPROVED;
+        lpo.setStatus(newStatus);
+        lpo.setUpdatedAt(java.time.Instant.now());
+        lpo.setUpdatedBy(actorId);
+        return new LpoRewindResult(priorStatus, newStatus);
+    }
+
+    private record LpoRewindResult(LpoOrderStatus priorStatus, LpoOrderStatus newStatus) {}
 
     @Override
     @Transactional(readOnly = true)
