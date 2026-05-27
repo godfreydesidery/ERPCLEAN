@@ -77,17 +77,31 @@ import { BusinessDay } from './day.models';
           <div class="d-flex gap-2 flex-wrap">
             @if (current(); as d) {
               @if (d.status === 'OPEN') {
-                <button class="btn btn-warning text-dark d-inline-flex align-items-center gap-2"
-                        (click)="startClosing(d)" [disabled]="busy()"
-                        *orbixHasPermission="'DAY.CLOSE'">
-                  <i class="bi bi-clipboard-check"></i> Start closing
-                </button>
+                <div class="d-flex gap-2 flex-wrap" *orbixHasPermission="'DAY.CLOSE'">
+                  <button class="btn btn-warning text-dark d-inline-flex align-items-center gap-2"
+                          (click)="startClosing(d)" [disabled]="busy()"
+                          title="Move the day into CLOSING so the Z-report can be attached.">
+                    <i class="bi bi-clipboard-check"></i> Start closing
+                  </button>
+                  <button class="btn btn-success d-inline-flex align-items-center gap-2"
+                          (click)="endDay(d)" [disabled]="busy()"
+                          title="Close this day and open the next one in a single step.">
+                    <i class="bi bi-lock-fill"></i> End of day
+                  </button>
+                </div>
               } @else if (d.status === 'CLOSING') {
-                <div class="input-group close-day-group" *orbixHasPermission="'DAY.CLOSE'">
-                  <input class="form-control" placeholder="EOD report key (optional)"
-                         [(ngModel)]="eodReportObjectKey" name="eod">
-                  <button class="btn btn-success d-inline-flex align-items-center gap-1" (click)="closeDay(d)" [disabled]="busy()">
-                    <i class="bi bi-lock"></i> Close day
+                <div class="d-flex gap-2 flex-wrap align-items-center" *orbixHasPermission="'DAY.CLOSE'">
+                  <div class="input-group close-day-group">
+                    <input class="form-control" placeholder="EOD report key (optional)"
+                           [(ngModel)]="eodReportObjectKey" name="eod">
+                    <button class="btn btn-success d-inline-flex align-items-center gap-1" (click)="closeDay(d)" [disabled]="busy()">
+                      <i class="bi bi-lock"></i> Close day
+                    </button>
+                  </div>
+                  <button class="btn btn-outline-success d-inline-flex align-items-center gap-2"
+                          (click)="endDay(d)" [disabled]="busy()"
+                          title="Close this day and open the next one in a single step.">
+                    <i class="bi bi-lock-fill"></i> End of day
                   </button>
                 </div>
               }
@@ -236,6 +250,11 @@ export class DayComponent implements OnInit {
 
   closeDay(day: BusinessDay): void {
     this.run(this.dayService.closeDay(day.uid, this.eodReportObjectKey.trim() || null));
+  }
+
+  endDay(day: BusinessDay): void {
+    if (!confirm('End the business day? This closes it and opens the next day.')) return;
+    this.run(this.dayService.endDay(day.uid, this.eodReportObjectKey.trim() || null));
   }
 
   private run(source: Observable<BusinessDay>): void {

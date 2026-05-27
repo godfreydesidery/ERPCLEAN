@@ -8,7 +8,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
 import { DayService } from './day.service';
-import { BusinessDayOverride } from './day.models';
+import { BusinessDay, BusinessDayOverride } from './day.models';
 
 /**
  * Read + void list of back-dated business-day overrides. List gated by
@@ -33,7 +33,22 @@ import { BusinessDayOverride } from './day.models';
           Supervisor grants that let a posting land in a closed day. Void before the back-dated post is committed.
         </p>
       </div>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm"
+              *orbixHasPermission="'DAY.OVERRIDE'"
+              (click)="toggleForm()"
+              [title]="showForm() ? 'Close the form without saving' : 'Pre-grant a back-dated override for a target day'">
+        <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
+        {{ showForm() ? 'Close form' : 'Pre-grant override' }}
+      </button>
     </header>
+
+    @if (success()) {
+      <div class="alert alert-success d-flex align-items-center gap-2 py-2">
+        <i class="bi bi-check-circle-fill"></i>
+        <span class="flex-grow-1">{{ success() }}</span>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="success.set(null)"></button>
+      </div>
+    }
 
     @if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
@@ -52,6 +67,66 @@ import { BusinessDayOverride } from './day.models';
         </div>
       </div>
     } @else {
+      @if (showForm()) {
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+            <h2 class="h6 fw-bold mb-0 text-dark">Pre-grant override</h2>
+            <button class="btn-close btn-sm" (click)="toggleForm()" aria-label="Close"
+                    title="Close the form without saving"></button>
+          </div>
+          <div class="card-body p-3">
+            <p class="small text-secondary mb-3">
+              Authorise a back-dated posting in advance for a specific entity. The producing feature
+              (POS, sales, procurement) consumes the grant when the post lands.
+            </p>
+            <form (ngSubmit)="submit()" #f="ngForm" class="d-flex flex-column gap-3">
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label small fw-semibold text-secondary" for="ov-day">Target day</label>
+                  <select id="ov-day" class="form-select" name="dayUid" [(ngModel)]="form.dayUid" required>
+                    <option [ngValue]="''" disabled>Pick a business day…</option>
+                    @for (d of days(); track d.uid) {
+                      <option [ngValue]="d.uid">
+                        {{ d.businessDate }} — {{ d.status }}
+                      </option>
+                    }
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold text-secondary" for="ov-etype">Entity type</label>
+                  <input id="ov-etype" class="form-control font-monospace" name="entityType"
+                         [(ngModel)]="form.entityType" required placeholder="e.g. SALES_INVOICE">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold text-secondary" for="ov-eid">Entity id</label>
+                  <input id="ov-eid" class="form-control font-monospace" name="entityId"
+                         [(ngModel)]="form.entityId" required placeholder="42">
+                </div>
+              </div>
+              <div>
+                <label class="form-label small fw-semibold text-secondary" for="ov-reason">Reason</label>
+                <textarea id="ov-reason" class="form-control" name="reason" rows="2"
+                          [(ngModel)]="form.reason" required minlength="4"
+                          placeholder="Why this back-dated posting is permitted (min 4 chars)"></textarea>
+              </div>
+              <div class="d-flex gap-2 pt-2 border-top">
+                <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
+                        [disabled]="busy() || f.invalid">
+                  @if (busy()) {
+                    <span class="spinner-border spinner-border-sm"></span>
+                  } @else {
+                    <i class="bi bi-shield-check"></i>
+                  }
+                  Grant override
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="toggleForm()"
+                        title="Discard and close">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
+
       <div class="card border-0 shadow-sm overflow-hidden">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Overrides</h2>
@@ -168,9 +243,14 @@ export class DayOverridesComponent implements OnInit {
   private readonly auth = inject(AuthService);
 
   protected readonly overrides = signal<BusinessDayOverride[]>([]);
+  protected readonly days = signal<BusinessDay[]>([]);
   protected readonly loading = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly success = signal<string | null>(null);
+  protected readonly showForm = signal(false);
+
+  protected form = { dayUid: '', entityType: '', entityId: '', reason: '' };
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -178,6 +258,34 @@ export class DayOverridesComponent implements OnInit {
 
   ngOnInit(): void {
     this.load();
+  }
+
+  toggleForm(): void {
+    this.showForm.update(v => !v);
+    if (!this.showForm()) this.resetForm();
+  }
+
+  submit(): void {
+    if (this.busy()) return;
+    const { dayUid, entityType, entityId, reason } = this.form;
+    if (!dayUid || !entityType.trim() || !entityId.trim() || reason.trim().length < 4) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.success.set(null);
+    this.dayService.postOverrideForDay(dayUid, {
+      entityType: entityType.trim(),
+      entityId: entityId.trim(),
+      reason: reason.trim()
+    }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.success.set('Override granted.');
+        this.resetForm();
+        this.showForm.set(false);
+        this.load();
+      },
+      error: err => { this.busy.set(false); this.showError(err); }
+    });
   }
 
   archive(o: BusinessDayOverride): void {
@@ -190,6 +298,10 @@ export class DayOverridesComponent implements OnInit {
     });
   }
 
+  private resetForm(): void {
+    this.form = { dayUid: '', entityType: '', entityId: '', reason: '' };
+  }
+
   private load(): void {
     const branchId = this.branchId();
     if (branchId === null) return;
@@ -198,6 +310,10 @@ export class DayOverridesComponent implements OnInit {
     this.dayService.listOverrides(branchId).subscribe({
       next: list => { this.overrides.set(list); this.loading.set(false); },
       error: err => { this.loading.set(false); this.showError(err); }
+    });
+    this.dayService.listDays(branchId).subscribe({
+      next: list => this.days.set(list.filter(d => d.status === 'OPEN' || d.status === 'CLOSED')),
+      error: () => this.days.set([])
     });
   }
 
