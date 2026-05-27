@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
+import com.orbix.engine.modules.procurement.domain.dto.CancelReasonRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
@@ -64,9 +65,19 @@ public class LpoOrderController {
         return service.approve(uid);
     }
 
+    /**
+     * Cancel an LPO. DRAFT / PENDING_APPROVAL → CANCELLED requires
+     * {@code PROCUREMENT.MANAGE_LPO}; APPROVED → CANCELLED requires the
+     * dedicated {@code PROCUREMENT.CANCEL_LPO} permission (the service
+     * additionally refuses when any GRN draws against the LPO). Either
+     * permission is accepted at the controller; the service performs the
+     * status-specific guard.
+     */
     @PostMapping("/uid/{uid}/cancel")
-    @PreAuthorize("hasAuthority('PROCUREMENT.MANAGE_LPO')")
-    public LpoOrderDto cancel(@PathVariable @ValidUlid String uid) {
-        return service.cancel(uid);
+    @PreAuthorize("hasAnyAuthority('PROCUREMENT.MANAGE_LPO', 'PROCUREMENT.CANCEL_LPO')")
+    public LpoOrderDto cancel(@PathVariable @ValidUlid String uid,
+                              @Valid @RequestBody(required = false) CancelReasonRequestDto body) {
+        String reason = body != null ? body.reason() : null;
+        return service.cancel(uid, reason);
     }
 }

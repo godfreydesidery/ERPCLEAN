@@ -64,7 +64,7 @@
 - [ ] **Request bodies validated with `@Valid`** and the class is `@Validated` at the type level.
 - [ ] **No manual `ApiResponse` wrapping in controllers** — the envelope is auto-applied. Return raw DTOs / `ResponseEntity<DTO>`.
 - [ ] **`POST` returns `ResponseEntity.created(URI.create("/api/v1/<resource>/uid/" + dto.uid()))`** with the canonical Location header.
-- [ ] **State-transition endpoints are `POST .../uid/{uid}/{action}`** returning `204 No Content` (see `archiveUom`, `activateUom`).
+- [ ] **State-transition endpoints are `POST .../uid/{uid}/{action}`** returning **`200 OK` with the updated DTO** in the response body (see `GrnController#post`, `GrnController#cancel`, `BankDepositController#archive`, `BomController#activate`). Callers refresh from the response without a follow-up `GET`. *Exception: bulk operations (≥ N rows) may return `204` to avoid serialising large arrays — case-by-case in the endpoint review.*
 - [ ] Controller lives flat in `com.orbix.engine.api.<Resource>Controller`, not in a module subpackage.
 
 ## 6. Permissions

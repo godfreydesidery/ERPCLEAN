@@ -71,6 +71,10 @@ public class Grn extends UidEntity {
     @Column(name = "posted_by")
     private Long postedBy;
 
+    /** Free-text reason captured when the GRN is CANCELLED (DRAFT or POSTED path). */
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @Column(length = 2000)
     private String notes;
 
@@ -122,9 +126,29 @@ public class Grn extends UidEntity {
         touch(actorId);
     }
 
-    public void cancel(Long actorId) {
+    /** DRAFT → CANCELLED. Reason optional but persisted on the row. */
+    public void cancel(String reason, Long actorId) {
         requireStatus(GrnStatus.DRAFT);
         this.status = GrnStatus.CANCELLED;
+        this.cancellationReason = reason;
+        touch(actorId);
+    }
+
+    /** Back-compat shim. Prefer {@link #cancel(String, Long)}. */
+    public void cancel(Long actorId) {
+        cancel(null, actorId);
+    }
+
+    /**
+     * POSTED → CANCELLED with compensating semantics. Status guard only —
+     * the caller (service) is responsible for posting the compensating
+     * stock_move rows and re-rewinding LPO line/header state. {@code reason}
+     * is required at the controller layer.
+     */
+    public void cancelPosted(String reason, Long actorId) {
+        requireStatus(GrnStatus.POSTED);
+        this.status = GrnStatus.CANCELLED;
+        this.cancellationReason = reason;
         touch(actorId);
     }
 

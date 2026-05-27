@@ -19,6 +19,7 @@ CREATE TABLE grn (
     status                   VARCHAR(32)    NOT NULL,
     posted_at                TIMESTAMP,
     posted_by                BIGINT,
+    cancellation_reason      VARCHAR(500),
     notes                    VARCHAR(2000),
     version                  INT            NOT NULL DEFAULT 0,
     created_at               TIMESTAMP      NOT NULL,
@@ -32,9 +33,13 @@ CREATE TABLE grn (
     CONSTRAINT fk_grn_supplier FOREIGN KEY (supplier_id)  REFERENCES supplier (party_id),
     CONSTRAINT fk_grn_lpo      FOREIGN KEY (lpo_order_id) REFERENCES lpo_order (id)
 );
-CREATE INDEX ix_grn_company_status ON grn (company_id, status);
-CREATE INDEX ix_grn_branch_status  ON grn (branch_id,  status);
-CREATE INDEX ix_grn_lpo            ON grn (lpo_order_id);
+CREATE INDEX ix_grn_company_status         ON grn (company_id, status);
+CREATE INDEX ix_grn_branch_status          ON grn (branch_id,  status);
+CREATE INDEX ix_grn_lpo                    ON grn (lpo_order_id);
+-- F8.2 daily summary + supplier-history list (audit GAP 1.B).
+CREATE INDEX ix_grn_supplier               ON grn (supplier_id);
+CREATE INDEX ix_grn_supplier_status        ON grn (supplier_id, status);
+CREATE INDEX ix_grn_branch_received_status ON grn (branch_id, received_date, status);
 
 CREATE TABLE grn_line (
     id                  BIGINT         NOT NULL PRIMARY KEY,
@@ -54,4 +59,6 @@ CREATE TABLE grn_line (
     CONSTRAINT fk_grn_line_uom      FOREIGN KEY (uom_id)            REFERENCES uom (id),
     CONSTRAINT fk_grn_line_vat      FOREIGN KEY (vat_group_id)      REFERENCES vat_group (id)
 );
-CREATE INDEX ix_grn_line_grn ON grn_line (grn_id);
+CREATE INDEX ix_grn_line_grn      ON grn_line (grn_id);
+-- Three-way match (Slice C) joins on lpo_order_line_id heavily (audit GAP 1.C).
+CREATE INDEX ix_grn_line_lpo_line ON grn_line (lpo_order_line_id);

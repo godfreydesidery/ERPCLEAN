@@ -70,6 +70,10 @@ public class LpoOrder extends UidEntity {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
+    /** Free-text reason captured when the LPO is CANCELLED (any path). */
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @Column(length = 2000)
     private String notes;
 
@@ -142,12 +146,30 @@ public class LpoOrder extends UidEntity {
         touch(actorId);
     }
 
-    public void cancel(Long actorId) {
-        if (status != LpoOrderStatus.DRAFT && status != LpoOrderStatus.PENDING_APPROVAL) {
-            throw new IllegalStateException("Only DRAFT or PENDING_APPROVAL can be cancelled (was " + status + ")");
+    /**
+     * Cancel the LPO. Allowed transitions:
+     *   - DRAFT             → CANCELLED (no guard beyond status)
+     *   - PENDING_APPROVAL  → CANCELLED (no guard beyond status)
+     *   - APPROVED          → CANCELLED (caller must have verified no GRN draws against the LPO — that
+     *                                    cross-aggregate check lives in the service, not the entity)
+     * PARTIALLY_RECEIVED / RECEIVED cancel is deferred to Slice C.
+     * {@code reason} is optional but recommended; persisted as {@code cancellation_reason}.
+     */
+    public void cancel(String reason, Long actorId) {
+        if (status != LpoOrderStatus.DRAFT
+                && status != LpoOrderStatus.PENDING_APPROVAL
+                && status != LpoOrderStatus.APPROVED) {
+            throw new IllegalStateException(
+                "Only DRAFT, PENDING_APPROVAL or APPROVED can be cancelled (was " + status + ")");
         }
         this.status = LpoOrderStatus.CANCELLED;
+        this.cancellationReason = reason;
         touch(actorId);
+    }
+
+    /** Back-compat shim — callers without a reason. Prefer {@link #cancel(String, Long)}. */
+    public void cancel(Long actorId) {
+        cancel(null, actorId);
     }
 
     /**

@@ -10,8 +10,10 @@ import org.springframework.data.domain.Pageable;
  * LPO lifecycle (F3.1). State machine:
  * DRAFT → PENDING_APPROVAL → APPROVED. Submitting an LPO whose total is at or
  * below the configured auto-approval threshold skips PENDING_APPROVAL.
- * DRAFT / PENDING_APPROVAL may be CANCELLED. PARTIALLY_RECEIVED / RECEIVED
- * transitions land with F3.2 (GRN).
+ * DRAFT / PENDING_APPROVAL may be CANCELLED via {@code PROCUREMENT.MANAGE_LPO};
+ * APPROVED may be cancelled via {@code PROCUREMENT.CANCEL_LPO} provided no GRN
+ * draws against the LPO. PARTIALLY_RECEIVED / RECEIVED transitions land with
+ * F3.2 (GRN); their cancellation is deferred to Slice C.
  */
 public interface LpoOrderService {
 
@@ -25,8 +27,12 @@ public interface LpoOrderService {
     /** Moves PENDING_APPROVAL → APPROVED. Gated by {@code PROCUREMENT.APPROVE_LPO} at the controller. */
     LpoOrderDto approve(String uid);
 
-    /** Moves DRAFT / PENDING_APPROVAL → CANCELLED. */
-    LpoOrderDto cancel(String uid);
+    /**
+     * Cancel the LPO with an optional reason. Allowed:
+     * DRAFT / PENDING_APPROVAL → CANCELLED at any time;
+     * APPROVED → CANCELLED only when no GRN draws against this LPO.
+     */
+    LpoOrderDto cancel(String uid, String reason);
 
     PageDto<LpoOrderDto> list(Long branchId, Pageable pageable);
 

@@ -8,6 +8,7 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
 import { ProcurementService } from './procurement.service';
 import {
   CreateGrnLine,
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'orbix-grns',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent, HasPermissionDirective],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -38,13 +39,13 @@ import {
     @if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
       </div>
     }
     @if (info()) {
       <div class="alert alert-success d-flex align-items-center gap-2 py-2">
         <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -52,7 +53,7 @@ import {
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Receive against LPO</h2>
-          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
+          <button class="btn-close btn-sm" aria-label="Close" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3 d-flex flex-column gap-3">
           <form (ngSubmit)="loadLpo()" #lf="ngForm">
@@ -161,6 +162,7 @@ import {
                 <li>
                   <button type="button" class="grn-row"
                           [class.is-active]="selected()?.id === g.id"
+                          [title]="g.cancellationReason ? ('Cancelled: ' + g.cancellationReason) : null"
                           (click)="select(g)">
                     <div class="flex-grow-1 min-w-0">
                       <div class="d-flex align-items-center gap-2 mb-1">
@@ -212,12 +214,57 @@ import {
                     <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="post(grn)">
                       <i class="bi bi-send"></i> Post
                     </button>
-                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(grn)">
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="openCancel(grn)">
                       <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  }
+                  @if (grn.status === 'POSTED') {
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                            *orbixHasPermission="'GRN.CANCEL'"
+                            [disabled]="busy()" (click)="openCancel(grn)"
+                            title="Reverse this posted GRN. Backend writes a compensating stock move and flips the GRN to CANCELLED.">
+                      <i class="bi bi-arrow-counterclockwise"></i> Cancel (reverse)
                     </button>
                   }
                 </div>
               </div>
+
+              @if (cancelTarget()?.id === grn.id) {
+                <form (ngSubmit)="confirmCancel()" #cf="ngForm" class="cancel-form mb-3">
+                  <label class="form-label small fw-semibold text-secondary" [attr.for]="'grn-cancel-reason-' + grn.id">
+                    Reason
+                    @if (grn.status === 'POSTED') {
+                      <span class="text-danger" aria-hidden="true">*</span>
+                      <span class="visually-hidden">required</span>
+                    } @else {
+                      <span class="text-muted">(optional)</span>
+                    }
+                  </label>
+                  <textarea [id]="'grn-cancel-reason-' + grn.id"
+                            class="form-control" name="reason" rows="2" maxlength="500"
+                            [(ngModel)]="cancelReason"
+                            [required]="grn.status === 'POSTED'"
+                            [placeholder]="grn.status === 'POSTED'
+                              ? 'Reason for reversing this posted GRN (e.g. goods returned to supplier)'
+                              : 'Why is this draft GRN being cancelled?'"></textarea>
+                  @if (grn.status === 'POSTED') {
+                    <p class="small text-secondary mb-0 mt-2">
+                      <i class="bi bi-info-circle me-1"></i>
+                      A compensating stock movement will be posted against this GRN's lines.
+                    </p>
+                  }
+                  <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1"
+                            [disabled]="busy() || cf.invalid">
+                      @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                      @else { <i class="bi bi-x-circle"></i> }
+                      {{ grn.status === 'POSTED' ? 'Confirm reverse' : 'Confirm cancel' }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            [disabled]="busy()" (click)="closeCancel()">Keep GRN</button>
+                  </div>
+                </form>
+              }
 
               <div class="row g-2 totals-row mb-3">
                 <div class="col-6 col-md-4">
@@ -240,6 +287,10 @@ import {
                 @if (grn.postedAt) {
                   <dt class="col-4 text-secondary">Posted</dt>
                   <dd class="col-8 mb-1">by #{{ grn.postedBy }} at {{ grn.postedAt | date:'medium' }}</dd>
+                }
+                @if (grn.cancellationReason) {
+                  <dt class="col-4 text-secondary">Cancellation reason</dt>
+                  <dd class="col-8 mb-1">{{ grn.cancellationReason }}</dd>
                 }
               </dl>
             </div>
@@ -352,6 +403,11 @@ import {
       background: #fef3c7; color: #b45309; font-size: 1.75rem;
       display: flex; align-items: center; justify-content: center;
     }
+
+    .cancel-form {
+      background: #fff7f7; border: 1px solid #fecaca; border-radius: 10px;
+      padding: 0.875rem 1rem;
+    }
   `]
 })
 export class GrnsComponent implements OnInit {
@@ -370,6 +426,8 @@ export class GrnsComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
   protected readonly showForm = signal(false);
+  protected readonly cancelTarget = signal<Grn | null>(null);
+  protected cancelReason = '';
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -405,7 +463,10 @@ export class GrnsComponent implements OnInit {
     this.refresh();
   }
 
-  select(grn: Grn): void { this.selected.set(grn); }
+  select(grn: Grn): void {
+    this.selected.set(grn);
+    if (this.cancelTarget()?.id !== grn.id) this.closeCancel();
+  }
 
   loadLpo(): void {
     if (this.lpoUidInput === null) return;
@@ -465,9 +526,37 @@ export class GrnsComponent implements OnInit {
     this.run(this.procurement.postGrn(grn.uid), `GRN posted.`);
   }
 
-  cancel(grn: Grn): void {
-    if (!globalThis.confirm(`Cancel ${grn.number}?`)) return;
-    this.run(this.procurement.cancelGrn(grn.uid), `GRN cancelled.`);
+  openCancel(grn: Grn): void {
+    this.cancelTarget.set(grn);
+    this.cancelReason = '';
+    this.error.set(null);
+  }
+
+  closeCancel(): void {
+    this.cancelTarget.set(null);
+    this.cancelReason = '';
+  }
+
+  confirmCancel(): void {
+    const grn = this.cancelTarget();
+    if (!grn) return;
+    const reason = this.cancelReason.trim();
+    if (grn.status === 'POSTED') {
+      if (reason.length === 0) {
+        this.error.set('A reason is required when reversing a posted GRN.');
+        return;
+      }
+      this.run(
+        this.procurement.cancelPostedGrn(grn.uid, reason),
+        `GRN ${grn.number} reversed — compensating stock movements posted.`
+      );
+    } else {
+      this.run(
+        this.procurement.cancelGrn(grn.uid, reason.length > 0 ? reason : null),
+        `GRN ${grn.number} cancelled.`
+      );
+    }
+    this.closeCancel();
   }
 
   private run(op: Observable<Grn>, successMessage: string): void {
