@@ -35,7 +35,9 @@ export type Persona =
   | 'procurement-officer'
   | 'supervisor'      // can cancel POSTED GRNs / LPOs (GRN.CANCEL, PROCUREMENT.CANCEL_LPO)
   | 'sales-rep'
-  | 'sales-clerk';    // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
+  | 'sales-clerk'     // POST sales invoices/receipts but NO override-credit, NO AR_SUMMARY
+  | 'stock-controller' // full stock spine: ADJUST + ADJUST_APPROVE + COUNT + TRANSFER + OVERSELL (Slice E1)
+  | 'stock-clerk';    // ADJUST + COUNT only — negative-case persona for oversell + dual-control gates
 
 export interface TestUser {
   username: string;     // e.g. 'qa.cashier'
@@ -185,6 +187,43 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // 403 — they don't carry SALES.REPORT.AR_SUMMARY).
       'SALES.MANAGE_INVOICE',
       'SALES.MANAGE_RECEIPT',
+    ],
+  },
+  'stock-controller': {
+    // Full stock spine for Slice E1: post adjustments, authorise above-
+    // threshold / oversell adjustments (second-pair-of-eyes — backend
+    // enforces "you cannot authorise your own adjustment", so a separate
+    // user from `stock-clerk` is mandatory), run physical counts, and
+    // issue/receive inter-branch transfers. STOCK.OVERSELL is the
+    // Slice-E1-pending bit; bootstrap drops it gracefully if not seeded
+    // yet (mirrors the supervisor pattern from Slice B).
+    username: 'qa.stock.controller',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Controller',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.ADJUST_APPROVE',
+      'STOCK.COUNT',
+      'STOCK.TRANSFER',
+      // Slice-E1-pending perm — bootstrap drops it gracefully if absent.
+      'STOCK.OVERSELL',
+    ],
+  },
+  'stock-clerk': {
+    // Negative-case persona for the oversell + dual-control gate tests.
+    // Can attempt an adjustment (STOCK.ADJUST) so the above-threshold +
+    // authoriser gates can fire on a real request, plus STOCK.COUNT for
+    // read-capable access on the stock module. Deliberately MISSING
+    // STOCK.ADJUST_APPROVE (cannot authorise — own or anyone's),
+    // STOCK.OVERSELL (cannot drive qty negative), and STOCK.TRANSFER.
+    username: 'qa.stock.clerk',
+    password: TEST_PASSWORD,
+    fullName: 'QA Stock Clerk',
+    defaultBranchId: HQ_BRANCH,
+    permissions: [
+      'STOCK.ADJUST',
+      'STOCK.COUNT',
     ],
   },
 };
