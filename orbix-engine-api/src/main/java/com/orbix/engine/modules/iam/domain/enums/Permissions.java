@@ -53,9 +53,11 @@ public final class Permissions {
     public static final String SALES_AGENT_ARCHIVE = "SALES_AGENT.ARCHIVE";
 
     // ---- day ---------------------------------------------------------------
-    public static final String DAY_OPEN     = "DAY.OPEN";
-    public static final String DAY_CLOSE    = "DAY.CLOSE";
-    public static final String DAY_OVERRIDE = "DAY.OVERRIDE";
+    public static final String DAY_OPEN           = "DAY.OPEN";
+    public static final String DAY_CLOSE          = "DAY.CLOSE";
+    public static final String DAY_OVERRIDE       = "DAY.OVERRIDE";
+    public static final String DAY_READ           = "DAY.READ";
+    public static final String DAY_OVERRIDE_LIST  = "DAY.OVERRIDE_LIST";
 
     // ---- stock -------------------------------------------------------------
     public static final String STOCK_OVERSELL = "STOCK.OVERSELL";
