@@ -12,6 +12,10 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Bootstraps the persona roster (cashier, accountant, procurement-officer,
+  // supervisor, ...) once before any spec runs. See e2e/test-users.ts.
+  // Path is resolved by Playwright relative to this config file.
+  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,           // Real persisted writes → keep deterministic ordering
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 1 : 0,
