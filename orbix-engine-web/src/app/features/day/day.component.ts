@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
@@ -13,15 +14,22 @@ import { BusinessDay } from './day.models';
 @Component({
   selector: 'orbix-day',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe, HasPermissionDirective],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, HasPermissionDirective],
   template: `
-    <header class="mb-4">
-      <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Operations</p>
-      <h1 class="h3 fw-bold mb-1 text-dark">Business day</h1>
-      <p class="text-secondary mb-0 small">
-        @if (branchId() !== null) { Branch #{{ branchId() }} — open, close and review trading days. }
-        @else { Pick a branch to open or close its trading day. }
-      </p>
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Operations</p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Business day</h1>
+        <p class="text-secondary mb-0 small">
+          @if (branchId() !== null) { Branch #{{ branchId() }} — open, close and review trading days. }
+          @else { Pick a branch to open or close its trading day. }
+        </p>
+      </div>
+      <a routerLink="overrides" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+         *orbixHasPermission="'DAY.OVERRIDE_LIST'"
+         title="Review back-dated postings into closed days">
+        <i class="bi bi-clipboard-check"></i> Back-dated overrides
+      </a>
     </header>
 
     @if (error()) {
@@ -118,7 +126,7 @@ import { BusinessDay } from './day.models';
                 </tr>
               </thead>
               <tbody>
-                @for (day of days(); track day.businessDate) {
+                @for (day of days(); track day.uid) {
                   <tr>
                     <td class="fw-semibold text-dark">{{ day.businessDate | date:'mediumDate' }}</td>
                     <td>
@@ -223,12 +231,11 @@ export class DayComponent implements OnInit {
   }
 
   startClosing(day: BusinessDay): void {
-    this.run(this.dayService.startClosing(day.branchId, day.businessDate));
+    this.run(this.dayService.startClosing(day.uid));
   }
 
   closeDay(day: BusinessDay): void {
-    this.run(this.dayService.closeDay(day.branchId, day.businessDate,
-      this.eodReportObjectKey.trim() || null));
+    this.run(this.dayService.closeDay(day.uid, this.eodReportObjectKey.trim() || null));
   }
 
   private run(source: Observable<BusinessDay>): void {
