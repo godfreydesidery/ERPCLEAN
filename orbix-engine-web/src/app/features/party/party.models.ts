@@ -1,7 +1,7 @@
 /** Mirrors the backend party DTOs (Customer/Supplier/Employee/SalesAgent controllers). */
 
 export type PartyCategory = 'INDIVIDUAL' | 'BUSINESS' | 'GOVERNMENT' | 'NGO';
-export type PartyStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type PartyStatus = 'ACTIVE' | 'ARCHIVED';
 
 export const PARTY_CATEGORIES: PartyCategory[] = ['INDIVIDUAL', 'BUSINESS', 'GOVERNMENT', 'NGO'];
 
