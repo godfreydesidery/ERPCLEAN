@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map, of } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { SalesService } from '../sales/sales.service';
@@ -65,13 +65,19 @@ export class DashboardService {
     return this.sales.getArSummary(branchId);
   }
 
-  // ---- STUB metrics (no aggregate endpoint yet) -----------------------------
-  // Sample values so the dashboard depicts a populated environment. Replace each
-  // `of(...)` with the real call when the endpoint exists.
-
-  /** Connect: GET /reports/approvals-pending?branchId -> count of LPO in PENDING_APPROVAL */
-  lposPendingApproval(): Observable<number> {
-    return of(SAMPLE.lposPendingApproval);
+  /**
+   * Count of LPOs in PENDING_APPROVAL. Branch-scoped when {@code branchId} is
+   * set; company-wide otherwise. Backed by
+   * {@code GET /api/v1/lpos/pending-approval/count} (permission MANAGE_LPO /
+   * APPROVE_LPO / MANAGE_LPO.READ) — 403 surfaces as a hidden tile via the
+   * component (the alert only renders when count > 0).
+   */
+  lposPendingApproval(branchId: string | null): Observable<number> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(
+      this.http.get<ApiResponse<{ count: number }>>(`${this.base}/lpos/pending-approval/count`, { params })
+    ).pipe(map(r => r.count ?? 0));
   }
 }
 
@@ -83,12 +89,7 @@ export const DASHBOARD_LIVE = {
   openInvoiceCount: true,
   arOutstanding: true,
   overdueInvoiceCount: true,
-  lposPendingApproval: false,
-} as const;
-
-/** Depicted values for metrics whose backend resource doesn't exist yet. */
-const SAMPLE = {
-  lposPendingApproval: 2,
+  lposPendingApproval: true,
 } as const;
 
 /** Minimal shape of the backend DailySummaryDto we read here. */

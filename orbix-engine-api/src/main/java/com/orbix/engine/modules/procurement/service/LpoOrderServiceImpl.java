@@ -171,6 +171,16 @@ public class LpoOrderServiceImpl implements LpoOrderService {
         return LpoOrderDto.from(order, lines.findByLpoOrderIdOrderByLineNoAsc(order.getId()));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingApproval(Long branchId) {
+        Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
+        return scope == null
+            ? orders.countByCompanyIdAndStatus(companyId, LpoOrderStatus.PENDING_APPROVAL)
+            : orders.countByCompanyIdAndBranchIdAndStatus(companyId, scope, LpoOrderStatus.PENDING_APPROVAL);
+    }
+
     private List<LpoOrderLine> saveLinesAndRollUp(LpoOrder order,
                                                   List<CreateLpoOrderRequestDto.Line> requestLines,
                                                   Long companyId) {

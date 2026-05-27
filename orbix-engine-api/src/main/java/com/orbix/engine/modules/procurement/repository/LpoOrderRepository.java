@@ -24,4 +24,8 @@ public interface LpoOrderRepository extends JpaRepository<LpoOrder, Long> {
     Page<LpoOrder> findByCompanyIdOrderByIdDesc(Long companyId, Pageable pageable);
 
     Page<LpoOrder> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId, Pageable pageable);
+
+    long countByCompanyIdAndStatus(Long companyId, LpoOrderStatus status);
+
+    long countByCompanyIdAndBranchIdAndStatus(Long companyId, Long branchId, LpoOrderStatus status);
 }

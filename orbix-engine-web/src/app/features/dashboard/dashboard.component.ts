@@ -469,7 +469,13 @@ export class DashboardComponent implements OnInit {
     // surfaces as "Permission required" on the tile.
     this.loadNegativeStockCount();
 
-    this.dashboard.lposPendingApproval().subscribe(v => this.lposPending.set(v));
+    // LPO approvals tile — live via /lpos/pending-approval/count. Branch-scoped
+    // when active, company-wide on null. 403 leaves the tile in null state so
+    // the alert simply doesn't surface for callers without procurement perms.
+    this.dashboard.lposPendingApproval(this.branch.activeBranchId()).subscribe({
+      next: v => this.lposPending.set(v),
+      error: () => this.lposPending.set(null),
+    });
 
     const branchId = this.branch.activeBranchId();
     if (branchId == null) {
