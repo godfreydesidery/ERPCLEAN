@@ -31,18 +31,11 @@ export default defineConfig({
 
   projects: [
     {
-      // Logs in once with rootadmin and stashes the JWT + localStorage so
-      // every subsequent project picks up the auth without reposting.
-      name: 'setup',
-      testMatch: /.*\.setup\.ts/,
-    },
-    {
       name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: 'e2e/.auth/rootadmin.json',
-      },
-      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+      // Auth is injected per-test via e2e/auth.fixture.ts (sessionStorage
+      // addInitScript) — storageState would not capture sessionStorage.
+      testIgnore: /.*\.setup\.ts/,
     },
   ],
 });
