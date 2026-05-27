@@ -47,6 +47,16 @@ export class DashboardService {
   }
 
   /**
+   * Count of item-branch balances currently in negative on-hand. Branch-scoped
+   * when {@code branchId} is set; company-wide otherwise. Backed by Slice E1's
+   * {@code GET /api/v1/reports/stock-negative} (permission STOCK.COUNT) — the
+   * dashboard tile surfaces 403 as "Permission required" via the component.
+   */
+  negativeStockCount(branchId: string | null): Observable<number> {
+    return this.stock.getNegativeStockReport(branchId).pipe(map(rows => rows.length));
+  }
+
+  /**
    * AR rollup for the dashboard tiles. {@code branchId} null returns
    * a company-wide total. Backed by the Slice C
    * {@code GET /sales/reports/ar-summary} endpoint.
@@ -69,6 +79,7 @@ export class DashboardService {
 export const DASHBOARD_LIVE = {
   todaysSales: true,
   stockAlertCount: true,
+  negativeStockCount: true,
   openInvoiceCount: true,
   arOutstanding: true,
   overdueInvoiceCount: true,

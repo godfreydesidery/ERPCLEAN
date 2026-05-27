@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
+import { AuthService } from '../../core/auth/auth.service';
 import { StockService } from './stock.service';
 import { StockTransfer } from './stock.models';
 
@@ -270,6 +271,7 @@ import { StockTransfer } from './stock.models';
 })
 export class TransfersComponent implements OnInit {
   private readonly stock = inject(StockService);
+  private readonly auth = inject(AuthService);
 
   protected readonly transfers = signal<StockTransfer[]>([]);
   protected readonly selected = signal<StockTransfer | null>(null);
@@ -351,7 +353,27 @@ export class TransfersComponent implements OnInit {
   private showError(err: unknown): void {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
-      this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+      const msg = envelope?.message ?? `Request failed (${err.status})`;
+      // The transfer-issue path can trip the underlying negative-stock guard
+      // (StockMoveServiceImpl) when source-branch on-hand can't cover the
+      // issued qty. Surface a clearer hint — the issue endpoint does NOT
+      // accept an allowOversell flag, so the only fix is to top up the
+      // source branch first or get a STOCK.OVERSELL-holder to adjust.
+      if (err.status === 400 && msg.includes('STOCK.OVERSELL')) {
+        if (this.auth.hasPermission('STOCK.OVERSELL')) {
+          this.error.set(
+            'Stock would go negative on issue. Top up the source branch via a ' +
+            'STOCK.OVERSELL adjustment first, then re-issue this transfer.'
+          );
+        } else {
+          this.error.set(
+            'Stock would go negative on issue. Ask a supervisor to authorise ' +
+            'a top-up adjustment (STOCK.OVERSELL) before this transfer can be issued.'
+          );
+        }
+        return;
+      }
+      this.error.set(msg);
     } else {
       this.error.set('Unexpected error');
     }

@@ -147,10 +147,23 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
                     </button>
                   }
                   @if (count.status === 'CLOSED') {
-                    <button class="btn btn-sm btn-warning text-dark d-inline-flex align-items-center gap-1"
-                            (click)="act(count, 'post')" [disabled]="busy()">
-                      <i class="bi bi-send-fill"></i> Post variances
-                    </button>
+                    <div class="d-flex flex-wrap align-items-end gap-2">
+                      <div class="post-authoriser">
+                        <label [attr.for]="'count-authoriser-' + count.id"
+                               class="form-label small fw-semibold text-secondary mb-1">
+                          Authoriser user ID <span class="text-muted">(opt)</span>
+                        </label>
+                        <input [id]="'count-authoriser-' + count.id"
+                               class="form-control form-control-sm text-end" type="number"
+                               name="postAuthoriser"
+                               [(ngModel)]="postAuthoriserModel"
+                               placeholder="Above threshold">
+                      </div>
+                      <button class="btn btn-sm btn-warning text-dark d-inline-flex align-items-center gap-1"
+                              (click)="postVariances(count)" [disabled]="busy()">
+                        <i class="bi bi-send-fill"></i> Post variances
+                      </button>
+                    </div>
                   }
                 </div>
               </div>
@@ -256,6 +269,8 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
       background: #d1fae5; color: #047857; font-size: 1.75rem;
       display: flex; align-items: center; justify-content: center;
     }
+
+    .post-authoriser { min-width: 160px; }
   `]
 })
 export class CountsComponent implements OnInit {
@@ -279,6 +294,12 @@ export class CountsComponent implements OnInit {
   protected newType: StockCountType = 'CYCLE';
   protected newItemIds = '';
   protected countedDraft: Record<string, number | null> = {};
+  /**
+   * Authoriser user ID for the post step. The backend's dual-control gate
+   * requires this when the count's net variance value exceeds the threshold
+   * (permission STOCK.COUNT_APPROVE). Below threshold the field is ignored.
+   */
+  protected postAuthoriserModel: number | null = null;
 
   ngOnInit(): void { this.load(); }
 
@@ -319,13 +340,30 @@ export class CountsComponent implements OnInit {
     this.run(this.stock.recordCounts(count.uid, { counts }), updated => this.refresh(updated));
   }
 
-  act(count: StockCount, action: 'start' | 'close' | 'post'): void {
+  act(count: StockCount, action: 'start' | 'close'): void {
     const calls = {
       start: () => this.stock.startCount(count.uid),
       close: () => this.stock.closeCount(count.uid),
-      post:  () => this.stock.postCount(count.uid),
     };
     this.run(calls[action](), updated => this.refresh(updated));
+  }
+
+  /**
+   * Post the closed count. The authoriser is sent only when present; the
+   * backend rejects above-threshold posts without one (requires the named
+   * user to hold STOCK.COUNT_APPROVE).
+   */
+  postVariances(count: StockCount): void {
+    const authoriserId = this.postAuthoriserModel == null
+      ? null
+      : String(this.postAuthoriserModel);
+    this.run(
+      this.stock.postCount(count.uid, { authorisedByUserId: authoriserId }),
+      updated => {
+        this.postAuthoriserModel = null;
+        this.refresh(updated);
+      }
+    );
   }
 
   private refresh(updated: StockCount): void {
@@ -352,7 +390,18 @@ export class CountsComponent implements OnInit {
   private showError(err: unknown): void {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
-      this.error.set(envelope?.message ?? `Request failed (${err.status})`);
+      const msg = envelope?.message ?? `Request failed (${err.status})`;
+      // Slice E1: when the count-post dual-control gate fires, the backend
+      // returns 400/403 with "authoriser" in the message. Reframe it so the
+      // operator knows which permission to chase.
+      if ((err.status === 400 || err.status === 403) && /authoriser/i.test(msg)) {
+        this.error.set(
+          'This count\'s variance exceeds the threshold — needs an authoriser ' +
+          'holding STOCK.COUNT_APPROVE.'
+        );
+        return;
+      }
+      this.error.set(msg);
     } else {
       this.error.set('Unexpected error');
     }
