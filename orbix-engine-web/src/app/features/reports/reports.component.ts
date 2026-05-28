@@ -102,5 +102,8 @@ export class ReportsComponent {
     { label: 'AR ageing',           description: 'Customers grouped by current / 30 / 60 / 90+ days outstanding.',                   link: '/reports/ar-ageing',          icon: 'bi-clock-history',       tint: 'amber',  status: 'soon' },
     { label: 'AP ageing',           description: 'Suppliers grouped by current / 30 / 60 / 90+ days outstanding.',                   link: '/reports/ap-ageing',          icon: 'bi-hourglass-bottom',    tint: 'rose',   status: 'soon' },
     { label: 'Layby ageing',        description: 'Outstanding layby / pre-order balances by age bucket.',                             link: '/reports/layby-ageing',       icon: 'bi-bag-check',           tint: 'orange', status: 'soon' },
+    { label: 'Stock card',          description: 'Chronological stock movements for an item at a branch — GRNs, sales, adjustments.', link: '/reports/stock-card',         icon: 'bi-clipboard2-pulse',    tint: 'blue',   status: 'live' },
+    { label: 'Negative stock',      description: 'Items with on-hand quantity below zero — drill through to the stock card.',          link: '/reports/negative-stock',     icon: 'bi-exclamation-octagon', tint: 'rose',   status: 'live' },
+    { label: 'Stock movers',        description: 'Top fast and slow moving items over a chosen date range and move-type set.',         link: '/reports/stock-movers',       icon: 'bi-lightning-charge',    tint: 'amber',  status: 'live' },
   ];
 }

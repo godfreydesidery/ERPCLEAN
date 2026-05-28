@@ -67,38 +67,38 @@ class DashboardReportServiceImplTest {
         return List.of(
             new ItemBranchBalanceDto(1L, BRANCH_ID, new BigDecimal("-3"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, null, null, null),
+                null, null, null, null, null, null, null),
             new ItemBranchBalanceDto(2L, BRANCH_ID, new BigDecimal("-1"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, null, null, null),
+                null, null, null, null, null, null, null),
             new ItemBranchBalanceDto(3L, BRANCH_ID, new BigDecimal("-5"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, null, null, null));
+                null, null, null, null, null, null, null));
     }
 
     private List<ItemBranchBalanceDto> belowReorder() {
         return List.of(
             new ItemBranchBalanceDto(10L, BRANCH_ID, new BigDecimal("5"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(11L, BRANCH_ID, new BigDecimal("2"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(12L, BRANCH_ID, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(13L, BRANCH_ID, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(14L, BRANCH_ID, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(15L, BRANCH_ID, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null),
+                new BigDecimal("10"), null, null, null, null, null, null),
             new ItemBranchBalanceDto(16L, BRANCH_ID, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("10"), null, null, null));
+                new BigDecimal("10"), null, null, null, null, null, null));
     }
 
     @Test

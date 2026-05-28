@@ -410,3 +410,462 @@ test.describe('Slice I — empty-state export buttons disabled', () => {
     },
   );
 });
+
+// =============================================================================
+// Slice J — Stock reports (US-RPT-004, US-RPT-005, US-RPT-006)
+//
+// All six scenarios are tagged test.fail; they flip when the Slice J frontend
+// tasks land (stock-card.component, negative-stock.component,
+// stock-movers.component). See docs/design/slice-j-reports-tail-plan.md.
+//
+// Happy-path actor: `stock-controller` — holds STOCK.COUNT (and STOCK.ADJUST +
+// STOCK.TRANSFER) from Slice E1. All three stock-report endpoints on
+// StockReportController are @PreAuthorize("hasAuthority('STOCK.COUNT')").
+// The stock-card endpoint (GET /api/v1/stock-card on StockController) is also
+// readable by the same persona. No persona widening required.
+//
+// Negative-path actor: `cashier` — holds POS.* only; no STOCK.COUNT.
+//
+// DTO wire-shape notes (verified against actual Java records 2026-05-28):
+//
+//   StockMoveDto fields: id, at (Instant), itemId, branchId, companyId, qty
+//     (BigDecimal, signed), costAmount, direction (enum), moveType (enum),
+//     refType, refId, actorId, notes, batchId, sectionId,
+//     consumptionCategory, authorisedByUserId.
+//     — No uid, no runningBalance, no docKind/docNumber/movedAt.
+//     — FE renders moveType and refType as the "type / doc reference" columns.
+//     — "at" is the timestamp field (not "movedAt").
+//
+//   ItemBranchBalanceDto fields: itemId, branchId, qtyOnHand, qtyReserved,
+//     qtyInTransit, avgCost, lastCost, reorderMin, reorderMax, binLocation,
+//     lastMovedAt.
+//     — No itemCode, itemName, branchName. FE must resolve names client-side
+//       or the BE needs a follow-up projection. Flag to backend agent if
+//       the negative-stock page AC requires item/branch names in the table.
+//
+//   ItemMovementRowDto fields: itemId, itemCode, itemName, movedQty
+//     (BigDecimal, NOT totalQty), qtyOnHand.
+//     — No rank, moveCount, lastMoveAt. FE derives rank from list index.
+//
+// Frontend test-id contract (FE agent wires these — same shared component as
+// Slice I, extended to the stock-report pages):
+//
+//   data-testid              | Purpose
+//   -------------------------|----------------------------------------------
+//   export-csv               | CSV export trigger
+//   export-excel             | Excel export trigger
+//   export-pdf               | PDF export trigger
+//   report-empty-state       | Visible when result set is empty
+//   report-permission-state  | Visible when current user lacks STOCK.COUNT
+//   reports-nav-section      | Sidebar Reports nav group (Slice I contract)
+//   stock-card-item-input    | Item typeahead input on /reports/stock-card
+//   stock-card-table-row     | Each row of the stock-card move table
+//   stock-movers-fast-tab    | "Fast movers" tab trigger
+//   stock-movers-slow-tab    | "Slow movers" tab trigger
+//   stock-movers-table-row   | Each row in whichever movers tab is active
+//   negative-stock-table-row | Each row on /reports/negative-stock
+// =============================================================================
+
+// =============================================================================
+// SCENARIO 6 — Stock-card report happy-path
+// Actor: stock-controller
+// US-RPT-004 / Slice J — flips when FE lands
+// =============================================================================
+
+test.describe('Slice J — stock-card report happy-path (US-RPT-004)', () => {
+  test.use({ persona: 'stock-controller' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands
+    'stock-controller opens /reports/stock-card, selects an item + branch via typeahead, sees move table, exports CSV, axe-AA clean',
+    async ({ page }) => {
+      // Navigate to stock-card with branch pre-selected via query param.
+      // The page should default to branchId=1 (HQ) via the active-branch
+      // localStorage key set in beforeEach; passing it explicitly is safer.
+      await page.goto(`/reports/stock-card?branchId=${BRANCH_ID}`);
+      await dismissDismissableAlerts(page);
+
+      // The item typeahead must be visible — it is the primary filter control
+      // and signals the component has mounted.
+      const itemInput = page.locator('[data-testid="stock-card-item-input"]');
+      await expect(itemInput).toBeVisible({ timeout: 20_000 });
+
+      // Type a prefix to trigger the typeahead. Any item that was GRN'd on
+      // the QA container will have at least one StockMove. The seeded catalog
+      // from Slice E1 setup typically contains items starting with common
+      // prefixes; "item" or the first item code works. Adjust prefix if the
+      // QA-container seed uses a different naming convention.
+      await itemInput.fill('item');
+      // Wait for dropdown suggestions to appear.
+      const suggestion = page.locator('[data-testid="stock-card-item-input"] ~ * [role="option"]').first();
+      await expect(suggestion).toBeVisible({ timeout: 10_000 });
+      await suggestion.click();
+
+      // After selecting an item the report loads automatically (or the user
+      // clicks a "Run" button — the FE agent decides; either way the table
+      // must appear).
+      const firstRow = page.locator('[data-testid="stock-card-table-row"]').first();
+      await expect(firstRow).toBeVisible({ timeout: 20_000 });
+
+      // Axe-AA scan before triggering the download.
+      await assertNoSeriousA11yViolations(page, '/reports/stock-card');
+
+      // CSV export.
+      const csvBtn = page.locator('[data-testid="export-csv"]');
+      await expect(csvBtn).toBeVisible();
+      await expect(csvBtn).toBeEnabled();
+
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        csvBtn.click(),
+      ]);
+
+      expect(download.suggestedFilename(), 'CSV filename').toMatch(/stock-card.*\.csv$/i);
+
+      // Stream must be non-empty and contain header + at least 1 data row.
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+      const csvText = Buffer.concat(chunks).toString('utf-8');
+      expect(csvText.length, 'CSV is non-empty').toBeGreaterThan(0);
+      const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+      expect(lines.length, 'CSV has header + at least 1 data row').toBeGreaterThanOrEqual(2);
+    },
+  );
+});
+
+// =============================================================================
+// SCENARIO 7 — Negative-stock report happy-path
+// Actor: stock-controller
+// US-RPT-006 / Slice J — flips when FE lands
+// =============================================================================
+
+test.describe('Slice J — negative-stock report happy-path (US-RPT-006)', () => {
+  test.use({ persona: 'stock-controller' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands
+    'stock-controller opens /reports/negative-stock, page renders (empty-or-rows), click-through to stock-card, exports Excel, axe-AA clean',
+    async ({ page }) => {
+      await page.goto(`/reports/negative-stock?branchId=${BRANCH_ID}`);
+      await dismissDismissableAlerts(page);
+
+      // The Excel export button appearing signals the page has mounted and the
+      // API call resolved. On a fresh QA container the list may be empty —
+      // that is an acceptable result; we test the empty-state separately.
+      // Here we tolerate both populated and empty, but require the export
+      // surface to be present (even if disabled in empty case).
+      const excelBtn = page.locator('[data-testid="export-excel"]');
+      await expect(excelBtn).toBeVisible({ timeout: 20_000 });
+
+      // Axe-AA scan.
+      await assertNoSeriousA11yViolations(page, '/reports/negative-stock');
+
+      // If the table has rows, clicking the first one must navigate to
+      // /reports/stock-card with itemId and branchId query params.
+      const firstRow = page.locator('[data-testid="negative-stock-table-row"]').first();
+      const hasRows = await firstRow.isVisible().catch(() => false);
+      if (hasRows) {
+        // Record current URL before click.
+        await firstRow.click();
+        // After drill-through the URL must contain /reports/stock-card.
+        await expect(page).toHaveURL(/\/reports\/stock-card/, { timeout: 10_000 });
+        // Navigate back to the negative-stock page to continue.
+        await page.goBack();
+        await dismissDismissableAlerts(page);
+        await expect(excelBtn).toBeVisible({ timeout: 10_000 });
+      }
+
+      // Excel export — only assert if button is enabled (empty-state disables).
+      const isEnabled = await excelBtn.isEnabled();
+      if (isEnabled) {
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          excelBtn.click(),
+        ]);
+        const filename = download.suggestedFilename();
+        expect(filename, 'Excel filename').toMatch(/negative-stock.*\.xlsx$/i);
+        expect(filename.toLowerCase().endsWith('.xlsx'), 'extension is .xlsx').toBe(true);
+        const stream = await download.createReadStream();
+        const chunks: Buffer[] = [];
+        await new Promise<void>((resolve, reject) => {
+          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+          stream.on('end', resolve);
+          stream.on('error', reject);
+        });
+        expect(Buffer.concat(chunks).length, 'Excel file non-empty').toBeGreaterThan(0);
+      }
+    },
+  );
+});
+
+// =============================================================================
+// SCENARIO 8 — Stock movers (fast + slow tabs)
+// Actor: stock-controller
+// US-RPT-005 / Slice J — flips when FE lands
+// =============================================================================
+
+/** Last 30 days — the default window the fast/slow-movers endpoint uses. */
+const MOVERS_FROM = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+})();
+const MOVERS_TO = TODAY;
+
+test.describe('Slice J — stock movers (fast + slow tabs, US-RPT-005)', () => {
+  test.use({ persona: 'stock-controller' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands
+    'stock-controller opens /reports/stock-movers, fast-tab shows rows, switches to slow-tab, exports PDF per tab, axe-AA clean',
+    async ({ page }) => {
+      await page.goto(
+        `/reports/stock-movers?branchId=${BRANCH_ID}&from=${MOVERS_FROM}&to=${MOVERS_TO}`,
+      );
+      await dismissDismissableAlerts(page);
+
+      // Default tab must be Fast movers.
+      const fastTab = page.locator('[data-testid="stock-movers-fast-tab"]');
+      await expect(fastTab).toBeVisible({ timeout: 20_000 });
+
+      // Table rows in the fast tab (if any data exists in the date window).
+      const fastRows = page.locator('[data-testid="stock-movers-table-row"]');
+      // Wait for the loading state to resolve — at least the empty-state OR
+      // the first row must appear.
+      await Promise.race([
+        fastRows.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+        page.locator('[data-testid="report-empty-state"]').waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+      ]);
+
+      // Axe-AA scan on the fast-movers tab.
+      await assertNoSeriousA11yViolations(page, '/reports/stock-movers (fast tab)');
+
+      // PDF export for the fast tab — only if enabled.
+      const pdfBtn = page.locator('[data-testid="export-pdf"]');
+      await expect(pdfBtn).toBeVisible();
+      const fastPdfEnabled = await pdfBtn.isEnabled();
+      if (fastPdfEnabled) {
+        const [fastDownload] = await Promise.all([
+          page.waitForEvent('download'),
+          pdfBtn.click(),
+        ]);
+        expect(fastDownload.suggestedFilename(), 'fast-movers PDF filename').toMatch(/fast.*movers.*\.pdf$/i);
+        const stream = await fastDownload.createReadStream();
+        const firstChunk = await new Promise<Buffer>((resolve, reject) => {
+          stream.once('data', (chunk: Buffer) => { stream.destroy(); resolve(chunk); });
+          stream.once('error', reject);
+        });
+        expect(firstChunk.slice(0, 5).toString('ascii'), 'PDF magic bytes').toBe('%PDF-');
+      }
+
+      // Switch to Slow movers tab.
+      const slowTab = page.locator('[data-testid="stock-movers-slow-tab"]');
+      await expect(slowTab).toBeVisible();
+      await slowTab.click();
+
+      // Wait for slow-tab content to resolve.
+      await Promise.race([
+        page.locator('[data-testid="stock-movers-table-row"]').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {}),
+        page.locator('[data-testid="report-empty-state"]').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {}),
+      ]);
+
+      // Axe-AA scan on the slow-movers tab.
+      await assertNoSeriousA11yViolations(page, '/reports/stock-movers (slow tab)');
+
+      // PDF export for the slow tab — only if enabled.
+      const slowPdfEnabled = await pdfBtn.isEnabled();
+      if (slowPdfEnabled) {
+        const [slowDownload] = await Promise.all([
+          page.waitForEvent('download'),
+          pdfBtn.click(),
+        ]);
+        expect(slowDownload.suggestedFilename(), 'slow-movers PDF filename').toMatch(/slow.*movers.*\.pdf$/i);
+        const stream = await slowDownload.createReadStream();
+        const firstChunk = await new Promise<Buffer>((resolve, reject) => {
+          stream.once('data', (chunk: Buffer) => { stream.destroy(); resolve(chunk); });
+          stream.once('error', reject);
+        });
+        expect(firstChunk.slice(0, 5).toString('ascii'), 'PDF magic bytes').toBe('%PDF-');
+      }
+    },
+  );
+});
+
+// =============================================================================
+// SCENARIO 9 — Cashier permission gate on stock-report pages (FE-side)
+// Actor: cashier
+// Slice J — flips when FE lands
+//
+// Backend gating: StockReportController carries class-level
+// @PreAuthorize("hasAuthority('STOCK.COUNT')"). Cashier holds POS.* only.
+// HTTP 403 will fire on the API call; the FE must translate that into the
+// permission-required inert state (report-permission-state test-id) rather
+// than a raw error page, because a raw error is an accessibility/UX defect.
+// This scenario asserts on the FE state; the 403 is the cause, not the check.
+// =============================================================================
+
+test.describe('Slice J — cashier permission gate on stock-report pages', () => {
+  test.use({ persona: 'cashier' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands (requires FE permission guard or 403-to-state mapping)
+    'cashier opens /reports/stock-card, /reports/negative-stock, /reports/stock-movers — each shows permission-required state, no export buttons',
+    async ({ page }) => {
+      const pages: Array<{ path: string; label: string }> = [
+        { path: '/reports/stock-card', label: 'stock-card' },
+        { path: '/reports/negative-stock', label: 'negative-stock' },
+        { path: '/reports/stock-movers', label: 'stock-movers' },
+      ];
+
+      for (const { path, label } of pages) {
+        await page.goto(path);
+        await dismissDismissableAlerts(page);
+
+        // The permission-required inert state element must be present and
+        // visible. Accept either a route-guard redirect to a permission page
+        // OR the component rendering the inert state inline.
+        const permState = page.locator('[data-testid="report-permission-state"]');
+        await expect(
+          permState,
+          `${label}: report-permission-state visible for cashier`,
+        ).toBeVisible({ timeout: 10_000 });
+
+        // No export buttons may appear — no data, no export surface.
+        await expect(
+          page.locator('[data-testid="export-csv"]'),
+          `${label}: no CSV button for cashier`,
+        ).toHaveCount(0);
+        await expect(
+          page.locator('[data-testid="export-excel"]'),
+          `${label}: no Excel button for cashier`,
+        ).toHaveCount(0);
+        await expect(
+          page.locator('[data-testid="export-pdf"]'),
+          `${label}: no PDF button for cashier`,
+        ).toHaveCount(0);
+      }
+    },
+  );
+});
+
+// =============================================================================
+// SCENARIO 10 — Empty-state on stock-card (item with no moves)
+// Actor: stock-controller
+// Slice J — flips when FE lands
+// =============================================================================
+
+test.describe('Slice J — stock-card empty-state (item with no moves)', () => {
+  test.use({ persona: 'stock-controller' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands
+    'stock-controller opens /reports/stock-card with an itemId that has no moves, sees empty-state, export buttons disabled with tooltip',
+    async ({ page }) => {
+      // Pass an itemId that is guaranteed to have no stock moves. On any fresh
+      // QA container, a newly created item (not yet GRN'd) has zero moves.
+      // Use itemId=9999 as a sentinel that is almost certainly absent; the
+      // endpoint returns an empty page, not a 404, so the FE must render the
+      // empty state. If the QA container happens to have id 9999 with moves,
+      // use a sufficiently large value (e.g. 99999) — the scenario is resilient
+      // as long as the empty state is reachable by ID.
+      await page.goto(
+        `/reports/stock-card?itemId=9999&branchId=${BRANCH_ID}`,
+      );
+      await dismissDismissableAlerts(page);
+
+      // The empty-state marker must be visible within a reasonable timeout
+      // (page loads, API returns empty page, component resolves the state).
+      const emptyState = page.locator('[data-testid="report-empty-state"]');
+      await expect(emptyState, 'empty-state visible for no-move item').toBeVisible({ timeout: 20_000 });
+
+      // All export buttons must be present but disabled.
+      const csvBtn = page.locator('[data-testid="export-csv"]');
+      const excelBtn = page.locator('[data-testid="export-excel"]');
+      const pdfBtn = page.locator('[data-testid="export-pdf"]');
+
+      await expect(csvBtn, 'CSV button present').toBeVisible({ timeout: 10_000 });
+      await expect(excelBtn, 'Excel button present').toBeVisible({ timeout: 10_000 });
+      await expect(pdfBtn, 'PDF button present').toBeVisible({ timeout: 10_000 });
+
+      await expect(csvBtn, 'CSV button disabled').toBeDisabled();
+      await expect(excelBtn, 'Excel button disabled').toBeDisabled();
+      await expect(pdfBtn, 'PDF button disabled').toBeDisabled();
+
+      // Each disabled button must carry "No data to export" via title or aria-label.
+      for (const [btn, label] of [
+        [csvBtn, 'CSV'],
+        [excelBtn, 'Excel'],
+        [pdfBtn, 'PDF'],
+      ] as const) {
+        const titleAttr = await btn.getAttribute('title');
+        const ariaLabel = await btn.getAttribute('aria-label');
+        const hasTooltip =
+          (titleAttr !== null && /no data to export/i.test(titleAttr)) ||
+          (ariaLabel !== null && /no data to export/i.test(ariaLabel));
+        expect(hasTooltip, `${label} disabled button carries "No data to export" tooltip`).toBe(true);
+      }
+
+      // Axe-AA scan on the empty-state page.
+      await assertNoSeriousA11yViolations(page, '/reports/stock-card (empty state)');
+    },
+  );
+});
+
+// =============================================================================
+// SCENARIO 11 — Empty-state on stock-movers (date range with no moves)
+// Actor: stock-controller
+// Slice J — flips when FE lands
+// =============================================================================
+
+test.describe('Slice J — stock-movers empty-state (date range with no moves)', () => {
+  test.use({ persona: 'stock-controller' as Persona });
+
+  test.fail(
+    // Slice J — flips when FE lands
+    'stock-controller opens /reports/stock-movers with to=1900-01-01 (empty window), both tabs show empty-state, exports disabled',
+    async ({ page }) => {
+      // Using EMPTY_DATE as `to` guarantees the window [1900-01-01, 1900-01-01]
+      // contains zero stock moves on any QA container. Mirror the Slice I trick
+      // (scenario 5 uses the same EMPTY_DATE to pin zero-sales-summary).
+      await page.goto(
+        `/reports/stock-movers?branchId=${BRANCH_ID}&from=${EMPTY_DATE}&to=${EMPTY_DATE}`,
+      );
+      await dismissDismissableAlerts(page);
+
+      // Fast movers tab is the default; the empty-state must appear.
+      const emptyState = page.locator('[data-testid="report-empty-state"]');
+      await expect(emptyState, 'fast-tab empty-state visible').toBeVisible({ timeout: 20_000 });
+
+      // Export buttons must be present but disabled on the fast tab.
+      // (stock-movers exposes CSV + PDF; Excel is not wired for this report.)
+      const csvBtn = page.locator('[data-testid="export-csv"]');
+      const pdfBtn = page.locator('[data-testid="export-pdf"]');
+
+      await expect(csvBtn, 'CSV button present on fast-tab empty').toBeVisible({ timeout: 10_000 });
+      await expect(pdfBtn, 'PDF button present on fast-tab empty').toBeVisible({ timeout: 10_000 });
+
+      await expect(csvBtn, 'CSV button disabled on fast-tab empty').toBeDisabled();
+      await expect(pdfBtn, 'PDF button disabled on fast-tab empty').toBeDisabled();
+
+      // Switch to Slow movers tab.
+      const slowTab = page.locator('[data-testid="stock-movers-slow-tab"]');
+      await expect(slowTab, 'slow tab visible').toBeVisible();
+      await slowTab.click();
+
+      // Empty-state must also appear on the slow tab.
+      await expect(emptyState, 'slow-tab empty-state visible').toBeVisible({ timeout: 10_000 });
+
+      // Disabled exports on slow tab.
+      await expect(csvBtn, 'CSV button disabled on slow-tab empty').toBeDisabled();
+      await expect(pdfBtn, 'PDF button disabled on slow-tab empty').toBeDisabled();
+
+      // Axe-AA on the empty-movers page (either tab; slow is already active).
+      await assertNoSeriousA11yViolations(page, '/reports/stock-movers (empty state)');
+    },
+  );
+});

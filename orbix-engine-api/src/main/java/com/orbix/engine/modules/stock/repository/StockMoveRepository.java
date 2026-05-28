@@ -21,13 +21,13 @@ public interface StockMoveRepository extends JpaRepository<StockMove, Long> {
     Page<StockMove> findByItemIdAndBranchIdOrderByAtAsc(Long itemId, Long branchId, Pageable pageable);
 
     /**
-     * F8.1 / US-RPT-005 — sum of moved qty per (itemId) in a window, filtered
-     * by move type so the merchandiser can rank fast / slow movers across
-     * outbound sales (or any chosen subset). Sum uses {@code ABS(qty)} so
-     * outbound rows (negative qty) and inbound rows (positive) both add to
-     * total throughput. Returns {@code Object[]{itemId, totalQty}}.
+     * F8.1 / US-RPT-005 — aggregated movement per item in a window, filtered
+     * by move type. Returns {@code Object[]{itemId, totalQty, moveCount, lastMoveAt}}
+     * where {@code totalQty} is the sum of ABS(qty) so both inbound and outbound
+     * rows contribute to total throughput, {@code moveCount} is the row count, and
+     * {@code lastMoveAt} is the most recent move timestamp in the window.
      */
-    @Query("SELECT m.itemId, SUM(ABS(m.qty)) FROM StockMove m"
+    @Query("SELECT m.itemId, SUM(ABS(m.qty)), COUNT(m), MAX(m.at) FROM StockMove m"
         + " WHERE m.companyId = :companyId"
         + " AND (:branchId IS NULL OR m.branchId = :branchId)"
         + " AND m.moveType IN :moveTypes"

@@ -20,5 +20,20 @@ export const routes: Routes = [
     // Slice I — US-RPT-003. Accepts ?branchId=...&from=YYYY-MM-DD&to=YYYY-MM-DD.
     path: 'z-history',
     loadComponent: () => import('./z-history.component').then(m => m.ZHistoryComponent)
+  },
+  {
+    // Slice J — US-RPT-004. Accepts ?itemId=&branchId=.
+    path: 'stock-card',
+    loadComponent: () => import('./stock-card.component').then(m => m.StockCardComponent)
+  },
+  {
+    // Slice J — US-RPT-006. Accepts ?branchId=.
+    path: 'negative-stock',
+    loadComponent: () => import('./negative-stock.component').then(m => m.NegativeStockComponent)
+  },
+  {
+    // Slice J — US-RPT-005. Accepts ?branchId=.
+    path: 'stock-movers',
+    loadComponent: () => import('./stock-movers.component').then(m => m.StockMoversComponent)
   }
 ];

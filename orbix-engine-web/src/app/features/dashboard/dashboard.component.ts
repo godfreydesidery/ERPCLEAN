@@ -488,8 +488,8 @@ export class DashboardComponent implements OnInit {
       value: c.negDenied ? 'Permission required' : this.count(c.negativeStockNumeric),
       icon: 'bi-exclamation-octagon', tint: 'rose',
       live: DASHBOARD_LIVE.negativeStockCount, testId: 'kpi-negative-stock',
-      link: linked ? '/stock/balances' : null,
-      queryParams: linked ? { negativeOnly: 'true' } : null,
+      link: linked ? '/reports/negative-stock' : null,
+      queryParams: null,
       denied: c.negDenied,
     };
   }
@@ -530,7 +530,7 @@ export class DashboardComponent implements OnInit {
     this.pushIfPositive(out, this.negativeStockCount(), n =>
       ({ tint: 'rose', title: `${n} item${n === 1 ? '' : 's'} in negative stock`,
         desc: 'OVERSELL moves have driven on-hand below zero — reconcile soon.',
-        link: '/stock/balances', queryParams: { negativeOnly: 'true' }, cta: 'Review',
+        link: '/reports/negative-stock', queryParams: {}, cta: 'Review',
         live: DASHBOARD_LIVE.negativeStockCount, testId: 'alert-negative-stock' }));
     this.pushIfPositive(out, this.overdueInvoices(), n =>
       ({ tint: 'rose', title: `${n} invoice${n === 1 ? '' : 's'} past due`,

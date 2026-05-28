@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.stock.domain.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 /**
  * One row of the fast / slow movers report (F8.1 / US-RPT-005). Captures
@@ -13,5 +14,9 @@ public record ItemMovementRowDto(
     String itemCode,
     String itemName,
     BigDecimal movedQty,
-    BigDecimal qtyOnHand
+    BigDecimal qtyOnHand,
+    /** Number of individual move rows in the window contributing to {@code movedQty}. */
+    Long moveCount,
+    /** Timestamp of the most recent move in the window; null for zero-mover items. */
+    Instant lastMoveAt
 ) {}
