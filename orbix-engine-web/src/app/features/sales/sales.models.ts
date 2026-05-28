@@ -177,7 +177,7 @@ export type ReturnReason = 'DAMAGED' | 'EXPIRED' | 'WRONG_ITEM' | 'BUYER_REMORSE
 export const RETURN_REASONS: ReturnReason[] = ['DAMAGED', 'EXPIRED', 'WRONG_ITEM', 'BUYER_REMORSE', 'OTHER'];
 
 export type CustomerReturnStatus = 'DRAFT' | 'POSTED' | 'CREDITED' | 'CANCELLED';
-export type CreditNoteStatus = 'POSTED' | 'FULLY_ALLOCATED' | 'CANCELLED';
+export type CreditNoteStatus = 'POSTED' | 'PARTIALLY_ALLOCATED' | 'FULLY_ALLOCATED' | 'CANCELLED';
 
 export interface CustomerReturnLine {
   id: string;
@@ -237,6 +237,22 @@ export interface IssueCreditNoteRequest {
   notes: string | null;
 }
 
+// ---- Slice H: credit-note allocation types --------------------------------
+
+export interface CreditNoteAllocation {
+  id: string;
+  salesInvoiceId: string;
+  salesInvoiceNumber: string | null;
+  amount: number;
+  allocatedAt: string;
+  allocatedBy: string | null;
+}
+
+export interface ApplyCreditNoteRequest {
+  salesInvoiceUid: string;
+  amount: number;
+}
+
 export interface CustomerCreditNote {
   id: string;
   uid: string;
@@ -244,13 +260,16 @@ export interface CustomerCreditNote {
   companyId: string;
   branchId: string;
   customerId: string;
+  customerName: string | null;
   customerReturnId: string | null;
   cnDate: string;
   currencyCode: string;
   totalAmount: number;
   allocatedAmount: number;
+  availableAmount: number;
   status: CreditNoteStatus;
   notes: string | null;
+  allocations: CreditNoteAllocation[] | null;
 }
 
 // ---- F4.5: packing list ----------------------------------------------------
