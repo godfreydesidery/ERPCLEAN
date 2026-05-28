@@ -41,4 +41,19 @@ public interface SupplierInvoiceService {
      * reflects it" holds strictly.
      */
     void applyWriteOff(Long invoiceId, BigDecimal amount);
+
+    /**
+     * Slice H.1 — vendor credit-note application. Advances {@code paidAmount}
+     * by {@code amount} on the given invoice (must be POSTED or PARTIALLY_PAID)
+     * within the caller's transaction. Flips status to PAID when fully paid.
+     * Throws {@link IllegalStateException} if the invoice is in a non-payable
+     * status; {@link IllegalArgumentException} if the amount would overpay.
+     *
+     * <p>ADR-0004 sync-TX exemption #23: called by
+     * {@code VendorReturnServiceImpl.applyToInvoice} in the same DB tx as the
+     * {@code vendor_credit_note_allocation} row and outbox event, so the
+     * invariant "if credit note is allocated, invoice paidAmount reflects it"
+     * holds strictly.
+     */
+    void applyVendorCredit(Long invoiceId, BigDecimal amount);
 }

@@ -88,11 +88,13 @@ entry is categorised.
 | 19 | `sales.SalesReportServiceImpl` → `pos.TillReportService` | `SalesReportServiceImpl.java:196` (`zReport`) | **(ii) Latent gap — refactor.** Reports are a read-only cross-cut; the right shape is a dedicated `reporting` module that owns the projection, not sales reaching across to pos. Out of scope for Slice C. Leave the named exemption in place for now (read-only, no TX correctness risk) and track the refactor as a future hardening slice. |
 | 20 | `sales.DebtWriteOffServiceImpl` → `sales.SalesInvoiceService`, `procurement.SupplierInvoiceService` | `DebtWriteOffServiceImpl.java` (`applyToInvoice`) | **(i) Sync — ADR-0004 named (Slice G.2).** `debt_write_off` write + `sales_invoice`/`supplier_invoice` paidAmount update happen in the same DB tx as the outbox `DebtWriteOffPosted.v1` event. Invariant: if write-off is POSTED, the invoice paidAmount reflects it — eventual consistency would break aging queries during the poll window. |
 | 21 | `sales.CustomerReturnServiceImpl` → `sales.SalesInvoiceService` | `CustomerReturnServiceImpl.java` (`applyToInvoice`) | **(i) Sync — ADR-0004 named (Slice H).** `customer_credit_note_allocation` write + `customer_credit_note.allocated_amount` update + `sales_invoice.paidAmount` update happen in the same DB tx as the outbox `CustomerCreditNoteApplied.v1` event. Invariant: the credit-note `allocated_amount` matches the sum of allocations AND the invoice paidAmount reflects the applied credit — eventual consistency would leave AR aging inconsistent during the poll window. |
+| 22 | `procurement.VendorReturnServiceImpl` → `stock.StockMoveService` | `VendorReturnServiceImpl.java` (`post`) | **(i) Sync — ADR-0003 / ADR-0004 named (Slice H.1).** Covered by the existing procurement→stock exemption (entry #1). `vendor_return` POST and the stock-OUT movement happen in one TX — invariant: "if return is POSTED, on-hand has decreased". No new exemption needed; the Slice B entry (GrnServiceImpl→StockMoveService) already named the procurement→stock seam. |
+| 23 | `procurement.VendorReturnServiceImpl` → `procurement.SupplierInvoiceService` | `VendorReturnServiceImpl.java` (`applyToInvoice`) | **(i) Sync — ADR-0004 named (Slice H.1).** `vendor_credit_note_allocation` write + `vendor_credit_note.allocated_amount` update + `supplier_invoice.paidAmount` update happen in the same DB tx as the outbox `VendorCreditNoteApplied.v1` event. Mirror of row 21 (customer-side). Invariant: the credit-note `allocated_amount` matches allocations AND the invoice paidAmount reflects the applied credit — eventual consistency would leave AP aging inconsistent during the poll window. |
 
-**Totals.** 18 directional call sites that currently cross a non-infrastructure
-module boundary. 17 keep the sync exemption (categorised (i)). 1 is a latent
+**Totals.** 20 directional call sites that currently cross a non-infrastructure
+module boundary. 19 keep the sync exemption (categorised (i)). 1 is a latent
 quality issue (categorised (ii)) that does not violate atomicity but signals
-a missing `reporting` module.
+a missing `reporting` module. (Rows 22–23 added by Slice H.1.)
 
 ### 3. Latent gaps that ADR-0004 does NOT close
 
