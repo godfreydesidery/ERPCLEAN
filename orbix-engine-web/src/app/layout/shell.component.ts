@@ -625,6 +625,21 @@ export class ShellComponent implements OnInit {
         {
           label: 'Z-history', route: '/reports/z-history', icon: 'bi-printer',
           tooltip: 'Closed till sessions with Z-report totals and variance.'
+        },
+        {
+          label: 'Stock card', route: '/reports/stock-card', icon: 'bi-clipboard2-pulse',
+          tooltip: 'Chronological stock movements for an item at a branch.',
+          permissions: ['STOCK.COUNT'],
+        },
+        {
+          label: 'Negative stock', route: '/reports/negative-stock', icon: 'bi-exclamation-octagon',
+          tooltip: 'Items with negative on-hand quantity requiring immediate action.',
+          permissions: ['STOCK.COUNT'],
+        },
+        {
+          label: 'Stock movers', route: '/reports/stock-movers', icon: 'bi-lightning-charge',
+          tooltip: 'Top fast and slow moving items over a date range.',
+          permissions: ['STOCK.COUNT'],
         }
       ]
     },
