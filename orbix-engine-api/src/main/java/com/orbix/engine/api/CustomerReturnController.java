@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
+import com.orbix.engine.modules.sales.domain.dto.ApplyCreditNoteRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.CreateCustomerReturnRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerCreditNoteDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerReturnDto;
@@ -66,5 +67,12 @@ public class CustomerReturnController {
     @GetMapping("/customer-credit-notes")
     public List<CustomerCreditNoteDto> listCreditNotes(@RequestParam(required = false) Long branchId) {
         return service.listCreditNotes(branchId);
+    }
+
+    /** Slice H — apply a credit note to an open invoice for the same customer (US-SALES-011). */
+    @PostMapping("/customer-credit-notes/uid/{uid}/apply")
+    public CustomerCreditNoteDto applyCreditNote(@PathVariable @ValidUlid String uid,
+                                                 @Valid @RequestBody ApplyCreditNoteRequestDto request) {
+        return service.applyToInvoice(uid, request);
     }
 }

@@ -18,7 +18,7 @@ import AxeBuilder from '@axe-core/playwright';
  * Negative-path actor: `cashier` — holds only POS.* perms, no SALES.MANAGE_RETURN.
  *
  * Backend gaps that must close before flipping (// Slice H — flips when /apply lands):
- *   1. POST /api/v1/sales/customer-credit-notes/uid/{uid}/apply does not exist.
+ *   1. POST /api/v1/customer-credit-notes/uid/{uid}/apply does not exist.
  *   2. CreditNoteStatus.PARTIALLY_ALLOCATED variant does not exist.
  *   3. customer_credit_note_allocation table (V75) does not exist.
  *   4. CustomerCreditNoteApplied.v1 outbox event does not exist.
@@ -81,7 +81,7 @@ function escapeSql(s: string): string {
 // Wire-shape type guards — pinned against slice-h-credit-allocation-plan.md §5
 // ---------------------------------------------------------------------------
 
-/** POST /api/v1/sales/customer-credit-notes/uid/{uid}/apply request body. */
+/** POST /api/v1/customer-credit-notes/uid/{uid}/apply request body. */
 interface ApplyCreditNoteRequest {
   salesInvoiceUid: string;   // 26-char Crockford ULID
   amount: number;            // > 0, <= creditNote.availableAmount, <= invoice.outstanding
@@ -347,7 +347,7 @@ async function createReturnAndCreditNote(
   },
 ): Promise<{ returnUid: string; returnId: string; creditNoteUid: string; creditNoteId: string }> {
   // POST the customer return (DRAFT).
-  const returnDraft = await apiPost(page, '/api/v1/sales/customer-returns', {
+  const returnDraft = await apiPost(page, '/api/v1/customer-returns', {
     salesInvoiceId: opts.salesInvoiceId,
     branchId: BRANCH_ID,
     customerId: opts.customerPartyId,
@@ -364,12 +364,12 @@ async function createReturnAndCreditNote(
   const rDto = unwrap<{ uid: string; id: string }>(returnDraft);
 
   // POST to advance DRAFT → POSTED.
-  await apiPost(page, `/api/v1/sales/customer-returns/uid/${rDto.uid}/post`, {}, { expectedStatus: 200 });
+  await apiPost(page, `/api/v1/customer-returns/uid/${rDto.uid}/post`, {}, { expectedStatus: 200 });
 
   // Issue credit note (POSTED → CREDITED, credit note created with status=POSTED).
   const cnR = await apiPost(
     page,
-    `/api/v1/sales/customer-returns/uid/${rDto.uid}/credit-note`,
+    `/api/v1/customer-returns/uid/${rDto.uid}/credit-note`,
     {},
     { expectedStatus: 200 },
   );
@@ -656,7 +656,7 @@ test.describe('Slice H — happy-path: full credit-note apply', () => {
       // note to learn the real total.
       const cnBefore = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invB.uid, amount: invA.totalAmount } satisfies ApplyCreditNoteRequest,
         { expectedStatus: 200 },
       );
@@ -795,7 +795,7 @@ test.describe('Slice H — partial apply twice → FULLY_ALLOCATED', () => {
         // No GET endpoint for a single credit note by uid in the spec — probe via apply with 0 is illegal.
         // Use the returns endpoint to find the credit note total. Since we don't have a GET,
         // resolve totalAmount from the DB directly.
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget1.uid, amount: 0.01 } satisfies ApplyCreditNoteRequest,
         { acceptStatuses: [422] }, // amount 0.01 may pass or fail dep on precision — use DB value instead
       );
@@ -813,7 +813,7 @@ test.describe('Slice H — partial apply twice → FULLY_ALLOCATED', () => {
       // --- First apply: POSTED → PARTIALLY_ALLOCATED ---
       const r1 = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget1.uid, amount: firstAmount } satisfies ApplyCreditNoteRequest,
         { expectedStatus: 200 },
       );
@@ -831,7 +831,7 @@ test.describe('Slice H — partial apply twice → FULLY_ALLOCATED', () => {
       // --- Second apply: PARTIALLY_ALLOCATED → FULLY_ALLOCATED ---
       const r2 = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget2.uid, amount: secondAmount } satisfies ApplyCreditNoteRequest,
         { expectedStatus: 200 },
       );
@@ -915,7 +915,7 @@ test.describe('Slice H — over-apply guard → 422', () => {
       // API level: over-apply must 422.
       const apiResp = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget.uid, amount: overAmount } satisfies ApplyCreditNoteRequest,
         { acceptStatuses: [422] },
       );
@@ -1012,7 +1012,7 @@ test.describe('Slice H — cross-customer apply guard → 422', () => {
       // Attempt to apply customer A's credit note to customer B's invoice.
       const apiResp = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invB.uid, amount: applyAmount } satisfies ApplyCreditNoteRequest,
         { acceptStatuses: [422] },
       );
@@ -1089,7 +1089,7 @@ test.describe('Slice H — apply to FULLY_ALLOCATED → 409', () => {
       // First apply — exhausts the credit note.
       await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget.uid, amount: totalAmount } satisfies ApplyCreditNoteRequest,
         { expectedStatus: 200 },
       );
@@ -1114,7 +1114,7 @@ test.describe('Slice H — apply to FULLY_ALLOCATED → 409', () => {
       // Attempt to apply again against the already-fully-allocated credit note.
       const apiResp = await apiPost(
         page,
-        `/api/v1/sales/customer-credit-notes/uid/${creditNoteUid}/apply`,
+        `/api/v1/customer-credit-notes/uid/${creditNoteUid}/apply`,
         { salesInvoiceUid: invTarget2.uid, amount: 1 } satisfies ApplyCreditNoteRequest,
         { acceptStatuses: [409] },
       );
@@ -1152,7 +1152,7 @@ test.describe('Slice H — permission 403 gate', () => {
         // Endpoint-level 403 check — cashier must be rejected.
         const apiResp = await apiPost(
           page,
-          `/api/v1/sales/customer-credit-notes/uid/${existingCnUid}/apply`,
+          `/api/v1/customer-credit-notes/uid/${existingCnUid}/apply`,
           { salesInvoiceUid: r0.customerAUid, amount: 1 } as ApplyCreditNoteRequest,
           { acceptStatuses: [403] },
         );
