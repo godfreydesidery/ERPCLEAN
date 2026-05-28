@@ -38,7 +38,9 @@ class CustomerCreditNoteDtoJsonTest {
             "TZS",
             new BigDecimal("1180.0000"),
             new BigDecimal("0.0000"),
+            new BigDecimal("1180.0000"),
             CreditNoteStatus.POSTED,
+            null,
             null
         );
 
@@ -52,5 +54,6 @@ class CustomerCreditNoteDtoJsonTest {
         assertThat(json).contains("\"customerReturnId\":\"8\"");
         // Genuine numerics untouched.
         assertThat(json).contains("\"totalAmount\":1180.0000");
+        assertThat(json).contains("\"availableAmount\":1180.0000");
     }
 }

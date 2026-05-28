@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { Page } from '../../core/api/page';
 import {
+  ApplyCreditNoteRequest,
   ArSummary,
   CreateCustomerReturnRequest,
   CreatePackingListRequest,
@@ -19,6 +20,8 @@ import {
   SalesReceipt,
   VoidSalesInvoiceRequest
 } from './sales.models';
+import { map } from 'rxjs/operators';
+import { OpenInvoiceRow } from '../debt/debt.models';
 
 @Injectable({ providedIn: 'root' })
 export class SalesService {
@@ -178,6 +181,33 @@ export class SalesService {
     return unwrap(this.http.get<ApiResponse<CustomerCreditNote[]>>(
       `${this.base}/customer-credit-notes`, { params }
     ));
+  }
+
+  /**
+   * Slice H — apply a credit note (by uid) to an open invoice.
+   * POST /api/v1/sales/customer-credit-notes/uid/{uid}/apply
+   * Gated by SALES.MANAGE_RETURN on the backend.
+   * Returns the updated CustomerCreditNote with refreshed allocatedAmount + status.
+   */
+  applyCreditNote(uid: string, request: ApplyCreditNoteRequest): Observable<CustomerCreditNote> {
+    return unwrap(this.http.post<ApiResponse<CustomerCreditNote>>(
+      `${this.base}/customer-credit-notes/uid/${uid}/apply`, request
+    ));
+  }
+
+  /**
+   * Slice H — fetch open invoices (POSTED / PARTIALLY_PAID) for a customer
+   * to populate the apply-modal invoice picker.
+   * Delegates to GET /api/v1/debt/statement/uid/{customerUid} and extracts
+   * the openInvoices list, reusing the existing CustomerStatement endpoint
+   * rather than adding a new one.
+   */
+  getOpenInvoicesForCustomer(customerUid: string): Observable<OpenInvoiceRow[]> {
+    return unwrap(
+      this.http.get<ApiResponse<{ openInvoices: OpenInvoiceRow[] }>>(
+        `${this.base}/debt/statement/uid/${customerUid}`
+      )
+    ).pipe(map(stmt => stmt.openInvoices ?? []));
   }
 
   // ---- packing lists (F4.5) -----------------------------------------------

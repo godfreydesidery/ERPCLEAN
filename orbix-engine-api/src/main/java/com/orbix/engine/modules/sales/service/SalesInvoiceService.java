@@ -66,4 +66,18 @@ public interface SalesInvoiceService {
      * reflects it" holds strictly.
      */
     void applyWriteOff(Long invoiceId, BigDecimal amount);
+
+    /**
+     * Slice H — credit-note allocation. Advances {@code paidAmount} by
+     * {@code amount} on the given invoice (must be POSTED or PARTIALLY_PAID)
+     * within the caller's transaction. Flips status to PAID when fully settled.
+     * Throws {@link IllegalStateException} if non-payable;
+     * {@link IllegalArgumentException} if amount would overpay.
+     *
+     * <p>ADR-0004 sync-TX exemption #21: called by
+     * {@code CustomerReturnServiceImpl#applyToInvoice} in the same DB tx as
+     * the allocation row so the invariant "allocatedAmount matches the sum of
+     * allocations AND invoice paidAmount reflects the applied credit" holds strictly.
+     */
+    void applyCreditNote(Long invoiceId, BigDecimal amount);
 }

@@ -487,6 +487,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         invoice.applyReceipt(amount, actorId);
     }
 
+    @Override
+    @Transactional
+    public void applyCreditNote(Long invoiceId, BigDecimal amount) {
+        // Delegates to the same receipt-application logic; kept as a named
+        // entry point so ADR-0004 exemption #21 has an unambiguous call site.
+        applyWriteOff(invoiceId, amount);
+    }
+
     private SalesInvoice requireInvoiceByUid(String uid) {
         SalesInvoice invoice = invoices.findByUid(uid)
             .orElseThrow(() -> new NoSuchElementException("Sales invoice not found: " + uid));
