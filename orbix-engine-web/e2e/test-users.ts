@@ -242,6 +242,11 @@ export const TEST_USERS: Record<Persona, TestUser> = {
     // credit-limit gate actually fires on a non-override persona, and
     // (b) AR-summary is permission-gated, not open to anyone with
     // SALES_INVOICE.READ.
+    //
+    // Slice H widening: SALES.MANAGE_RETURN (id 34, V28) added so the
+    // sales-clerk is the natural happy-path actor for customer-returns +
+    // credit-note allocation. The negative-path actor for the Slice H
+    // permission gate is `cashier` (holds POS.* only — no SALES.MANAGE_RETURN).
     username: 'qa.sales.clerk',
     password: TEST_PASSWORD,
     fullName: 'QA Sales Clerk',
@@ -254,6 +259,8 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // 403 — they don't carry SALES.REPORT.AR_SUMMARY).
       'SALES.MANAGE_INVOICE',
       'SALES.MANAGE_RECEIPT',
+      // Slice H: returns + credit-note create/apply capability.
+      'SALES.MANAGE_RETURN',
     ],
   },
   'stock-controller': {
