@@ -58,4 +58,41 @@ public interface SupplierInvoiceRepository extends JpaRepository<SupplierInvoice
         """)
     BigDecimal sumOutstandingBefore(@Param("supplierId") Long supplierId,
                                      @Param("from") LocalDate from);
+
+    /**
+     * Slice G.1 — every open AP invoice (POSTED + PARTIALLY_PAID with
+     * outstanding &gt; 0) for the AP aging / dunning / supplier-statement reports.
+     * Returned unpaged because aging bucketing is computed in-memory in Java
+     * for DB-portability. {@code branchId} nullable — null = company-wide.
+     * Backed by {@code ix_supplier_invoice_branch_due} (V72).
+     */
+    @Query("""
+        select s from SupplierInvoice s
+         where s.companyId = :companyId
+           and (:branchId is null or s.branchId = :branchId)
+           and s.status in (
+              com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus.POSTED,
+              com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus.PARTIALLY_PAID)
+           and s.totalAmount > s.paidAmount
+         order by s.supplierId asc, s.dueDate asc, s.id asc
+        """)
+    List<SupplierInvoice> findAllOpenForAging(@Param("companyId") Long companyId,
+                                              @Param("branchId") Long branchId);
+
+    /**
+     * Slice G.1 — open AP invoices for a single supplier (for the supplier
+     * statement / debt-position view). Sorted by dueDate asc so the oldest
+     * arrears land at the top of the operator's screen. Capped at 100 rows.
+     */
+    @Query("""
+        select s from SupplierInvoice s
+         where s.supplierId = :supplierId
+           and s.status in (
+              com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus.POSTED,
+              com.orbix.engine.modules.procurement.domain.enums.SupplierInvoiceStatus.PARTIALLY_PAID)
+           and s.totalAmount > s.paidAmount
+         order by s.dueDate asc, s.id asc
+        """)
+    List<SupplierInvoice> findOpenForSupplier(@Param("supplierId") Long supplierId,
+                                              Pageable pageable);
 }

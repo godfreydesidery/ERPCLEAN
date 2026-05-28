@@ -24,4 +24,12 @@ public interface PartyNoteRepository extends JpaRepository<PartyNote, Long> {
     /** Future chase-activity roll-up: scoped by company + kind + lifecycle. */
     List<PartyNote> findByCompanyIdAndKindAndStatusOrderByCreatedAtDescIdDesc(
         Long companyId, PartyNoteKind kind, PartyNoteStatus status, Pageable pageable);
+
+    /** Slice G.1 — AP chase notes for a party filtered by kind + status. */
+    List<PartyNote> findByPartyIdAndKindAndStatusOrderByCreatedAtDescIdDesc(
+        Long partyId, PartyNoteKind kind, PartyNoteStatus status, Pageable pageable);
+
+    /** Slice G.1 — AP chase notes for a party filtered by kind, all statuses. */
+    List<PartyNote> findByPartyIdAndKindOrderByCreatedAtDescIdDesc(
+        Long partyId, PartyNoteKind kind, Pageable pageable);
 }
