@@ -6,7 +6,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { DebtService } from './debt.service';
-import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
+import { AgingBucket, OpenSupplierInvoiceRow, PartyNote, SupplierStatement } from './debt.models';
+import { DebtWriteOffModalComponent } from './debt-write-off-modal.component';
 
 /**
  * Slice G.1 — per-supplier AP debt drill-down (US-DEBT-002).
@@ -16,6 +17,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
  *  1. Header — supplier name + read-only payment-terms-days + "View statement" link.
  *  2. Aging row — 5 bucket cells computed inline from openInvoices.
  *  3. Open AP invoices table — sorted by dueDate asc.
+ *     G.2: each row has a perm-gated "Write off" button.
  *  4. Recent payments table — last 30 days, max 50.
  *  5. AP chase notes activity log — append form (kind = AP_CHASE) + list.
  *
@@ -26,7 +28,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
 @Component({
   selector: 'orbix-debt-supplier',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, DebtWriteOffModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -50,7 +52,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
 
     @if (permissionDenied()) {
       <div data-testid="debt-permission-required" class="alert alert-warning d-flex align-items-start gap-2">
-        <i class="bi bi-shield-lock mt-1"></i>
+        <i class="bi bi-shield-lock mt-1" aria-hidden="true"></i>
         <div class="flex-grow-1">
           <strong>Permission required.</strong>
           <span class="small d-block text-secondary">
@@ -60,11 +62,11 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
       </div>
     } @else if (loading()) {
       <div class="text-center text-secondary small p-4">
-        <span class="spinner-border spinner-border-sm me-2"></span> Loading supplier position…
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Loading supplier position…
       </div>
     } @else if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2">
-        <i class="bi bi-exclamation-triangle-fill"></i>
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
         <span class="flex-grow-1">{{ error() }}</span>
         <button type="button" class="btn-close" aria-label="Dismiss error" (click)="error.set(null)"></button>
       </div>
@@ -102,7 +104,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
                    target="_blank"
                    rel="noopener noreferrer"
                    class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2 mt-4">
-                  <i class="bi bi-file-earmark-text"></i> View statement
+                  <i class="bi bi-file-earmark-text" aria-hidden="true"></i> View statement
                 </a>
               </div>
             </div>
@@ -152,6 +154,9 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
                       <th scope="col" class="text-end">Outstanding</th>
                       <th scope="col" class="text-end">Days overdue</th>
                       <th scope="col">Status</th>
+                      @if (canRequestWriteOff()) {
+                        <th scope="col" class="text-center">Actions</th>
+                      }
                     </tr>
                   </thead>
                   <tbody>
@@ -175,6 +180,17 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
                           }
                         </td>
                         <td><span class="badge text-bg-light text-secondary">{{ inv.status }}</span></td>
+                        @if (canRequestWriteOff()) {
+                          <td class="text-center">
+                            <button type="button"
+                                    data-testid="write-off-btn"
+                                    class="btn btn-sm btn-outline-danger"
+                                    [attr.aria-label]="'Write off invoice ' + inv.number"
+                                    (click)="openWriteOffModal(inv)">
+                              Write off
+                            </button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -230,7 +246,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
           <div class="card-body p-3 d-flex flex-column gap-3">
             @if (noteLoadError()) {
               <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
-                <i class="bi bi-exclamation-triangle-fill"></i>
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
                 <span class="flex-grow-1">{{ noteLoadError() }}</span>
                 <button type="button" class="btn-close btn-sm" aria-label="Dismiss"
                         (click)="noteLoadError.set(null)"></button>
@@ -264,9 +280,9 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
                           [disabled]="savingNote() || !noteDraft.trim()"
                           (click)="saveNote()">
                     @if (savingNote()) {
-                      <span class="spinner-border spinner-border-sm me-1"></span>
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                     }
-                    <i class="bi bi-plus-lg"></i> Add note
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add note
                   </button>
                 </div>
               </div>
@@ -274,7 +290,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
 
             @if (notesLoading()) {
               <div class="text-center text-secondary small py-2">
-                <span class="spinner-border spinner-border-sm me-1"></span> Loading notes…
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Loading notes…
               </div>
             } @else {
               <ul data-testid="debt-ap-chase-notes-list" class="list-unstyled mb-0 d-flex flex-column gap-2"
@@ -297,7 +313,7 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
                                 [disabled]="archivingNoteUid() === n.uid"
                                 (click)="archiveNote(n.uid)">
                           @if (archivingNoteUid() === n.uid) {
-                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                           }
                           Archive
                         </button>
@@ -315,6 +331,17 @@ import { AgingBucket, PartyNote, SupplierStatement } from './debt.models';
 
       </div>
     }
+
+    <!-- Write-off modal (Slice G.2) -->
+    <orbix-debt-write-off-modal
+      [visible]="writeOffModalVisible()"
+      [targetKind]="'SUPPLIER_INVOICE'"
+      [targetInvoiceUid]="writeOffInvoiceUid()"
+      [targetInvoiceNumber]="writeOffInvoiceNumber()"
+      [outstanding]="writeOffOutstanding()"
+      (writeOffCreated)="onWriteOffCreated()"
+      (closed)="closeWriteOffModal()">
+    </orbix-debt-write-off-modal>
   `,
   styles: [`
     :host { display: block; }
@@ -363,11 +390,20 @@ export class DebtSupplierComponent implements OnInit {
   // Archive state — tracks which note uid is being archived
   protected readonly archivingNoteUid = signal<string | null>(null);
 
+  // Write-off modal state (Slice G.2)
+  protected readonly writeOffModalVisible = signal(false);
+  protected readonly writeOffInvoiceUid = signal('');
+  protected readonly writeOffInvoiceNumber = signal<string | null>(null);
+  protected readonly writeOffOutstanding = signal(0);
+
   protected readonly canAddNote = computed(() =>
     this.auth.hasPermission('DEBT.NOTE.CREATE')
   );
   protected readonly canArchiveNote = computed(() =>
     this.auth.hasPermission('DEBT.NOTE.ARCHIVE')
+  );
+  protected readonly canRequestWriteOff = computed(() =>
+    this.auth.hasPermission('DEBT.WRITE_OFF.REQUEST')
   );
 
   private supplierUid = '';
@@ -391,7 +427,6 @@ export class DebtSupplierComponent implements OnInit {
   /** Compute 5-bucket amounts inline from the openInvoices list. */
   protected agingBuckets(): { key: AgingBucket; label: string; amount: number }[] {
     const invoices = this.statement()?.openInvoices ?? [];
-    const today = new Date();
 
     let current = 0, d1_30 = 0, d31_60 = 0, d61_90 = 0, d90plus = 0;
 
@@ -411,15 +446,13 @@ export class DebtSupplierComponent implements OnInit {
         d90plus += outstanding;
       }
     }
-    // suppress unused variable warning
-    void today;
 
     return [
-      { key: 'CURRENT',   label: 'Current',    amount: current  },
-      { key: 'D_1_30',    label: '1 – 30 days', amount: d1_30   },
-      { key: 'D_31_60',   label: '31 – 60 days', amount: d31_60 },
-      { key: 'D_61_90',   label: '61 – 90 days', amount: d61_90 },
-      { key: 'D_90_PLUS', label: '90+ days',     amount: d90plus },
+      { key: 'CURRENT',   label: 'Current',     amount: current  },
+      { key: 'D_1_30',    label: '1 – 30 days',  amount: d1_30   },
+      { key: 'D_31_60',   label: '31 – 60 days', amount: d31_60  },
+      { key: 'D_61_90',   label: '61 – 90 days', amount: d61_90  },
+      { key: 'D_90_PLUS', label: '90+ days',      amount: d90plus },
     ];
   }
 
@@ -457,6 +490,24 @@ export class DebtSupplierComponent implements OnInit {
         this.archivingNoteUid.set(null);
       },
     });
+  }
+
+  /** Open the write-off modal seeded with the invoice row's data. */
+  protected openWriteOffModal(inv: OpenSupplierInvoiceRow): void {
+    this.writeOffInvoiceUid.set(inv.invoiceUid);
+    this.writeOffInvoiceNumber.set(inv.number);
+    this.writeOffOutstanding.set(inv.outstanding);
+    this.writeOffModalVisible.set(true);
+  }
+
+  protected closeWriteOffModal(): void {
+    this.writeOffModalVisible.set(false);
+  }
+
+  /** After a successful write-off, refresh the statement so the table updates. */
+  protected onWriteOffCreated(): void {
+    this.writeOffModalVisible.set(false);
+    this.load();
   }
 
   private load(): void {
@@ -499,9 +550,9 @@ export class DebtSupplierComponent implements OnInit {
   }
 
   private formatError(err: HttpErrorResponse, fallback: string): string {
-    const body = err.error;
-    if (body && typeof body === 'object' && 'message' in body && body.message) {
-      return String((body as { message: unknown }).message);
+    const body = err.error as Record<string, unknown> | null;
+    if (body && typeof body['message'] === 'string' && body['message']) {
+      return body['message'];
     }
     return fallback;
   }

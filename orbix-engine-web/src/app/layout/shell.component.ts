@@ -605,6 +605,11 @@ export class ShellComponent implements OnInit {
           tooltip: 'Ageing of what customers owe you (receivables) and what you owe suppliers (payables), bucketed by current / 30d / 60d / 90d+. Drives collections and payment-run decisions.'
         },
         {
+          label: 'Write-offs', route: '/debt/write-offs', icon: 'bi-eraser',
+          tooltip: 'Write-off requests for AR and AP invoices, with dual-approval workflow. Submitted from the customer or supplier drill-down pages.',
+          permissions: ['DEBT.READ']
+        },
+        {
           label: 'Reports', route: '/reports', icon: 'bi-bar-chart-line',
           tooltip: 'Pre-built reports across stock, sales, production, gift cards, VAT, and customer statements. Run on demand or scheduled to email on a cadence.'
         }
