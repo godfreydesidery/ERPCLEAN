@@ -1,5 +1,23 @@
 /** Mirrors the backend procurement DTOs. */
 
+// ---- Item lookup (typeahead) -----------------------------------------------
+
+/**
+ * Lightweight item projection returned by GET /api/v1/items?q=...
+ * Mirrors the fields the item typeahead and line autopopulation need.
+ */
+export interface ItemSummary {
+  id: string;
+  uid: string;
+  code: string;
+  name: string;
+  /** uid of the item's default UoM — used to pre-select the UoM dropdown. */
+  defaultUomUid: string | null;
+  defaultUomCode: string | null;
+  /** uid of the item's default VAT group — used to pre-select the VAT dropdown. */
+  defaultVatGroupUid: string | null;
+}
+
 // ---- Supplier lookup (typeahead) ------------------------------------------
 
 export interface SupplierSummary {

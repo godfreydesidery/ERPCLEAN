@@ -2,13 +2,16 @@
  * Slice H.1 — VendorReturnCreateComponent unit spec.
  *
  * Uses the real child components (SupplierTypeaheadComponent,
- * GrnPickerModalComponent) with a mocked ProcurementService so no real HTTP
- * calls are made.  Drives the host component via its public API (signal-based
- * methods) and asserts:
+ * ItemTypeaheadComponent, GrnPickerModalComponent) with mocked services so no
+ * real HTTP calls are made.  Drives the host component via its public API
+ * (signal-based methods) and asserts:
  *   - supplier is set via onSupplierSelected (not a raw uid text input)
+ *   - item is set via onLineItemSelected (not a raw uid text input)
+ *   - onLineItemSelected auto-populates uomUid and vatGroupUid from item defaults
  *   - GRN pre-fill uses uid fields from the picked GRN
- *   - submitted payload carries the picked partyUid
+ *   - submitted payload carries uids from the pickers (not user-typed text)
  *   - form guards (no supplier, no valid lines) produce error signals
+ *   - clearing/picking GRN replaces free lines
  */
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -18,6 +21,7 @@ import { of } from 'rxjs';
 
 import { VendorReturnCreateComponent } from './vendor-return-create.component';
 import { ProcurementService } from './procurement.service';
+import { CatalogService } from '../catalog/catalog.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import {
@@ -26,6 +30,8 @@ import {
   VendorReturn,
 } from './procurement.models';
 import { SupplierSelectedEvent } from './supplier-typeahead.component';
+import { ItemSelectedEvent } from './item-typeahead.component';
+import { Uom, VatGroup } from '../catalog/catalog.models';
 import { Page } from '../../core/api/page';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +43,26 @@ const SUPPLIER_EVT: SupplierSelectedEvent = {
   id: '10',
   code: 'SUP-001',
   name: 'Acme Supplies',
+};
+
+const ITEM_EVT: ItemSelectedEvent = {
+  uid: '01JITM00000000000001',
+  id: '20',
+  code: 'WGT-001',
+  name: 'Widget A',
+  defaultUomUid: '01JUOM00000000000001',
+  defaultUomCode: 'PCS',
+  defaultVatGroupUid: '01JVAT00000000000001',
+};
+
+const ITEM_EVT_NO_DEFAULTS: ItemSelectedEvent = {
+  uid: '01JITM00000000000002',
+  id: '21',
+  code: 'WGT-002',
+  name: 'Widget B',
+  defaultUomUid: null,
+  defaultUomCode: null,
+  defaultVatGroupUid: null,
 };
 
 const POSTED_GRN: Grn = {
@@ -72,7 +98,21 @@ const CREATED_RETURN: VendorReturn = {
   lines: [],
 };
 
+const MOCK_UOMS: Uom[] = [
+  { id: '3', uid: '01JUOM00000000000001', code: 'PCS', name: 'Pieces', dimension: 'COUNT', base: true, status: 'ACTIVE' },
+  { id: '4', uid: '01JUOM00000000000002', code: 'KG', name: 'Kilograms', dimension: 'WEIGHT', base: true, status: 'ACTIVE' },
+];
+
+const MOCK_VAT_GROUPS: VatGroup[] = [
+  { id: '2', uid: '01JVAT00000000000001', companyId: '1', code: 'STD', name: 'Standard', rate: 18, validFrom: '2024-01-01', isDefault: true, status: 'ACTIVE' },
+  { id: '3', uid: '01JVAT00000000000002', companyId: '1', code: 'EXM', name: 'Exempt', rate: 0, validFrom: '2024-01-01', isDefault: false, status: 'ACTIVE' },
+];
+
 function makeSupplierPage(): Page<{ id: string; partyUid: string; code: string; name: string }> {
+  return { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+}
+
+function makeItemPage(): Page<{ id: string; uid: string; code: string; name: string; defaultUomUid: string | null; defaultUomCode: string | null; defaultVatGroupUid: string | null }> {
   return { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
 }
 
@@ -86,12 +126,19 @@ function makeGrnPage(grns: Grn[]): Page<Grn> {
 
 async function setup() {
   const procSpy = jasmine.createSpyObj<ProcurementService>('ProcurementService', [
-    'createVendorReturn', 'postVendorReturn', 'listGrns', 'searchSuppliers',
+    'createVendorReturn', 'postVendorReturn', 'listGrns', 'searchSuppliers', 'searchItems',
   ]);
   procSpy.createVendorReturn.and.returnValue(of(CREATED_RETURN));
   procSpy.postVendorReturn.and.returnValue(of({ ...CREATED_RETURN, status: 'POSTED' }));
   procSpy.listGrns.and.returnValue(of(makeGrnPage([POSTED_GRN])));
   procSpy.searchSuppliers.and.returnValue(of(makeSupplierPage()));
+  procSpy.searchItems.and.returnValue(of(makeItemPage()));
+
+  const catalogSpy = jasmine.createSpyObj<CatalogService>('CatalogService', [
+    'listUoms', 'listVatGroups',
+  ]);
+  catalogSpy.listUoms.and.returnValue(of(MOCK_UOMS));
+  catalogSpy.listVatGroups.and.returnValue(of(MOCK_VAT_GROUPS));
 
   const authStub = {
     currentUser: signal(null), permissions: signal([]),
@@ -104,6 +151,7 @@ async function setup() {
     providers: [
       provideRouter([]),
       { provide: ProcurementService, useValue: procSpy },
+      { provide: CatalogService, useValue: catalogSpy },
       { provide: AuthService, useValue: authStub },
       { provide: BranchService, useValue: branchStub },
     ],
@@ -115,7 +163,7 @@ async function setup() {
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, comp: fixture.componentInstance, procSpy };
+  return { fixture, comp: fixture.componentInstance, procSpy, catalogSpy };
 }
 
 async function stabilise(fixture: ComponentFixture<unknown>): Promise<void> {
@@ -144,6 +192,26 @@ describe('VendorReturnCreateComponent', () => {
       expect(fixture.nativeElement.querySelector('input#supplierUid')).toBeNull();
     });
 
+    it('renders the item typeahead in the first free line (no raw uid text input)', async () => {
+      const { fixture } = await setup();
+      // No GRN selected — first row should have an item typeahead.
+      expect(fixture.nativeElement.querySelector('orbix-item-typeahead')).toBeTruthy();
+      // Old raw item UID text input must NOT be present.
+      expect(fixture.nativeElement.querySelector('input[placeholder="Item UID"]')).toBeNull();
+    });
+
+    it('renders the UoM select dropdown in the first free line', async () => {
+      const { fixture } = await setup();
+      const uomSelect = fixture.nativeElement.querySelector('select[id^="uom-"]');
+      expect(uomSelect).toBeTruthy();
+    });
+
+    it('renders the VAT group select dropdown in the first free line', async () => {
+      const { fixture } = await setup();
+      const vatSelect = fixture.nativeElement.querySelector('select[id^="vat-"]');
+      expect(vatSelect).toBeTruthy();
+    });
+
     it('renders the reason select with expected options', async () => {
       const { fixture } = await setup();
       const select: HTMLSelectElement = fixture.nativeElement.querySelector('select#reason');
@@ -159,6 +227,12 @@ describe('VendorReturnCreateComponent', () => {
       const { fixture } = await setup();
       const rows = fixture.nativeElement.querySelectorAll('tbody tr');
       expect(rows.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('loads UoM and VAT group lists on init', async () => {
+      const { catalogSpy } = await setup();
+      expect(catalogSpy.listUoms).toHaveBeenCalled();
+      expect(catalogSpy.listVatGroups).toHaveBeenCalled();
     });
   });
 
@@ -184,6 +258,58 @@ describe('VendorReturnCreateComponent', () => {
     });
   });
 
+  // -- Item typeahead wiring (no-GRN path) ----------------------------------------
+  describe('item typeahead wiring (no-GRN path)', () => {
+    it('onLineItemSelected sets itemUid from the picked item uid', async () => {
+      const { fixture, comp } = await setup();
+      comp.onLineItemSelected(0, ITEM_EVT);
+      await stabilise(fixture);
+
+      const c = comp as unknown as { lines: LineRow[] };
+      expect(c.lines[0].itemUid).toBe(ITEM_EVT.uid);
+    });
+
+    it('onLineItemSelected auto-populates uomUid from item defaultUomUid', async () => {
+      const { fixture, comp } = await setup();
+      comp.onLineItemSelected(0, ITEM_EVT);
+      await stabilise(fixture);
+
+      const c = comp as unknown as { lines: LineRow[] };
+      expect(c.lines[0].uomUid).toBe('01JUOM00000000000001');
+    });
+
+    it('onLineItemSelected auto-populates vatGroupUid from item defaultVatGroupUid', async () => {
+      const { fixture, comp } = await setup();
+      comp.onLineItemSelected(0, ITEM_EVT);
+      await stabilise(fixture);
+
+      const c = comp as unknown as { lines: LineRow[] };
+      expect(c.lines[0].vatGroupUid).toBe('01JVAT00000000000001');
+    });
+
+    it('onLineItemSelected does not overwrite uomUid when item has no default', async () => {
+      const { fixture, comp } = await setup();
+      const c = comp as unknown as { lines: LineRow[] };
+      c.lines[0].uomUid = '01JUOM00000000000002'; // user pre-selected
+      comp.onLineItemSelected(0, ITEM_EVT_NO_DEFAULTS);
+      await stabilise(fixture);
+
+      // Should remain unchanged because item has no default.
+      expect(c.lines[0].uomUid).toBe('01JUOM00000000000002');
+    });
+
+    it('onLineItemCleared clears itemUid and itemName', async () => {
+      const { fixture, comp } = await setup();
+      comp.onLineItemSelected(0, ITEM_EVT);
+      comp.onLineItemCleared(0);
+      await stabilise(fixture);
+
+      const c = comp as unknown as { lines: LineRow[] };
+      expect(c.lines[0].itemUid).toBe('');
+      expect(c.lines[0].itemName).toBeNull();
+    });
+  });
+
   // -- Validation -------------------------------------------------------------------
   describe('form validation — supplier required', () => {
     it('sets an error when saveDraft is called without a supplier', async () => {
@@ -200,10 +326,8 @@ describe('VendorReturnCreateComponent', () => {
     it('sets an error when no valid lines are present', async () => {
       const { fixture, comp } = await setup();
       comp.onSupplierSelected(SUPPLIER_EVT);
-      const c = comp as unknown as {
-        lines: Array<{ itemUid: string; uomUid: string; returnedQty: number | null; unitPrice: number | null; vatGroupUid: string; fromGrn: boolean }>;
-      };
-      c.lines = [{ itemUid: '', uomUid: '', returnedQty: null, unitPrice: null, vatGroupUid: '', fromGrn: false }];
+      const c = comp as unknown as { lines: LineRow[] };
+      c.lines = [{ itemUid: '', itemName: null, uomUid: '', uomCode: null, returnedQty: null, unitPrice: null, vatGroupUid: '', fromGrn: false }];
       await stabilise(fixture);
 
       comp.saveDraft();
@@ -222,10 +346,7 @@ describe('VendorReturnCreateComponent', () => {
       comp.onGrnSelected(POSTED_GRN);
       await stabilise(fixture);
 
-      const c = comp as unknown as {
-        lines: Array<{ itemUid: string; uomUid: string; vatGroupUid: string; returnedQty: number | null; fromGrn: boolean }>;
-        selectedGrn: () => Grn | null;
-      };
+      const c = comp as unknown as { lines: LineRow[]; selectedGrn: () => Grn | null };
       expect(c.selectedGrn()?.uid).toBe(POSTED_GRN.uid);
       expect(c.lines.length).toBe(1);
       expect(c.lines[0].itemUid).toBe('01JITM00000000000001');
@@ -242,12 +363,19 @@ describe('VendorReturnCreateComponent', () => {
       comp.clearGrn();
       await stabilise(fixture);
 
-      const c = comp as unknown as {
-        lines: unknown[];
-        selectedGrn: () => Grn | null;
-      };
+      const c = comp as unknown as { lines: unknown[]; selectedGrn: () => Grn | null };
       expect(c.selectedGrn()).toBeNull();
       expect(c.lines.length).toBe(1);
+    });
+
+    it('GRN lines render as read-only badges (no item typeahead visible)', async () => {
+      const { fixture, comp } = await setup();
+      comp.onSupplierSelected(SUPPLIER_EVT);
+      comp.onGrnSelected(POSTED_GRN);
+      await stabilise(fixture);
+
+      // After GRN selection the typeaheads should be gone.
+      expect(fixture.nativeElement.querySelector('orbix-item-typeahead')).toBeNull();
     });
   });
 
@@ -256,12 +384,12 @@ describe('VendorReturnCreateComponent', () => {
     it('saveDraft sends supplierUid from the picked supplier (not typed text)', async () => {
       const { fixture, comp, procSpy } = await setup();
       comp.onSupplierSelected(SUPPLIER_EVT);
-      const c = comp as unknown as {
-        lines: Array<{ itemUid: string; uomUid: string; returnedQty: number; unitPrice: number; vatGroupUid: string; fromGrn: boolean }>;
-      };
+      const c = comp as unknown as { lines: LineRow[] };
       c.lines = [{
         itemUid: '01JITM00000000000001',
+        itemName: 'Widget A',
         uomUid: '01JUOM00000000000001',
+        uomCode: 'PCS',
         returnedQty: 5,
         unitPrice: 9000,
         vatGroupUid: '01JVAT00000000000001',
@@ -276,6 +404,7 @@ describe('VendorReturnCreateComponent', () => {
       expect(payload.supplierUid).toBe(SUPPLIER_EVT.partyUid);
       expect(payload.lines[0].itemUid).toBe('01JITM00000000000001');
       expect(payload.lines[0].uomUid).toBe('01JUOM00000000000001');
+      expect(payload.lines[0].vatGroupUid).toBe('01JVAT00000000000001');
       expect(payload.lines[0].returnedQty).toBe(5);
       expect(payload.lines[0].unitPrice).toBe(9000);
     });
@@ -291,6 +420,25 @@ describe('VendorReturnCreateComponent', () => {
 
       const payload = procSpy.createVendorReturn.calls.mostRecent().args[0] as CreateVendorReturnRequest;
       expect(payload.originalGrnUid).toBe(POSTED_GRN.uid);
+    });
+
+    it('saveDraft payload lines carry picker-sourced uids (not raw text input)', async () => {
+      const { fixture, comp, procSpy } = await setup();
+      comp.onSupplierSelected(SUPPLIER_EVT);
+      // Simulate the item typeahead selecting an item on line 0.
+      comp.onLineItemSelected(0, ITEM_EVT);
+      const c = comp as unknown as { lines: LineRow[] };
+      c.lines[0].returnedQty = 3;
+      c.lines[0].unitPrice = 5000;
+      await stabilise(fixture);
+
+      comp.saveDraft();
+      await stabilise(fixture);
+
+      const payload = procSpy.createVendorReturn.calls.mostRecent().args[0] as CreateVendorReturnRequest;
+      expect(payload.lines[0].itemUid).toBe(ITEM_EVT.uid);
+      expect(payload.lines[0].uomUid).toBe('01JUOM00000000000001');
+      expect(payload.lines[0].vatGroupUid).toBe('01JVAT00000000000001');
     });
 
     it('saveAndPost calls postVendorReturn after create', async () => {
@@ -333,3 +481,11 @@ describe('VendorReturnCreateComponent', () => {
     });
   });
 });
+
+// Local LineRow type alias for spec readability — mirrors the component's internal interface.
+interface LineRow {
+  itemUid: string; itemName: string | null;
+  uomUid: string; uomCode: string | null;
+  returnedQty: number | null; unitPrice: number | null;
+  vatGroupUid: string; fromGrn: boolean;
+}

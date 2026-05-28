@@ -14,6 +14,7 @@ import {
   CreateVendorReturnRequest,
   Grn,
   IssueVendorCreditNoteRequest,
+  ItemSummary,
   LpoOrder,
   SupplierInvoice,
   SupplierPayment,
@@ -70,6 +71,25 @@ export class ProcurementService {
   cancelLpo(uid: string, reason?: string | null): Observable<LpoOrder> {
     const body = reason && reason.trim().length > 0 ? { reason: reason.trim() } : {};
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, body));
+  }
+
+  // ---- Item search (typeahead) ----------------------------------------------
+
+  /**
+   * Typeahead search over active items. Fires GET /api/v1/items?q=...&status=ACTIVE&size=N.
+   * Returns a page of {@link ItemSummary} rows. The `defaultUomUid` and
+   * `defaultVatGroupUid` fields are used to auto-populate line dropdowns when an
+   * item is picked.
+   */
+  searchItems(q: string, size = 20): Observable<Page<ItemSummary>> {
+    const params = new HttpParams()
+      .set('q', q)
+      .set('status', 'ACTIVE')
+      .set('page', 0)
+      .set('size', size);
+    return unwrap(this.http.get<ApiResponse<Page<ItemSummary>>>(
+      `${this.base}/items`, { params }
+    ));
   }
 
   // ---- Supplier search (typeahead) ------------------------------------------

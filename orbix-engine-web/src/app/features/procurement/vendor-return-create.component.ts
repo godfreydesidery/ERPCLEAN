@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -6,6 +6,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { CatalogService } from '../catalog/catalog.service';
+import { Uom, VatGroup } from '../catalog/catalog.models';
 import { ProcurementService } from './procurement.service';
 import {
   CreateVendorReturnRequest,
@@ -14,6 +16,7 @@ import {
   VENDOR_RETURN_REASONS,
 } from './procurement.models';
 import { SupplierTypeaheadComponent, SupplierSelectedEvent } from './supplier-typeahead.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from './item-typeahead.component';
 import { GrnPickerModalComponent } from './grn-picker-modal.component';
 
 interface LineRow {
@@ -43,7 +46,7 @@ function emptyLine(): LineRow {
   selector: 'orbix-vendor-return-create',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DecimalPipe,
-            SupplierTypeaheadComponent, GrnPickerModalComponent],
+            SupplierTypeaheadComponent, ItemTypeaheadComponent, GrnPickerModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -181,10 +184,10 @@ function emptyLine(): LineRow {
             <thead>
               <tr>
                 <th scope="col">Item</th>
-                <th scope="col">UOM</th>
-                <th scope="col">VAT Group UID</th>
+                <th scope="col">UoM</th>
                 <th scope="col" class="text-end">Qty</th>
                 <th scope="col" class="text-end">Unit price</th>
+                <th scope="col">VAT group</th>
                 @if (!selectedGrn()) {
                   <th scope="col" class="actions-col"></th>
                 }
@@ -193,22 +196,24 @@ function emptyLine(): LineRow {
             <tbody>
               @for (row of lines; track $index) {
                 <tr>
-                  <!-- Item: read-only badge when from GRN, plain text input otherwise -->
-                  <td>
+                  <!-- Item: read-only badge when from GRN, typeahead picker otherwise -->
+                  <td class="col-item">
                     @if (row.fromGrn) {
                       <span class="badge text-bg-light border text-secondary font-monospace small"
                             [title]="row.itemUid">
                         {{ row.itemName ?? row.itemUid }}
                       </span>
                     } @else {
-                      <input class="form-control form-control-sm" type="text"
-                             [name]="'item' + $index" [(ngModel)]="row.itemUid"
-                             [attr.aria-label]="'Item UID row ' + ($index + 1)"
-                             placeholder="Item UID">
+                      <orbix-item-typeahead
+                        [instanceId]="'vr-line-' + $index"
+                        [required]="true"
+                        (itemSelected)="onLineItemSelected($index, $event)"
+                        (itemCleared)="onLineItemCleared($index)"
+                      />
                     }
                   </td>
 
-                  <!-- UOM: read-only badge when from GRN -->
+                  <!-- UoM: read-only badge when from GRN, select dropdown otherwise -->
                   <td>
                     @if (row.fromGrn) {
                       <span class="badge text-bg-light border text-secondary font-monospace small"
@@ -216,25 +221,20 @@ function emptyLine(): LineRow {
                         {{ row.uomCode ?? row.uomUid }}
                       </span>
                     } @else {
-                      <input class="form-control form-control-sm" type="text"
-                             [name]="'uom' + $index" [(ngModel)]="row.uomUid"
-                             [attr.aria-label]="'UOM UID row ' + ($index + 1)"
-                             placeholder="UOM UID">
-                    }
-                  </td>
-
-                  <!-- VAT Group: read-only badge when from GRN -->
-                  <td>
-                    @if (row.fromGrn) {
-                      <span class="badge text-bg-light border text-secondary font-monospace small"
-                            [title]="row.vatGroupUid">
-                        {{ row.vatGroupUid }}
-                      </span>
-                    } @else {
-                      <input class="form-control form-control-sm" type="text"
-                             [name]="'vat' + $index" [(ngModel)]="row.vatGroupUid"
-                             [attr.aria-label]="'VAT group UID row ' + ($index + 1)"
-                             placeholder="VAT group UID">
+                      <label [for]="'uom-' + $index" class="visually-hidden">
+                        UoM row {{ $index + 1 }}
+                      </label>
+                      <select [id]="'uom-' + $index"
+                              class="form-select form-select-sm"
+                              [name]="'uom' + $index"
+                              [(ngModel)]="row.uomUid"
+                              [attr.aria-label]="'UoM row ' + ($index + 1)"
+                              required>
+                        <option value="" disabled>Select UoM…</option>
+                        @for (u of uoms(); track u.uid) {
+                          <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
+                        }
+                      </select>
                     }
                   </td>
 
@@ -247,6 +247,31 @@ function emptyLine(): LineRow {
                     <input class="form-control form-control-sm text-end" type="number"
                            step="0.0001" min="0" [name]="'price' + $index" [(ngModel)]="row.unitPrice"
                            [attr.aria-label]="'Unit price row ' + ($index + 1)">
+                  </td>
+
+                  <!-- VAT group: read-only badge when from GRN, select dropdown otherwise -->
+                  <td>
+                    @if (row.fromGrn) {
+                      <span class="badge text-bg-light border text-secondary font-monospace small"
+                            [title]="row.vatGroupUid">
+                        {{ row.vatGroupUid }}
+                      </span>
+                    } @else {
+                      <label [for]="'vat-' + $index" class="visually-hidden">
+                        VAT group row {{ $index + 1 }}
+                      </label>
+                      <select [id]="'vat-' + $index"
+                              class="form-select form-select-sm"
+                              [name]="'vat' + $index"
+                              [(ngModel)]="row.vatGroupUid"
+                              [attr.aria-label]="'VAT group row ' + ($index + 1)"
+                              required>
+                        <option value="" disabled>Select VAT group…</option>
+                        @for (v of vatGroups(); track v.uid) {
+                          <option [value]="v.uid">{{ v.code }} — {{ v.name }}</option>
+                        }
+                      </select>
+                    }
                   </td>
 
                   @if (!selectedGrn()) {
@@ -319,10 +344,12 @@ function emptyLine(): LineRow {
     }
     .line-table tbody td { padding: 0.4rem 0.5rem; vertical-align: middle; }
     .line-table .actions-col { width: 1%; white-space: nowrap; }
+    .col-item { min-width: 200px; }
   `]
 })
-export class VendorReturnCreateComponent {
+export class VendorReturnCreateComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
+  private readonly catalog = inject(CatalogService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
@@ -330,6 +357,12 @@ export class VendorReturnCreateComponent {
   protected readonly reasons = VENDOR_RETURN_REASONS;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+
+  /** UoM list for the dropdown — loaded once on init. */
+  protected readonly uoms = signal<Uom[]>([]);
+
+  /** VAT group list for the dropdown — loaded once on init. */
+  protected readonly vatGroups = signal<VatGroup[]>([]);
 
   /** Holds the picked supplier from the typeahead. */
   protected readonly selectedSupplier = signal<SupplierSelectedEvent | null>(null);
@@ -349,6 +382,11 @@ export class VendorReturnCreateComponent {
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
+
+  ngOnInit(): void {
+    this.catalog.listUoms().subscribe({ next: list => this.uoms.set(list), error: () => {} });
+    this.catalog.listVatGroups().subscribe({ next: list => this.vatGroups.set(list), error: () => {} });
+  }
 
   // ---- Supplier typeahead callbacks ----------------------------------------
 
@@ -371,6 +409,9 @@ export class VendorReturnCreateComponent {
   }
 
   onGrnSelected(grn: Grn): void {
+    if (this.hasDirtyFreeLines()) {
+      if (!confirm('Picking a GRN will replace the current free lines. Continue?')) return;
+    }
     this.selectedGrn.set(grn);
     this.grnPickerOpen.set(false);
     this.prefillFromGrn(grn);
@@ -379,6 +420,31 @@ export class VendorReturnCreateComponent {
   clearGrn(): void {
     this.selectedGrn.set(null);
     this.lines = [emptyLine()];
+  }
+
+  // ---- Item typeahead callbacks (no-GRN path) ------------------------------
+
+  onLineItemSelected(lineIndex: number, evt: ItemSelectedEvent): void {
+    const line = this.lines[lineIndex];
+    if (!line) return;
+    line.itemUid = evt.uid;
+    line.itemName = evt.name;
+    // Autopopulate UoM and VAT group from item defaults if not already set.
+    if (evt.defaultUomUid) {
+      line.uomUid = evt.defaultUomUid;
+      line.uomCode = evt.defaultUomCode;
+    }
+    if (evt.defaultVatGroupUid) {
+      line.vatGroupUid = evt.defaultVatGroupUid;
+    }
+  }
+
+  onLineItemCleared(lineIndex: number): void {
+    const line = this.lines[lineIndex];
+    if (!line) return;
+    line.itemUid = '';
+    line.itemName = null;
+    // Do not clear uomUid/vatGroupUid — user may have changed them manually.
   }
 
   // ---- Line management -----------------------------------------------------
@@ -465,6 +531,14 @@ export class VendorReturnCreateComponent {
       fromGrn: true,
     }));
     if (this.lines.length === 0) this.lines = [emptyLine()];
+  }
+
+  /**
+   * Returns true if any free line (non-GRN) has a non-empty itemUid.
+   * Used to confirm before replacing free lines with GRN lines.
+   */
+  private hasDirtyFreeLines(): boolean {
+    return this.lines.some(l => !l.fromGrn && l.itemUid.trim().length > 0);
   }
 
   private showError(err: unknown): void {
