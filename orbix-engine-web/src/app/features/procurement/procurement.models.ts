@@ -1,5 +1,16 @@
 /** Mirrors the backend procurement DTOs. */
 
+// ---- Supplier lookup (typeahead) ------------------------------------------
+
+export interface SupplierSummary {
+  /** Numeric PK serialised as string (Jackson global Long-as-string). */
+  id: string;
+  /** The supplier's party uid — submit this in write payloads. */
+  partyUid: string;
+  code: string;
+  name: string;
+}
+
 export type LpoOrderStatus =
   'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
 
@@ -74,10 +85,17 @@ export interface GrnLine {
   id: string;
   lpoOrderLineId: string | null;
   itemId: string;
+  itemUid: string | null;
+  itemName: string | null;
+  itemCode: string | null;
   uomId: string;
+  uomUid: string | null;
+  uomCode: string | null;
   receivedQty: number;
   unitCost: number;
   vatGroupId: string;
+  vatGroupUid: string | null;
+  vatGroupName: string | null;
   lineTotal: number;
   batchNo: string | null;
   expiryDate: string | null;

@@ -17,6 +17,7 @@ import {
   LpoOrder,
   SupplierInvoice,
   SupplierPayment,
+  SupplierSummary,
   UpdateLpoOrderRequest,
   VendorCreditNote,
   VendorReturn,
@@ -71,11 +72,43 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, body));
   }
 
+  // ---- Supplier search (typeahead) ------------------------------------------
+
+  /**
+   * Typeahead search over suppliers. Returns a page of {@link SupplierSummary}
+   * rows. Each row exposes {@code partyUid} — the uid to submit in write
+   * payloads — plus {@code code} and {@code name} for display.
+   */
+  searchSuppliers(q: string, page = 0, size = 20): Observable<Page<SupplierSummary>> {
+    const params = new HttpParams()
+      .set('q', q)
+      .set('page', page)
+      .set('size', size);
+    return unwrap(this.http.get<ApiResponse<Page<SupplierSummary>>>(
+      `${this.base}/suppliers`, { params }
+    ));
+  }
+
   // ---- GRN (F3.2) ----------------------------------------------------------
 
-  listGrns(branchId: string | null, page: number, size: number): Observable<Page<Grn>> {
+  /**
+   * List GRNs. Supports optional {@code supplierId} (Long as string) and
+   * {@code status} query params added by the BE in the parallel Slice H.1 task.
+   * Falls back to branch-scoped listing when those params are absent so
+   * existing call sites are unaffected.
+   */
+  listGrns(
+    branchId: string | null,
+    page: number,
+    size: number,
+    supplierId?: string | null,
+    status?: 'POSTED' | 'DRAFT' | 'CANCELLED' | null,
+  ): Observable<Page<Grn>> {
+    let params = branchPageParams(branchId, page, size);
+    if (supplierId != null) params = params.set('supplierId', supplierId);
+    if (status != null) params = params.set('status', status);
     return unwrap(this.http.get<ApiResponse<Page<Grn>>>(
-      `${this.base}/grns`, { params: branchPageParams(branchId, page, size) }
+      `${this.base}/grns`, { params }
     ));
   }
 

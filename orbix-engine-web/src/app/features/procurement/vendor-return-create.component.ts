@@ -1,5 +1,5 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -13,24 +13,37 @@ import {
   ReturnReason,
   VENDOR_RETURN_REASONS,
 } from './procurement.models';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from './supplier-typeahead.component';
+import { GrnPickerModalComponent } from './grn-picker-modal.component';
 
 interface LineRow {
   itemUid: string;
+  itemName: string | null;
   uomUid: string;
+  uomCode: string | null;
   returnedQty: number | null;
   unitPrice: number | null;
   vatGroupUid: string;
   originalLineId?: string;
+  /** True when line was pre-filled from a GRN — blocks removing/editing uid fields. */
+  fromGrn: boolean;
 }
 
 function emptyLine(): LineRow {
-  return { itemUid: '', uomUid: '', returnedQty: null, unitPrice: null, vatGroupUid: '' };
+  return {
+    itemUid: '', itemName: null,
+    uomUid: '', uomCode: null,
+    returnedQty: null, unitPrice: null,
+    vatGroupUid: '',
+    fromGrn: false,
+  };
 }
 
 @Component({
   selector: 'orbix-vendor-return-create',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DecimalPipe,
+            SupplierTypeaheadComponent, GrnPickerModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -61,30 +74,51 @@ function emptyLine(): LineRow {
         </legend>
         <div class="row g-2">
 
+          <!-- Supplier typeahead -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold text-secondary" for="supplierUid">
-              Supplier UID <span class="text-danger" aria-hidden="true">*</span>
-            </label>
-            <input id="supplierUid" class="form-control" name="supplierUid"
-                   [(ngModel)]="supplierUid" required
-                   placeholder="Supplier ULID"
-                   aria-describedby="supplierUidHelp"
-                   (blur)="onSupplierSet()">
-            <div id="supplierUidHelp" class="form-text">Paste the supplier's UID to load their GRNs.</div>
+            <orbix-supplier-typeahead
+              instanceId="vr-create"
+              (supplierSelected)="onSupplierSelected($event)"
+              (supplierCleared)="onSupplierCleared()"
+            />
           </div>
 
+          <!-- GRN picker -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold text-secondary" for="grnRef">
+            <label class="form-label small fw-semibold text-secondary">
               GRN reference <span class="text-muted">(optional)</span>
             </label>
-            <select id="grnRef" class="form-select" name="grnRef" [(ngModel)]="selectedGrnUid"
-                    (ngModelChange)="onGrnSelected($event)"
-                    [disabled]="grns().length === 0">
-              <option value="">— no GRN reference —</option>
-              @for (grn of grns(); track grn.uid) {
-                <option [value]="grn.uid">{{ grn.number }} ({{ grn.receivedDate }})</option>
-              }
-            </select>
+
+            @if (selectedGrn()) {
+              <!-- Selected GRN display -->
+              <div class="d-flex align-items-center gap-2 form-control bg-light" style="min-height:38px;">
+                <i class="bi bi-box-seam text-secondary" aria-hidden="true"></i>
+                <span class="small flex-grow-1 font-monospace">
+                  {{ selectedGrn()!.number }}
+                  / {{ selectedGrn()!.receivedDate }}
+                  / TZS {{ selectedGrn()!.totalAmount | number:'1.0-0' }}
+                </span>
+                <button type="button" class="btn btn-link btn-sm p-0 text-primary"
+                        (click)="openGrnPicker()"
+                        aria-label="Change GRN selection">
+                  Change
+                </button>
+                <button type="button" class="btn btn-link btn-sm p-0 text-danger"
+                        (click)="clearGrn()"
+                        aria-label="Remove GRN reference">
+                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+              </div>
+            } @else {
+              <button type="button"
+                      class="btn btn-outline-secondary w-100 d-flex align-items-center gap-2"
+                      [disabled]="!selectedSupplier()"
+                      (click)="openGrnPicker()"
+                      aria-haspopup="dialog">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                {{ selectedSupplier() ? 'Pick GRN…' : 'Select a supplier first' }}
+              </button>
+            }
           </div>
 
           <div class="col-md-4">
@@ -128,43 +162,82 @@ function emptyLine(): LineRow {
       <fieldset class="form-fieldset mb-3">
         <legend class="form-fieldset__legend d-flex align-items-center justify-content-between">
           <span><i class="bi bi-list-ul text-secondary" aria-hidden="true"></i> Lines</span>
-          <button type="button" class="btn btn-sm btn-outline-primary" (click)="addLine()">
-            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add line
-          </button>
+          @if (!selectedGrn()) {
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="addLine()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add line
+            </button>
+          }
         </legend>
+
+        @if (selectedGrn()) {
+          <p class="small text-secondary mb-2">
+            <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+            Lines pre-filled from GRN. Edit qty and price only; to change items remove the GRN reference.
+          </p>
+        }
+
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0 line-table">
             <thead>
               <tr>
-                <th scope="col">Item UID</th>
-                <th scope="col">UOM UID</th>
+                <th scope="col">Item</th>
+                <th scope="col">UOM</th>
                 <th scope="col">VAT Group UID</th>
                 <th scope="col" class="text-end">Qty</th>
                 <th scope="col" class="text-end">Unit price</th>
-                <th scope="col" class="actions-col"></th>
+                @if (!selectedGrn()) {
+                  <th scope="col" class="actions-col"></th>
+                }
               </tr>
             </thead>
             <tbody>
               @for (row of lines; track $index) {
                 <tr>
+                  <!-- Item: read-only badge when from GRN, plain text input otherwise -->
                   <td>
-                    <input class="form-control form-control-sm" type="text"
-                           [name]="'item' + $index" [(ngModel)]="row.itemUid"
-                           [attr.aria-label]="'Item UID row ' + ($index + 1)"
-                           placeholder="Item ULID">
+                    @if (row.fromGrn) {
+                      <span class="badge text-bg-light border text-secondary font-monospace small"
+                            [title]="row.itemUid">
+                        {{ row.itemName ?? row.itemUid }}
+                      </span>
+                    } @else {
+                      <input class="form-control form-control-sm" type="text"
+                             [name]="'item' + $index" [(ngModel)]="row.itemUid"
+                             [attr.aria-label]="'Item UID row ' + ($index + 1)"
+                             placeholder="Item UID">
+                    }
                   </td>
+
+                  <!-- UOM: read-only badge when from GRN -->
                   <td>
-                    <input class="form-control form-control-sm" type="text"
-                           [name]="'uom' + $index" [(ngModel)]="row.uomUid"
-                           [attr.aria-label]="'UOM UID row ' + ($index + 1)"
-                           placeholder="UOM ULID">
+                    @if (row.fromGrn) {
+                      <span class="badge text-bg-light border text-secondary font-monospace small"
+                            [title]="row.uomUid">
+                        {{ row.uomCode ?? row.uomUid }}
+                      </span>
+                    } @else {
+                      <input class="form-control form-control-sm" type="text"
+                             [name]="'uom' + $index" [(ngModel)]="row.uomUid"
+                             [attr.aria-label]="'UOM UID row ' + ($index + 1)"
+                             placeholder="UOM UID">
+                    }
                   </td>
+
+                  <!-- VAT Group: read-only badge when from GRN -->
                   <td>
-                    <input class="form-control form-control-sm" type="text"
-                           [name]="'vat' + $index" [(ngModel)]="row.vatGroupUid"
-                           [attr.aria-label]="'VAT group UID row ' + ($index + 1)"
-                           placeholder="VatGroup ULID">
+                    @if (row.fromGrn) {
+                      <span class="badge text-bg-light border text-secondary font-monospace small"
+                            [title]="row.vatGroupUid">
+                        {{ row.vatGroupUid }}
+                      </span>
+                    } @else {
+                      <input class="form-control form-control-sm" type="text"
+                             [name]="'vat' + $index" [(ngModel)]="row.vatGroupUid"
+                             [attr.aria-label]="'VAT group UID row ' + ($index + 1)"
+                             placeholder="VAT group UID">
+                    }
                   </td>
+
                   <td>
                     <input class="form-control form-control-sm text-end" type="number"
                            step="0.0001" min="0.0001" [name]="'qty' + $index" [(ngModel)]="row.returnedQty"
@@ -175,13 +248,16 @@ function emptyLine(): LineRow {
                            step="0.0001" min="0" [name]="'price' + $index" [(ngModel)]="row.unitPrice"
                            [attr.aria-label]="'Unit price row ' + ($index + 1)">
                   </td>
-                  <td class="actions-col">
-                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                            [attr.aria-label]="'Remove line ' + ($index + 1)"
-                            (click)="removeLine($index)">
-                      <i class="bi bi-x-lg" aria-hidden="true"></i>
-                    </button>
-                  </td>
+
+                  @if (!selectedGrn()) {
+                    <td class="actions-col">
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              [attr.aria-label]="'Remove line ' + ($index + 1)"
+                              (click)="removeLine($index)">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    </td>
+                  }
                 </tr>
               }
             </tbody>
@@ -204,7 +280,7 @@ function emptyLine(): LineRow {
         <button type="button"
                 class="btn btn-success d-inline-flex align-items-center gap-2"
                 [disabled]="busy() || f.invalid"
-                (click)="saveDraft(true)">
+                (click)="saveAndPost()">
           @if (busy()) {
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           } @else {
@@ -215,6 +291,14 @@ function emptyLine(): LineRow {
         <a routerLink="/procurement/vendor-returns" class="btn btn-outline-secondary">Cancel</a>
       </div>
     </form>
+
+    <!-- GRN picker modal -->
+    <orbix-grn-picker-modal
+      [visible]="grnPickerOpen()"
+      [supplierId]="selectedSupplier()?.id ?? null"
+      (grnSelected)="onGrnSelected($event)"
+      (closed)="grnPickerOpen.set(false)"
+    />
   `,
   styles: [`
     :host { display: block; }
@@ -237,7 +321,7 @@ function emptyLine(): LineRow {
     .line-table .actions-col { width: 1%; white-space: nowrap; }
   `]
 })
-export class VendorReturnCreateComponent implements OnInit {
+export class VendorReturnCreateComponent {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
@@ -246,10 +330,16 @@ export class VendorReturnCreateComponent implements OnInit {
   protected readonly reasons = VENDOR_RETURN_REASONS;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly grns = signal<Grn[]>([]);
 
-  protected supplierUid = '';
-  protected selectedGrnUid = '';
+  /** Holds the picked supplier from the typeahead. */
+  protected readonly selectedSupplier = signal<SupplierSelectedEvent | null>(null);
+
+  /** Holds the picked GRN after selection from the modal. */
+  protected readonly selectedGrn = signal<Grn | null>(null);
+
+  /** Controls the GRN picker modal. */
+  protected readonly grnPickerOpen = signal(false);
+
   protected returnDate = new Date().toISOString().slice(0, 10);
   protected reason: ReturnReason = 'DAMAGED';
   protected restock = true;
@@ -260,7 +350,38 @@ export class VendorReturnCreateComponent implements OnInit {
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  ngOnInit(): void { /* nothing to pre-load */ }
+  // ---- Supplier typeahead callbacks ----------------------------------------
+
+  onSupplierSelected(evt: SupplierSelectedEvent): void {
+    this.selectedSupplier.set(evt);
+    // Reset GRN and lines when supplier changes.
+    this.clearGrn();
+  }
+
+  onSupplierCleared(): void {
+    this.selectedSupplier.set(null);
+    this.clearGrn();
+  }
+
+  // ---- GRN picker callbacks ------------------------------------------------
+
+  openGrnPicker(): void {
+    if (!this.selectedSupplier()) return;
+    this.grnPickerOpen.set(true);
+  }
+
+  onGrnSelected(grn: Grn): void {
+    this.selectedGrn.set(grn);
+    this.grnPickerOpen.set(false);
+    this.prefillFromGrn(grn);
+  }
+
+  clearGrn(): void {
+    this.selectedGrn.set(null);
+    this.lines = [emptyLine()];
+  }
+
+  // ---- Line management -----------------------------------------------------
 
   addLine(): void { this.lines.push(emptyLine()); }
 
@@ -269,48 +390,53 @@ export class VendorReturnCreateComponent implements OnInit {
     if (this.lines.length === 0) this.addLine();
   }
 
-  onSupplierSet(): void {
-    if (!this.supplierUid.trim()) { this.grns.set([]); return; }
-    // Load posted GRNs for this supplier so the user can pick a GRN reference.
-    // We use listGrns (branch-scoped) — filtering by supplier is done client-side.
-    this.procurement.listGrns(this.branchId(), 0, 200).subscribe({
-      next: page => {
-        const uid = this.supplierUid.trim();
-        this.grns.set(page.content.filter(g => g.status === 'POSTED'));
-        // Reset GRN selection when supplier changes.
-        this.selectedGrnUid = '';
-      },
-      error: () => this.grns.set([])
+  // ---- Submit --------------------------------------------------------------
+
+  saveDraft(): void {
+    const request = this.buildRequest();
+    if (!request) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.procurement.createVendorReturn(request).subscribe({
+      next: () => { this.busy.set(false); void this.router.navigate(['/procurement/vendor-returns']); },
+      error: err => { this.busy.set(false); this.showError(err); },
     });
   }
 
-  onGrnSelected(grnUid: string): void {
-    if (!grnUid) { this.lines = [emptyLine()]; return; }
-    const grn = this.grns().find(g => g.uid === grnUid);
-    if (!grn) return;
-    // Pre-fill lines from the selected GRN.
-    this.lines = grn.lines.map(gl => ({
-      itemUid: gl.itemId,       // IDs serve as placeholder — real impl would use UIDs from GRN response
-      uomUid: gl.uomId,
-      vatGroupUid: gl.vatGroupId,
-      returnedQty: gl.receivedQty,
-      unitPrice: gl.unitCost,
-      originalLineId: gl.id,
-    }));
-    if (this.lines.length === 0) this.lines = [emptyLine()];
+  saveAndPost(): void {
+    const request = this.buildRequest();
+    if (!request) return;
+    this.busy.set(true);
+    this.error.set(null);
+    this.procurement.createVendorReturn(request).subscribe({
+      next: ret => {
+        this.procurement.postVendorReturn(ret.uid).subscribe({
+          next: () => void this.router.navigate(['/procurement/vendor-returns']),
+          error: err => { this.busy.set(false); this.showError(err); },
+        });
+      },
+      error: err => { this.busy.set(false); this.showError(err); },
+    });
   }
 
-  saveDraft(andPost = false): void {
-    if (!this.supplierUid.trim()) { this.error.set('Supplier UID is required.'); return; }
+  // ---- Private helpers -----------------------------------------------------
 
+  private buildRequest(): CreateVendorReturnRequest | null {
+    const supplier = this.selectedSupplier();
+    if (!supplier) {
+      this.error.set('Supplier is required — use the typeahead to pick one.');
+      return null;
+    }
     const validLines = this.lines.filter(
       l => l.itemUid.trim() && l.uomUid.trim() && (l.returnedQty ?? 0) > 0 && (l.unitPrice ?? 0) >= 0
     );
-    if (validLines.length === 0) { this.error.set('Add at least one valid line.'); return; }
-
-    const request: CreateVendorReturnRequest = {
-      supplierUid: this.supplierUid.trim(),
-      originalGrnUid: this.selectedGrnUid.trim() || undefined,
+    if (validLines.length === 0) {
+      this.error.set('Add at least one valid line.');
+      return null;
+    }
+    return {
+      supplierUid: supplier.partyUid,
+      originalGrnUid: this.selectedGrn()?.uid || undefined,
       returnDate: this.returnDate,
       reason: this.reason,
       restock: this.restock,
@@ -318,29 +444,27 @@ export class VendorReturnCreateComponent implements OnInit {
       lines: validLines.map(l => ({
         itemUid: l.itemUid.trim(),
         uomUid: l.uomUid.trim(),
-        returnedQty: l.returnedQty as number,
-        unitPrice: l.unitPrice as number,
+        returnedQty: l.returnedQty ?? 0,
+        unitPrice: l.unitPrice ?? 0,
         vatGroupUid: l.vatGroupUid.trim() || 'STANDARD',
         originalLineId: l.originalLineId,
       })),
     };
+  }
 
-    this.busy.set(true);
-    this.error.set(null);
-    this.procurement.createVendorReturn(request).subscribe({
-      next: ret => {
-        if (andPost) {
-          this.procurement.postVendorReturn(ret.uid).subscribe({
-            next: () => void this.router.navigate(['/procurement/vendor-returns']),
-            error: err => { this.busy.set(false); this.showError(err); }
-          });
-        } else {
-          this.busy.set(false);
-          void this.router.navigate(['/procurement/vendor-returns']);
-        }
-      },
-      error: err => { this.busy.set(false); this.showError(err); }
-    });
+  private prefillFromGrn(grn: Grn): void {
+    this.lines = grn.lines.map(gl => ({
+      itemUid: gl.itemUid ?? gl.itemId,
+      itemName: gl.itemName ?? null,
+      uomUid: gl.uomUid ?? gl.uomId,
+      uomCode: gl.uomCode ?? null,
+      vatGroupUid: gl.vatGroupUid ?? gl.vatGroupId,
+      returnedQty: gl.receivedQty,
+      unitPrice: gl.unitCost,
+      originalLineId: gl.id,
+      fromGrn: true,
+    }));
+    if (this.lines.length === 0) this.lines = [emptyLine()];
   }
 
   private showError(err: unknown): void {
