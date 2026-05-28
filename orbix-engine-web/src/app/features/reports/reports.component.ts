@@ -94,11 +94,13 @@ interface ReportTile {
 })
 export class ReportsComponent {
   protected readonly tiles: ReportTile[] = [
-    { label: 'Customer statement',  description: 'Per-customer AR statement with opening + period + closing balance.', link: '/reports/customer-statement', icon: 'bi-file-earmark-person',  tint: 'blue',   status: 'soon' },
-    { label: 'Supplier statement',  description: 'Per-supplier AP statement with the same ledger view.',                link: '/reports/supplier-statement', icon: 'bi-truck',                tint: 'green',  status: 'soon' },
-    { label: 'AR ageing',           description: 'Customers grouped by current / 30 / 60 / 90+ days outstanding.',     link: '/reports/ar-ageing',          icon: 'bi-clock-history',        tint: 'amber',  status: 'soon' },
-    { label: 'AP ageing',           description: 'Suppliers grouped by current / 30 / 60 / 90+ days outstanding.',     link: '/reports/ap-ageing',          icon: 'bi-hourglass-bottom',     tint: 'rose',   status: 'soon' },
-    { label: 'Layby ageing',        description: 'Outstanding layby / pre-order balances by age bucket.',              link: '/reports/layby-ageing',       icon: 'bi-bag-check',            tint: 'violet', status: 'soon' },
-    { label: 'X / Z report',        description: 'Cumulative and end-of-day till report.',                              link: '/reports/xz',                 icon: 'bi-printer',              tint: 'orange', status: 'soon' },
+    { label: 'Daily sales',         description: 'Per-document list blending sales invoices and POS sales for a single business day.', link: '/reports/sales-daily',     icon: 'bi-receipt',              tint: 'blue',   status: 'live' },
+    { label: 'Daily summary',       description: 'Sales, purchases and cash one-pager rollup — the manager morning report.',           link: '/reports/sales-summary',   icon: 'bi-bar-chart-line',       tint: 'green',  status: 'live' },
+    { label: 'Z-history',           description: 'Closed till sessions with Z-report totals — business date, cashier, variance.',      link: '/reports/z-history',       icon: 'bi-printer',              tint: 'violet', status: 'live' },
+    { label: 'Customer statement',  description: 'Per-customer AR statement with opening + period + closing balance.',                 link: '/reports/customer-statement', icon: 'bi-file-earmark-person', tint: 'amber',  status: 'soon' },
+    { label: 'Supplier statement',  description: 'Per-supplier AP statement with the same ledger view.',                              link: '/reports/supplier-statement', icon: 'bi-truck',               tint: 'rose',   status: 'soon' },
+    { label: 'AR ageing',           description: 'Customers grouped by current / 30 / 60 / 90+ days outstanding.',                   link: '/reports/ar-ageing',          icon: 'bi-clock-history',       tint: 'amber',  status: 'soon' },
+    { label: 'AP ageing',           description: 'Suppliers grouped by current / 30 / 60 / 90+ days outstanding.',                   link: '/reports/ap-ageing',          icon: 'bi-hourglass-bottom',    tint: 'rose',   status: 'soon' },
+    { label: 'Layby ageing',        description: 'Outstanding layby / pre-order balances by age bucket.',                             link: '/reports/layby-ageing',       icon: 'bi-bag-check',           tint: 'orange', status: 'soon' },
   ];
 }
