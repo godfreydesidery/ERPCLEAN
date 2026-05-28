@@ -207,4 +207,41 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     Page<SalesInvoice> findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(Long companyId, Long branchId,
                                                                         com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus status,
                                                                         Pageable pageable);
+
+    /**
+     * Slice G — every open AR invoice (POSTED + PARTIALLY_PAID with
+     * outstanding &gt; 0) for the aging / dunning / customer-statement reports.
+     * Returned unpaged because aging bucketing is computed in-memory in Java
+     * for DB-portability (avoiding {@code datediff}-style native functions).
+     * {@code branchId} nullable — null = company-wide.
+     * Backed by {@code ix_sales_invoice_branch_due} for the predicate.
+     */
+    @Query("""
+        select s from SalesInvoice s
+         where s.companyId = :companyId
+           and (:branchId is null or s.branchId = :branchId)
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID)
+           and s.totalAmount > s.paidAmount
+         order by s.customerId asc, s.dueDate asc, s.id asc
+        """)
+    List<SalesInvoice> findAllOpenForAging(@Param("companyId") Long companyId,
+                                           @Param("branchId") Long branchId);
+
+    /**
+     * Slice G — open AR invoices for a single customer (for the customer
+     * statement / debt-position view). Sorted by dueDate asc so the oldest
+     * arrears land at the top of the operator's screen.
+     */
+    @Query("""
+        select s from SalesInvoice s
+         where s.customerId = :customerId
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID)
+           and s.totalAmount > s.paidAmount
+         order by s.dueDate asc nulls last, s.id asc
+        """)
+    List<SalesInvoice> findOpenForCustomer(@Param("customerId") Long customerId);
 }
