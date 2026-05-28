@@ -207,6 +207,13 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // dropped at bootstrap if not present.
       'GRN.READ',
       'GRN.POST',
+      // Slice H.1 widening — procurement-officer is the natural happy-path
+      // actor for vendor returns + vendor credit-note allocation. The
+      // "Storekeeper" user story persona does not exist in this roster; the
+      // procurement-officer is the closest analogue with purchasing authority.
+      // Forward-compat-skip: V77 seeds id 136; bootstrapOne() drops it
+      // gracefully until the QA-image is rebuilt with V77 applied.
+      'PROCUREMENT.MANAGE_RETURN',
     ],
   },
   supervisor: {

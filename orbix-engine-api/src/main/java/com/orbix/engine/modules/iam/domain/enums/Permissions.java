@@ -119,4 +119,7 @@ public final class Permissions {
     // ---- debt write-off (Slice G.2 — dual-approval AR + AP write-off) ----
     public static final String DEBT_WRITE_OFF_REQUEST = "DEBT.WRITE_OFF.REQUEST";
     public static final String DEBT_WRITE_OFF_APPROVE = "DEBT.WRITE_OFF.APPROVE";
+
+    // ---- vendor returns (Slice H.1 — vendor return + credit-note allocation) ----
+    public static final String PROCUREMENT_MANAGE_RETURN = "PROCUREMENT.MANAGE_RETURN";
 }

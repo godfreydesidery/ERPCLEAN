@@ -20,8 +20,11 @@ public interface ItemService {
 
     ItemResponseDto create(CreateItemRequestDto request);
 
-    /** Company-scoped paged list; {@code status} optional filter. */
-    PageDto<ItemResponseDto> listItems(ItemStatus status, Pageable pageable);
+    /**
+     * Company-scoped paged list. {@code status} and {@code q} are optional filters.
+     * When {@code q} is supplied, matches case-insensitively on code or name.
+     */
+    PageDto<ItemResponseDto> listItems(ItemStatus status, String q, Pageable pageable);
 
     ItemResponseDto getItemByUid(String uid);
 

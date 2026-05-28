@@ -23,6 +23,29 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     Page<Item> findByCompanyIdAndStatus(Long companyId, ItemStatus status, Pageable pageable);
 
+    /**
+     * Full-text search over code and name (case-insensitive substring).
+     * {@code q} is a pre-wrapped {@code %term%} string or {@code null} to skip.
+     * {@code status} is optional; pass {@code null} for all statuses.
+     */
+    @Query(value = """
+        select i from Item i
+        where i.companyId = :companyId
+          and (:q is null or lower(i.code) like :q or lower(i.name) like :q)
+          and (:status is null or i.status = :status)
+        order by i.code
+        """,
+        countQuery = """
+        select count(i) from Item i
+        where i.companyId = :companyId
+          and (:q is null or lower(i.code) like :q or lower(i.name) like :q)
+          and (:status is null or i.status = :status)
+        """)
+    Page<Item> search(@Param("companyId") Long companyId,
+                      @Param("q") String q,
+                      @Param("status") ItemStatus status,
+                      Pageable pageable);
+
     /** Snapshot accessor for the F5.4 offline-sync endpoint. */
     List<Item> findByCompanyIdAndStatusOrderByIdAsc(Long companyId, ItemStatus status);
 

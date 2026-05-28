@@ -5,6 +5,8 @@ import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -43,4 +45,24 @@ public interface GrnRepository extends JpaRepository<Grn, Long> {
 
     List<Grn> findByCompanyIdAndReceivedDateAndStatus(
         Long companyId, LocalDate receivedDate, GrnStatus status);
+
+    /**
+     * GRN picker — filtered list for the vendor-return create form.
+     * Both {@code supplierId} and {@code status} are optional (null = no filter on that dimension).
+     * {@code branchId} is the scoped branch from {@code BranchScope}; null = company-wide.
+     */
+    @Query("""
+        select g from Grn g
+         where g.companyId = :companyId
+           and (:branchId   is null or g.branchId   = :branchId)
+           and (:supplierId is null or g.supplierId  = :supplierId)
+           and (:status     is null or g.status      = :status)
+         order by g.id desc
+        """)
+    Page<Grn> findFiltered(
+        @Param("companyId")  Long companyId,
+        @Param("branchId")   Long branchId,
+        @Param("supplierId") Long supplierId,
+        @Param("status")     GrnStatus status,
+        Pageable pageable);
 }

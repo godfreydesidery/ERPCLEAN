@@ -69,12 +69,19 @@ public class ItemServiceImpl implements ItemService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<ItemResponseDto> listItems(ItemStatus status, Pageable pageable) {
+    public PageDto<ItemResponseDto> listItems(ItemStatus status, String q, Pageable pageable) {
         Long companyId = context.companyId();
-        var page = status == null
-            ? repo.findByCompanyId(companyId, pageable)
-            : repo.findByCompanyIdAndStatus(companyId, status, pageable);
-        return PageDto.of(page, ItemResponseDto::from);
+        String normalised = blankToNull(q);
+        if (normalised == null && status == null) {
+            // fast path — no filters
+            return PageDto.of(repo.findByCompanyId(companyId, pageable), ItemResponseDto::from);
+        }
+        String likeParam = normalised == null ? null : "%" + normalised.toLowerCase() + "%";
+        return PageDto.of(repo.search(companyId, likeParam, status, pageable), ItemResponseDto::from);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     @Override

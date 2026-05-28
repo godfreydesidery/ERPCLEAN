@@ -1,7 +1,6 @@
 package com.orbix.engine.modules.procurement.domain.dto;
 
 import com.orbix.engine.modules.procurement.domain.entity.Grn;
-import com.orbix.engine.modules.procurement.domain.entity.GrnLine;
 import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 
 import java.math.BigDecimal;
@@ -29,7 +28,8 @@ public record GrnDto(
     String notes,
     List<GrnLineDto> lines
 ) {
-    public static GrnDto from(Grn grn, List<GrnLine> lines) {
+    /** Build a {@link GrnDto} from a header entity and pre-hydrated line DTOs. */
+    public static GrnDto from(Grn grn, List<GrnLineDto> lines) {
         return new GrnDto(
             grn.getId(),
             grn.getUid(),
@@ -48,7 +48,7 @@ public record GrnDto(
             grn.getPostedBy(),
             grn.getCancellationReason(),
             grn.getNotes(),
-            lines.stream().map(GrnLineDto::from).toList()
+            lines
         );
     }
 }

@@ -3,6 +3,7 @@ package com.orbix.engine.modules.procurement.service;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
+import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import org.springframework.data.domain.Pageable;
 
 /**
@@ -29,7 +30,12 @@ public interface GrnService {
      */
     GrnDto cancelPosted(String uid, String reason);
 
-    PageDto<GrnDto> list(Long branchId, Pageable pageable);
+    /**
+     * Paginated GRN list. All filter params are optional (null = no filter).
+     * {@code branchId} is the branch override from the request; scoping is
+     * enforced by {@code BranchScope} inside the impl.
+     */
+    PageDto<GrnDto> list(Long branchId, Long supplierId, GrnStatus status, Pageable pageable);
 
     GrnDto get(String uid);
 }

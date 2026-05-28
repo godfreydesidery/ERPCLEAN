@@ -589,6 +589,11 @@ export class ShellComponent implements OnInit {
         {
           label: 'Procurement', route: '/procurement', icon: 'bi-truck',
           tooltip: 'LPOs out to suppliers, GRNs when goods arrive, supplier invoices matched against GRNs, and payments out. Builds the AP side of the ledger.'
+        },
+        {
+          label: 'Vendor returns', route: '/procurement/vendor-returns', icon: 'bi-arrow-return-left',
+          tooltip: 'Return goods to suppliers, issue vendor credit notes, and apply them against open supplier invoices.',
+          permissions: ['PROCUREMENT.MANAGE_RETURN'],
         }
       ]
     },

@@ -1,20 +1,29 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { Page } from '../../core/api/page';
 import {
+  ApplyVendorCreditNoteRequest,
   CreateGrnRequest,
   CreateLpoOrderRequest,
   CreateSupplierInvoiceRequest,
   CreateSupplierPaymentRequest,
+  CreateVendorReturnRequest,
   Grn,
+  IssueVendorCreditNoteRequest,
+  ItemSummary,
   LpoOrder,
   SupplierInvoice,
   SupplierPayment,
-  UpdateLpoOrderRequest
+  SupplierSummary,
+  UpdateLpoOrderRequest,
+  VendorCreditNote,
+  VendorReturn,
 } from './procurement.models';
+import { SupplierStatement } from '../debt/debt.models';
 
 @Injectable({ providedIn: 'root' })
 export class ProcurementService {
@@ -64,11 +73,62 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, body));
   }
 
+  // ---- Item search (typeahead) ----------------------------------------------
+
+  /**
+   * Typeahead search over active items. Fires GET /api/v1/items?q=...&status=ACTIVE&size=N.
+   * Returns a page of {@link ItemSummary} rows. The `defaultUomUid` and
+   * `defaultVatGroupUid` fields are used to auto-populate line dropdowns when an
+   * item is picked.
+   */
+  searchItems(q: string, size = 20): Observable<Page<ItemSummary>> {
+    const params = new HttpParams()
+      .set('q', q)
+      .set('status', 'ACTIVE')
+      .set('page', 0)
+      .set('size', size);
+    return unwrap(this.http.get<ApiResponse<Page<ItemSummary>>>(
+      `${this.base}/items`, { params }
+    ));
+  }
+
+  // ---- Supplier search (typeahead) ------------------------------------------
+
+  /**
+   * Typeahead search over suppliers. Returns a page of {@link SupplierSummary}
+   * rows. Each row exposes {@code partyUid} — the uid to submit in write
+   * payloads — plus {@code code} and {@code name} for display.
+   */
+  searchSuppliers(q: string, page = 0, size = 20): Observable<Page<SupplierSummary>> {
+    const params = new HttpParams()
+      .set('q', q)
+      .set('page', page)
+      .set('size', size);
+    return unwrap(this.http.get<ApiResponse<Page<SupplierSummary>>>(
+      `${this.base}/suppliers`, { params }
+    ));
+  }
+
   // ---- GRN (F3.2) ----------------------------------------------------------
 
-  listGrns(branchId: string | null, page: number, size: number): Observable<Page<Grn>> {
+  /**
+   * List GRNs. Supports optional {@code supplierId} (Long as string) and
+   * {@code status} query params added by the BE in the parallel Slice H.1 task.
+   * Falls back to branch-scoped listing when those params are absent so
+   * existing call sites are unaffected.
+   */
+  listGrns(
+    branchId: string | null,
+    page: number,
+    size: number,
+    supplierId?: string | null,
+    status?: 'POSTED' | 'DRAFT' | 'CANCELLED' | null,
+  ): Observable<Page<Grn>> {
+    let params = branchPageParams(branchId, page, size);
+    if (supplierId != null) params = params.set('supplierId', supplierId);
+    if (status != null) params = params.set('status', status);
     return unwrap(this.http.get<ApiResponse<Page<Grn>>>(
-      `${this.base}/grns`, { params: branchPageParams(branchId, page, size) }
+      `${this.base}/grns`, { params }
     ));
   }
 
@@ -159,6 +219,75 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<SupplierPayment>>(
       `${this.base}/supplier-payments/uid/${uid}/cancel`, {}
     ));
+  }
+
+  // ---- Slice H.1: vendor returns (US-PROC-008) + vendor credit notes (US-PROC-009) ----
+
+  createVendorReturn(request: CreateVendorReturnRequest): Observable<VendorReturn> {
+    return unwrap(this.http.post<ApiResponse<VendorReturn>>(
+      `${this.base}/vendor-returns`, request
+    ));
+  }
+
+  listVendorReturns(
+    branchId?: string | null,
+    page = 0,
+    size = 20,
+  ): Observable<Page<VendorReturn>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<Page<VendorReturn>>>(
+      `${this.base}/vendor-returns`, { params }
+    ));
+  }
+
+  getVendorReturn(uid: string): Observable<VendorReturn> {
+    return unwrap(this.http.get<ApiResponse<VendorReturn>>(
+      `${this.base}/vendor-returns/uid/${uid}`
+    ));
+  }
+
+  postVendorReturn(uid: string): Observable<VendorReturn> {
+    return unwrap(this.http.post<ApiResponse<VendorReturn>>(
+      `${this.base}/vendor-returns/uid/${uid}/post`, {}
+    ));
+  }
+
+  cancelVendorReturn(uid: string): Observable<VendorReturn> {
+    return unwrap(this.http.post<ApiResponse<VendorReturn>>(
+      `${this.base}/vendor-returns/uid/${uid}/cancel`, {}
+    ));
+  }
+
+  issueVendorCreditNote(uid: string, req: IssueVendorCreditNoteRequest): Observable<VendorCreditNote> {
+    return unwrap(this.http.post<ApiResponse<VendorCreditNote>>(
+      `${this.base}/vendor-returns/uid/${uid}/issue-credit-note`, req
+    ));
+  }
+
+  listVendorCreditNotes(branchId?: string | null): Observable<VendorCreditNote[]> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<VendorCreditNote[]>>(
+      `${this.base}/vendor-credit-notes`, { params }
+    ));
+  }
+
+  applyVendorCreditNote(uid: string, req: ApplyVendorCreditNoteRequest): Observable<VendorCreditNote> {
+    return unwrap(this.http.post<ApiResponse<VendorCreditNote>>(
+      `${this.base}/vendor-credit-notes/uid/${uid}/apply`, req
+    ));
+  }
+
+  /**
+   * Fetches open supplier invoices for a given supplier via the debt/AP statement endpoint
+   * (GET /api/v1/debt/supplier/uid/{uid}) and returns only the openInvoices array.
+   * Reuses SupplierStatement from debt.models — same shape as the AR-side customer statement.
+   */
+  getSupplierOpenInvoices(supplierUid: string): Observable<SupplierStatement['openInvoices']> {
+    return unwrap(
+      this.http.get<ApiResponse<SupplierStatement>>(`${this.base}/debt/supplier/uid/${supplierUid}`)
+    ).pipe(map(stmt => stmt.openInvoices));
   }
 }
 

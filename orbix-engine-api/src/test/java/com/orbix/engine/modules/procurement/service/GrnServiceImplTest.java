@@ -1,10 +1,14 @@
 package com.orbix.engine.modules.procurement.service;
 
 import com.orbix.engine.modules.catalog.domain.entity.Item;
+import com.orbix.engine.modules.catalog.domain.entity.Uom;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
+import com.orbix.engine.modules.catalog.domain.enums.UomDimension;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
+import com.orbix.engine.modules.catalog.repository.UomRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.iam.service.BranchScope;
@@ -36,6 +40,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -69,6 +76,7 @@ class GrnServiceImplTest {
     @Mock private LpoOrderRepository lpos;
     @Mock private LpoOrderLineRepository lpoLines;
     @Mock private ItemRepository items;
+    @Mock private UomRepository uoms;
     @Mock private VatGroupRepository vatGroups;
     @Mock private StockMoveService stockMoveService;
     @Mock private StockBatchService stockBatchService;
@@ -87,11 +95,18 @@ class GrnServiceImplTest {
 
         Item item = new Item(COMPANY_ID, "SKU1", "Sugar", ItemType.BOTH, 10L, UOM_ID, VAT_GROUP_ID, ACTOR_ID);
         item.setId(ITEM_ID);
+        ReflectionTestUtils.setField(item, "uid", UidGenerator.next());
         lenient().when(items.findById(ITEM_ID)).thenReturn(Optional.of(item));
+
+        Uom uom = new Uom("KG", "Kilogram", UomDimension.WEIGHT, true, ACTOR_ID);
+        uom.setId(UOM_ID);
+        ReflectionTestUtils.setField(uom, "uid", UidGenerator.next());
+        lenient().when(uoms.findById(UOM_ID)).thenReturn(Optional.of(uom));
 
         VatGroup vat = new VatGroup(COMPANY_ID, "STD", "Standard", new BigDecimal("0.18"),
             LocalDate.of(2020, 1, 1), true, ACTOR_ID);
         vat.setId(VAT_GROUP_ID);
+        ReflectionTestUtils.setField(vat, "uid", UidGenerator.next());
         lenient().when(vatGroups.findById(VAT_GROUP_ID)).thenReturn(Optional.of(vat));
 
         lenient().when(grns.save(any(Grn.class))).thenAnswer(inv -> {
@@ -416,6 +431,67 @@ class GrnServiceImplTest {
         assertThatThrownBy(() -> service.createDraft(request))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
+    }
+
+    // -------------------------------------------------------------------------
+    // list() filter tests — picker support (Slice H.1)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void list_filterBySupplierAndStatus_returnsMatchingRows() {
+        Grn grn = postable(null);
+        grn.post(ACTOR_ID); // → POSTED
+
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        when(grns.findFiltered(COMPANY_ID, null, SUPPLIER_ID, GrnStatus.POSTED, PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(grn)));
+        when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of());
+
+        PageDto<GrnDto> page = service.list(null, SUPPLIER_ID, GrnStatus.POSTED, PageRequest.of(0, 20));
+
+        assertThat(page.content()).hasSize(1);
+        assertThat(page.content().get(0).supplierId()).isEqualTo(SUPPLIER_ID);
+        assertThat(page.content().get(0).status()).isEqualTo(GrnStatus.POSTED);
+    }
+
+    @Test
+    void list_noFilters_returnsAllRows() {
+        Grn g1 = postable(null);
+        Grn g2 = postable(null);
+
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        when(grns.findFiltered(COMPANY_ID, BRANCH_ID, null, null, PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(g1, g2)));
+        when(grnLines.findByGrnIdOrderByIdAsc(any())).thenReturn(List.of());
+
+        PageDto<GrnDto> page = service.list(BRANCH_ID, null, null, PageRequest.of(0, 20));
+
+        assertThat(page.content()).hasSize(2);
+    }
+
+    @Test
+    void list_lineDtos_hydrateUidsAndDisplayFields() {
+        Grn grn = postable(null);
+        GrnLine line = grnLineRow(grn.getId(), null, new BigDecimal("5"), new BigDecimal("100"), null, null);
+
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        when(grns.findFiltered(COMPANY_ID, null, null, null, PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(grn)));
+        when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
+
+        PageDto<GrnDto> page = service.list(null, null, null, PageRequest.of(0, 20));
+
+        var lineDto = page.content().get(0).lines().get(0);
+        assertThat(lineDto.itemId()).isEqualTo(ITEM_ID);
+        assertThat(lineDto.itemUid()).isNotNull().hasSize(26);
+        assertThat(lineDto.itemCode()).isEqualTo("SKU1");
+        assertThat(lineDto.itemName()).isEqualTo("Sugar");
+        assertThat(lineDto.uomId()).isEqualTo(UOM_ID);
+        assertThat(lineDto.uomUid()).isNotNull().hasSize(26);
+        assertThat(lineDto.uomCode()).isEqualTo("KG");
+        assertThat(lineDto.vatGroupId()).isEqualTo(VAT_GROUP_ID);
+        assertThat(lineDto.vatGroupUid()).isNotNull().hasSize(26);
+        assertThat(lineDto.vatGroupName()).isEqualTo("Standard");
     }
 
     private Grn postable(Long lpoOrderId) {

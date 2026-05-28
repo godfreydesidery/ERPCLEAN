@@ -20,5 +20,13 @@ export const routes: Routes = [
   {
     path: 'payments',
     loadComponent: () => import('./payments.component').then(m => m.PaymentsComponent)
+  },
+  {
+    path: 'vendor-returns',
+    loadComponent: () => import('./vendor-returns.component').then(m => m.VendorReturnsComponent)
+  },
+  {
+    path: 'vendor-returns/new',
+    loadComponent: () => import('./vendor-return-create.component').then(m => m.VendorReturnCreateComponent)
   }
 ];

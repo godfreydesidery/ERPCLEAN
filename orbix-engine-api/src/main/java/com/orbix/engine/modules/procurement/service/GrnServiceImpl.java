@@ -1,8 +1,10 @@
 package com.orbix.engine.modules.procurement.service;
 
 import com.orbix.engine.modules.catalog.domain.entity.Item;
+import com.orbix.engine.modules.catalog.domain.entity.Uom;
 import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
+import com.orbix.engine.modules.catalog.repository.UomRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
@@ -11,6 +13,7 @@ import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
+import com.orbix.engine.modules.procurement.domain.dto.GrnLineDto;
 import com.orbix.engine.modules.procurement.domain.entity.Grn;
 import com.orbix.engine.modules.procurement.domain.entity.GrnLine;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrder;
@@ -57,6 +60,7 @@ public class GrnServiceImpl implements GrnService {
     private final LpoOrderRepository lpos;
     private final LpoOrderLineRepository lpoLines;
     private final ItemRepository items;
+    private final UomRepository uoms;
     private final VatGroupRepository vatGroups;
     private final StockMoveService stockMoveService;
     private final StockBatchService stockBatchService;
@@ -91,7 +95,7 @@ public class GrnServiceImpl implements GrnService {
                 "supplierId", grn.getSupplierId(),
                 F_LPO_ID, grn.getLpoOrderId() != null ? grn.getLpoOrderId() : -1L));
 
-        return GrnDto.from(grn, savedLines);
+        return GrnDto.from(grn, toLineDtos(savedLines));
     }
 
     private Map<Long, LpoOrderLine> resolveLpoLines(CreateGrnRequestDto request, Long companyId) {
@@ -261,7 +265,7 @@ public class GrnServiceImpl implements GrnService {
         postedPayload.put(F_LPO_ID, grn.getLpoOrderId());
         postedPayload.put("lines", linePayload);
         events.publish("GrnPosted.v1", AGG, String.valueOf(grn.getId()), postedPayload);
-        return GrnDto.from(grn, lines);
+        return GrnDto.from(grn, toLineDtos(lines));
     }
 
     @Override
@@ -281,7 +285,7 @@ public class GrnServiceImpl implements GrnService {
         payload.put("cancelledBy", context.userId());
         payload.put("cancelledAt", grn.getUpdatedAt());
         events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()), payload);
-        return GrnDto.from(grn, grnLines.findByGrnIdOrderByIdAsc(grn.getId()));
+        return GrnDto.from(grn, toLineDtos(grnLines.findByGrnIdOrderByIdAsc(grn.getId())));
     }
 
     @Override
@@ -322,7 +326,7 @@ public class GrnServiceImpl implements GrnService {
         payload.put("cancelledBy", actorId);
         payload.put("cancelledAt", grn.getUpdatedAt());
         events.publish("GrnCancelled.v1", AGG, String.valueOf(grn.getId()), payload);
-        return GrnDto.from(grn, lines);
+        return GrnDto.from(grn, toLineDtos(lines));
     }
 
     private void postCompensatingStockMoves(Grn grn, List<GrnLine> lines) {
@@ -371,21 +375,65 @@ public class GrnServiceImpl implements GrnService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<GrnDto> list(Long branchId, Pageable pageable) {
+    public PageDto<GrnDto> list(Long branchId, Long supplierId, GrnStatus status, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        Page<Grn> page = scope == null
-            ? grns.findByCompanyIdOrderByIdDesc(companyId, pageable)
-            : grns.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
-        return PageDto.of(page, g -> GrnDto.from(g, grnLines.findByGrnIdOrderByIdAsc(g.getId())));
+        Page<Grn> page = grns.findFiltered(companyId, scope, supplierId, status, pageable);
+        return PageDto.of(page, g -> GrnDto.from(g, toLineDtos(grnLines.findByGrnIdOrderByIdAsc(g.getId()))));
     }
 
     @Override
     @Transactional(readOnly = true)
     public GrnDto get(String uid) {
         Grn grn = requireGrnByUid(uid);
-        return GrnDto.from(grn, grnLines.findByGrnIdOrderByIdAsc(grn.getId()));
+        return GrnDto.from(grn, toLineDtos(grnLines.findByGrnIdOrderByIdAsc(grn.getId())));
     }
+
+    // -------------------------------------------------------------------------
+    // Hydration
+    // -------------------------------------------------------------------------
+
+    /**
+     * Converts raw {@link GrnLine} entities into fully-hydrated {@link GrnLineDto}s.
+     * Uid and display fields are looked up from catalog repositories so the
+     * frontend picker can pre-fill the vendor-return create form without a
+     * second round-trip. Silently uses null for any catalog entity that is not
+     * found (should not happen in a consistent DB, but defensive).
+     */
+    List<GrnLineDto> toLineDtos(List<GrnLine> lines) {
+        return lines.stream().map(this::toLineDto).toList();
+    }
+
+    private GrnLineDto toLineDto(GrnLine l) {
+        Item item = items.findById(l.getItemId()).orElse(null);
+        Uom uom = uoms.findById(l.getUomId()).orElse(null);
+        VatGroup vat = l.getVatGroupId() != null
+            ? vatGroups.findById(l.getVatGroupId()).orElse(null)
+            : null;
+        return new GrnLineDto(
+            l.getId(),
+            l.getLpoOrderLineId(),
+            l.getItemId(),
+            item != null ? item.getUid() : null,
+            item != null ? item.getCode() : null,
+            item != null ? item.getName() : null,
+            l.getUomId(),
+            uom != null ? uom.getUid() : null,
+            uom != null ? uom.getCode() : null,
+            l.getReceivedQty(),
+            l.getUnitCost(),
+            l.getVatGroupId(),
+            vat != null ? vat.getUid() : null,
+            vat != null ? vat.getName() : null,
+            l.getLineTotal(),
+            l.getBatchNo(),
+            l.getExpiryDate()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Guards
+    // -------------------------------------------------------------------------
 
     private Grn requireGrnByUid(String uid) {
         Grn grn = grns.findByUid(uid)

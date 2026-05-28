@@ -6,6 +6,7 @@ import com.orbix.engine.modules.procurement.domain.dto.CancelPostedGrnRequestDto
 import com.orbix.engine.modules.procurement.domain.dto.CancelReasonRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateGrnRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.GrnDto;
+import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import com.orbix.engine.modules.procurement.service.GrnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,9 +36,11 @@ public class GrnController {
 
     @GetMapping
     public PageDto<GrnDto> list(@RequestParam(required = false) Long branchId,
+                               @RequestParam(required = false) Long supplierId,
+                               @RequestParam(required = false) GrnStatus status,
                                @RequestParam(defaultValue = "0") int page,
                                @RequestParam(defaultValue = "20") int size) {
-        return service.list(branchId, PageRequest.of(page, size));
+        return service.list(branchId, supplierId, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{uid}")
