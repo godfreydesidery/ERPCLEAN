@@ -221,3 +221,56 @@ export interface RecentSupplierPaymentRow {
   totalAmount: number;
   currencyCode: string;
 }
+
+// ---------------------------------------------------------------------------
+// Slice G.2 — Debt write-off models
+// All Long-id fields typed string (global IdLongAsStringSerializerModifier).
+// ---------------------------------------------------------------------------
+
+/** Lifecycle of a debt write-off request. */
+export type DebtWriteOffStatus = 'PENDING_APPROVAL' | 'POSTED' | 'REJECTED';
+
+/** Discriminator — which side of the ledger the write-off targets. */
+export type DebtWriteOffTargetKind = 'CUSTOMER_INVOICE' | 'SUPPLIER_INVOICE';
+
+/**
+ * Wire shape of a {@code DebtWriteOffDto} returned by the backend.
+ * Long-id fields ({@code id}, {@code targetInvoiceId}, {@code requestedByUserId},
+ * {@code approvedByUserId}) serialise as JSON strings via the global
+ * {@code IdLongAsStringSerializerModifier}.
+ */
+export interface DebtWriteOff {
+  id: string;
+  uid: string;
+  targetKind: DebtWriteOffTargetKind;
+  targetInvoiceId: string;
+  targetInvoiceUid: string;
+  targetInvoiceNumber: string | null;
+  partyName: string | null;
+  amount: number;
+  currencyCode: string;
+  reason: string;
+  status: DebtWriteOffStatus;
+  requestedByUserId: string;
+  requestedByUsername: string | null;
+  requestedAt: string;    // ISO-8601
+  approvedByUserId: string | null;
+  approvedByUsername: string | null;
+  approvedAt: string | null;
+  postedAt: string | null;
+  rejectedAt: string | null;
+  reasonForReject: string | null;
+}
+
+/** Request body for POST /api/v1/debt/write-offs. */
+export interface CreateDebtWriteOffRequest {
+  targetKind: DebtWriteOffTargetKind;
+  targetInvoiceUid: string;
+  amount: number;
+  reason: string;
+}
+
+/** Request body for POST /api/v1/debt/write-offs/uid/{uid}/reject. */
+export interface RejectDebtWriteOffRequest {
+  reasonForReject: string;
+}

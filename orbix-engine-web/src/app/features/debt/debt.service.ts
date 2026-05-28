@@ -7,12 +7,17 @@ import { Page } from '../../core/api/page';
 import {
   AdjustCreditLimitRequest,
   AgingBucket,
+  CreateDebtWriteOffRequest,
   CreatePartyNoteRequest,
   CustomerStatement,
   DebtAging,
+  DebtWriteOff,
+  DebtWriteOffStatus,
+  DebtWriteOffTargetKind,
   DunningQueueRow,
   PartyNote,
   PartyNoteKind,
+  RejectDebtWriteOffRequest,
   SupplierAging,
   SupplierDunningQueueRow,
   SupplierStatement
@@ -193,6 +198,76 @@ export class DebtService {
   supplierStatement(uid: string): Observable<SupplierStatement> {
     return unwrap(this.http.get<ApiResponse<SupplierStatement>>(
       `${this.base}/debt/supplier/uid/${uid}`
+    ));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Slice G.2 — Write-off methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create and submit a write-off request.
+   * If amount is at or below the dual-approval threshold AND the caller holds
+   * {@code DEBT.WRITE_OFF.APPROVE}, the backend auto-posts (status POSTED).
+   * Otherwise returns status PENDING_APPROVAL.
+   * Backed by {@code POST /api/v1/debt/write-offs}; permission
+   * {@code DEBT.WRITE_OFF.REQUEST}.
+   */
+  createWriteOff(req: CreateDebtWriteOffRequest): Observable<DebtWriteOff> {
+    return unwrap(this.http.post<ApiResponse<DebtWriteOff>>(
+      `${this.base}/debt/write-offs`, req
+    ));
+  }
+
+  /**
+   * Paged list of write-off requests, newest-first.
+   * Filter by {@code status} and/or {@code kind} to narrow results.
+   * Backed by {@code GET /api/v1/debt/write-offs}; permission {@code DEBT.READ}.
+   */
+  listWriteOffs(
+    status?: DebtWriteOffStatus,
+    kind?: DebtWriteOffTargetKind,
+    page = 0,
+    size = 25
+  ): Observable<Page<DebtWriteOff>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (status) params = params.set('status', status);
+    if (kind) params = params.set('kind', kind);
+    return unwrap(this.http.get<ApiResponse<Page<DebtWriteOff>>>(
+      `${this.base}/debt/write-offs`, { params }
+    ));
+  }
+
+  /**
+   * Single write-off by uid.
+   * Backed by {@code GET /api/v1/debt/write-offs/uid/{uid}}; permission
+   * {@code DEBT.READ}.
+   */
+  getWriteOff(uid: string): Observable<DebtWriteOff> {
+    return unwrap(this.http.get<ApiResponse<DebtWriteOff>>(
+      `${this.base}/debt/write-offs/uid/${uid}`
+    ));
+  }
+
+  /**
+   * Approve a pending write-off. Transitions PENDING_APPROVAL → POSTED.
+   * Backed by {@code POST /api/v1/debt/write-offs/uid/{uid}/approve}; permission
+   * {@code DEBT.WRITE_OFF.APPROVE}.
+   */
+  approveWriteOff(uid: string): Observable<DebtWriteOff> {
+    return unwrap(this.http.post<ApiResponse<DebtWriteOff>>(
+      `${this.base}/debt/write-offs/uid/${uid}/approve`, {}
+    ));
+  }
+
+  /**
+   * Reject a pending write-off. Transitions PENDING_APPROVAL → REJECTED.
+   * Backed by {@code POST /api/v1/debt/write-offs/uid/{uid}/reject}; permission
+   * {@code DEBT.WRITE_OFF.APPROVE}.
+   */
+  rejectWriteOff(uid: string, req: RejectDebtWriteOffRequest): Observable<DebtWriteOff> {
+    return unwrap(this.http.post<ApiResponse<DebtWriteOff>>(
+      `${this.base}/debt/write-offs/uid/${uid}/reject`, req
     ));
   }
 }

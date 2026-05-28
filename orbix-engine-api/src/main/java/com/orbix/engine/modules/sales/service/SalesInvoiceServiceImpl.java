@@ -478,6 +478,15 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return false;
     }
 
+    @Override
+    @Transactional
+    public void applyWriteOff(Long invoiceId, BigDecimal amount) {
+        SalesInvoice invoice = invoices.findById(invoiceId)
+            .orElseThrow(() -> new NoSuchElementException("Sales invoice not found: " + invoiceId));
+        Long actorId = context.userId();
+        invoice.applyReceipt(amount, actorId);
+    }
+
     private SalesInvoice requireInvoiceByUid(String uid) {
         SalesInvoice invoice = invoices.findByUid(uid)
             .orElseThrow(() -> new NoSuchElementException("Sales invoice not found: " + uid));

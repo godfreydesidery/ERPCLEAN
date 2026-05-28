@@ -6,7 +6,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { DebtService } from './debt.service';
-import { CustomerStatement, PartyNote } from './debt.models';
+import { CustomerStatement, OpenInvoiceRow, PartyNote } from './debt.models';
+import { DebtWriteOffModalComponent } from './debt-write-off-modal.component';
 
 /**
  * Slice G — per-customer debt drill-down (US-DEBT-001).
@@ -14,6 +15,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
  * Composes four panels:
  *  1. Customer header — name + credit-limit + perm-gated adjust form.
  *  2. Open invoices table — from {@code customer.openInvoices}.
+ *     G.2: each row has a perm-gated "Write off" button.
  *  3. Recent receipts table — from {@code customer.recentReceipts}.
  *  4. Chase-notes activity log + append form (perm-gated on
  *     {@code DEBT.NOTE.CREATE}).
@@ -25,7 +27,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
 @Component({
   selector: 'orbix-debt-customer',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, DebtWriteOffModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -49,7 +51,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
 
     @if (permissionDenied()) {
       <div data-testid="debt-permission-required" class="alert alert-warning d-flex align-items-start gap-2">
-        <i class="bi bi-shield-lock mt-1"></i>
+        <i class="bi bi-shield-lock mt-1" aria-hidden="true"></i>
         <div class="flex-grow-1">
           <strong>Permission required.</strong>
           <span class="small d-block text-secondary">
@@ -59,11 +61,11 @@ import { CustomerStatement, PartyNote } from './debt.models';
       </div>
     } @else if (loading()) {
       <div class="text-center text-secondary small p-4">
-        <span class="spinner-border spinner-border-sm me-2"></span> Loading customer position…
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Loading customer position…
       </div>
     } @else if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2">
-        <i class="bi bi-exclamation-triangle-fill"></i>
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
         <span class="flex-grow-1">{{ error() }}</span>
       </div>
     } @else if (statement()) {
@@ -95,7 +97,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
                               type="button"
                               class="btn btn-sm btn-outline-secondary"
                               (click)="startEditLimit()">
-                        <i class="bi bi-pencil"></i> Adjust
+                        <i class="bi bi-pencil" aria-hidden="true"></i> Adjust
                       </button>
                     }
                   } @else {
@@ -113,7 +115,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
                             class="btn btn-sm btn-primary"
                             [disabled]="savingLimit()"
                             (click)="saveLimit()">
-                      <i class="bi bi-check-lg"></i> Save
+                      <i class="bi bi-check-lg" aria-hidden="true"></i> Save
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary"
                             [disabled]="savingLimit()"
@@ -148,17 +150,21 @@ import { CustomerStatement, PartyNote } from './debt.models';
               <p class="text-secondary small p-3 mb-0">No open invoices.</p>
             } @else {
               <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
+                <table class="table table-sm align-middle mb-0"
+                       aria-label="Open invoices for this customer">
                   <thead>
                     <tr>
-                      <th>Number</th>
-                      <th>Invoice date</th>
-                      <th>Due date</th>
-                      <th class="text-end">Total</th>
-                      <th class="text-end">Paid</th>
-                      <th class="text-end">Outstanding</th>
-                      <th class="text-end">Days overdue</th>
-                      <th>Status</th>
+                      <th scope="col">Number</th>
+                      <th scope="col">Invoice date</th>
+                      <th scope="col">Due date</th>
+                      <th scope="col" class="text-end">Total</th>
+                      <th scope="col" class="text-end">Paid</th>
+                      <th scope="col" class="text-end">Outstanding</th>
+                      <th scope="col" class="text-end">Days overdue</th>
+                      <th scope="col">Status</th>
+                      @if (canRequestWriteOff()) {
+                        <th scope="col" class="text-center">Actions</th>
+                      }
                     </tr>
                   </thead>
                   <tbody>
@@ -178,6 +184,17 @@ import { CustomerStatement, PartyNote } from './debt.models';
                           }
                         </td>
                         <td><span class="badge text-bg-light text-secondary">{{ inv.status }}</span></td>
+                        @if (canRequestWriteOff()) {
+                          <td class="text-center">
+                            <button type="button"
+                                    data-testid="write-off-btn"
+                                    class="btn btn-sm btn-outline-danger"
+                                    [attr.aria-label]="'Write off invoice ' + inv.number"
+                                    (click)="openWriteOffModal(inv)">
+                              Write off
+                            </button>
+                          </td>
+                        }
                       </tr>
                     }
                   </tbody>
@@ -197,13 +214,14 @@ import { CustomerStatement, PartyNote } from './debt.models';
               <p class="text-secondary small p-3 mb-0">No recent receipts.</p>
             } @else {
               <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
+                <table class="table table-sm align-middle mb-0"
+                       aria-label="Recent receipts for this customer">
                   <thead>
                     <tr>
-                      <th>Number</th>
-                      <th>Receipt date</th>
-                      <th>Currency</th>
-                      <th class="text-end">Amount</th>
+                      <th scope="col">Number</th>
+                      <th scope="col">Receipt date</th>
+                      <th scope="col">Currency</th>
+                      <th scope="col" class="text-end">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -250,7 +268,7 @@ import { CustomerStatement, PartyNote } from './debt.models';
                           class="btn btn-primary btn-sm"
                           [disabled]="savingNote() || !noteDraft.trim()"
                           (click)="saveNote()">
-                    <i class="bi bi-plus-lg"></i> Add note
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add note
                   </button>
                 </div>
               </div>
@@ -280,6 +298,17 @@ import { CustomerStatement, PartyNote } from './debt.models';
 
       </div>
     }
+
+    <!-- Write-off modal (Slice G.2) -->
+    <orbix-debt-write-off-modal
+      [visible]="writeOffModalVisible()"
+      [targetKind]="'CUSTOMER_INVOICE'"
+      [targetInvoiceUid]="writeOffInvoiceUid()"
+      [targetInvoiceNumber]="writeOffInvoiceNumber()"
+      [outstanding]="writeOffOutstanding()"
+      (writeOffCreated)="onWriteOffCreated()"
+      (closed)="closeWriteOffModal()">
+    </orbix-debt-write-off-modal>
   `,
   styles: [`
     :host { display: block; }
@@ -308,11 +337,20 @@ export class DebtCustomerComponent implements OnInit {
   protected readonly noteError = signal<string | null>(null);
   protected noteDraft = '';
 
+  // Write-off modal state (Slice G.2)
+  protected readonly writeOffModalVisible = signal(false);
+  protected readonly writeOffInvoiceUid = signal('');
+  protected readonly writeOffInvoiceNumber = signal<string | null>(null);
+  protected readonly writeOffOutstanding = signal(0);
+
   protected readonly canAdjustCreditLimit = computed(() =>
     this.auth.hasPermission('DEBT.CREDIT_LIMIT.UPDATE')
   );
   protected readonly canAddNote = computed(() =>
     this.auth.hasPermission('DEBT.NOTE.CREATE')
+  );
+  protected readonly canRequestWriteOff = computed(() =>
+    this.auth.hasPermission('DEBT.WRITE_OFF.REQUEST')
   );
 
   private customerUid = '';
@@ -347,7 +385,7 @@ export class DebtCustomerComponent implements OnInit {
   }
 
   protected saveLimit(): void {
-    if (this.limitDraft == null || isNaN(Number(this.limitDraft)) || Number(this.limitDraft) < 0) {
+    if (this.limitDraft == null || Number.isNaN(Number(this.limitDraft)) || Number(this.limitDraft) < 0) {
       this.limitError.set('Enter a non-negative number.');
       return;
     }
@@ -389,6 +427,24 @@ export class DebtCustomerComponent implements OnInit {
         this.savingNote.set(false);
       },
     });
+  }
+
+  /** Open the write-off modal seeded with the invoice row's data. */
+  protected openWriteOffModal(inv: OpenInvoiceRow): void {
+    this.writeOffInvoiceUid.set(inv.invoiceUid);
+    this.writeOffInvoiceNumber.set(inv.number);
+    this.writeOffOutstanding.set(inv.outstanding);
+    this.writeOffModalVisible.set(true);
+  }
+
+  protected closeWriteOffModal(): void {
+    this.writeOffModalVisible.set(false);
+  }
+
+  /** After a successful write-off, refresh the statement so the table updates. */
+  protected onWriteOffCreated(): void {
+    this.writeOffModalVisible.set(false);
+    this.load();
   }
 
   private load(): void {
