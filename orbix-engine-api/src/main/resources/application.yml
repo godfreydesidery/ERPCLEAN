@@ -111,6 +111,14 @@ orbix:
     # sum of its GRN allocations (0.005 = ±0.5%). Above this the match is
     # rejected — the operator must edit the allocations or the invoice totals.
     invoice-match-tolerance-pct: 0.005
+  debt:
+    write-off:
+      # Slice G.2 — write-off amount at or below which the requester may
+      # self-approve (status goes straight to POSTED) provided they also hold
+      # DEBT.WRITE_OFF.APPROVE. Above this threshold a second distinct user
+      # must approve (dual-control). Currency-agnostic: denominated in the
+      # company's functional currency (TZS for Tanzania-first deploys).
+      dual-approval-threshold: 100000
   sales:
     # Per-line discount percentage above which an authoriser holding
     # `SALES.DISCOUNT_APPROVE` is required. Set to 100 to disable.

@@ -115,4 +115,8 @@ public final class Permissions {
     public static final String DEBT_NOTE_CREATE         = "DEBT.NOTE.CREATE";
     public static final String DEBT_NOTE_ARCHIVE        = "DEBT.NOTE.ARCHIVE";
     public static final String DEBT_CREDIT_LIMIT_UPDATE = "DEBT.CREDIT_LIMIT.UPDATE";
+
+    // ---- debt write-off (Slice G.2 — dual-approval AR + AP write-off) ----
+    public static final String DEBT_WRITE_OFF_REQUEST = "DEBT.WRITE_OFF.REQUEST";
+    public static final String DEBT_WRITE_OFF_APPROVE = "DEBT.WRITE_OFF.APPROVE";
 }

@@ -5,6 +5,8 @@ import com.orbix.engine.modules.procurement.domain.dto.CreateSupplierInvoiceRequ
 import com.orbix.engine.modules.procurement.domain.dto.SupplierInvoiceDto;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
+
 /**
  * Supplier invoice + 3-way match against GRNs (F3.3). Creating an invoice
  * captures header totals + allocations to one or more POSTED GRNs (same
@@ -25,4 +27,18 @@ public interface SupplierInvoiceService {
     PageDto<SupplierInvoiceDto> list(Long branchId, Pageable pageable);
 
     SupplierInvoiceDto get(String uid);
+
+    /**
+     * Slice G.2 — debt write-off. Advances {@code paidAmount} by {@code amount}
+     * on the given invoice (must be POSTED or PARTIALLY_PAID) within the
+     * caller's transaction. Throws {@link IllegalStateException} if the
+     * invoice is in a non-payable status; {@link IllegalArgumentException}
+     * if the amount would overpay.
+     *
+     * <p>ADR-0004 sync-TX exemption #20: called by
+     * {@code DebtWriteOffServiceImpl} in the same DB tx as the write-off
+     * record so the invariant "if write-off is POSTED, invoice paidAmount
+     * reflects it" holds strictly.
+     */
+    void applyWriteOff(Long invoiceId, BigDecimal amount);
 }

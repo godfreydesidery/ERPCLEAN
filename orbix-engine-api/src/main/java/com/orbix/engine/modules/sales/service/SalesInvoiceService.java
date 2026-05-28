@@ -8,6 +8,8 @@ import com.orbix.engine.modules.sales.domain.dto.SalesInvoiceDto;
 import com.orbix.engine.modules.sales.domain.dto.VoidSalesInvoiceRequestDto;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
+
 /**
  * Back-office sales invoices (F4.2). DRAFT → POSTED writes the outbound
  * stock_move rows, snaps line cost from the balance avg, applies the
@@ -50,4 +52,18 @@ public interface SalesInvoiceService {
     PageDto<SalesInvoiceDto> list(Long branchId, String status, Pageable pageable);
 
     SalesInvoiceDto get(String uid);
+
+    /**
+     * Slice G.2 — debt write-off. Advances {@code paidAmount} by {@code amount}
+     * on the given invoice (must be POSTED or PARTIALLY_PAID) within the
+     * caller's transaction. Throws {@link IllegalStateException} if the
+     * invoice is in a non-payable status; {@link IllegalArgumentException}
+     * if the amount would overpay.
+     *
+     * <p>ADR-0004 sync-TX exemption #20: called by
+     * {@code DebtWriteOffServiceImpl} in the same DB tx as the write-off
+     * record so the invariant "if write-off is POSTED, invoice paidAmount
+     * reflects it" holds strictly.
+     */
+    void applyWriteOff(Long invoiceId, BigDecimal amount);
 }

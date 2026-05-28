@@ -208,6 +208,15 @@ public class SupplierInvoiceServiceImpl implements SupplierInvoiceService {
         return invoice;
     }
 
+    @Override
+    @Transactional
+    public void applyWriteOff(Long invoiceId, BigDecimal amount) {
+        SupplierInvoice invoice = invoices.findById(invoiceId)
+            .orElseThrow(() -> new NoSuchElementException("Supplier invoice not found: " + invoiceId));
+        Long actorId = context.userId();
+        invoice.applyPayment(amount, actorId);
+    }
+
     private Supplier requireSupplier(Long supplierId) {
         // Company scoping is enforced via the GRN allocation validation: every
         // referenced GRN is loaded by company, and its supplier_id must match
