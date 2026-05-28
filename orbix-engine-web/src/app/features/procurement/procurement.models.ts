@@ -223,3 +223,82 @@ export interface CreateSupplierPaymentRequest {
   notes: string | null;
   allocations: CreateSupplierPaymentAllocation[];
 }
+
+// ---- Slice H.1: vendor returns + vendor credit notes -----------------------
+
+export type VendorReturnStatus = 'DRAFT' | 'POSTED' | 'CREDITED';
+export type VendorCreditNoteStatus = 'POSTED' | 'PARTIALLY_ALLOCATED' | 'FULLY_ALLOCATED';
+export type ReturnReason = 'DAMAGED' | 'WRONG_ITEM' | 'EXPIRED' | 'OTHER';
+
+export const VENDOR_RETURN_REASONS: ReturnReason[] = ['DAMAGED', 'WRONG_ITEM', 'EXPIRED', 'OTHER'];
+
+export interface VendorReturn {
+  id: string; uid: string; number: string;
+  supplierId: string; supplierUid: string | null;
+  originalGrnId: string | null; originalGrnNumber: string | null;
+  originalSupplierInvoiceId: string | null;
+  returnDate: string;
+  reason: ReturnReason; restock: boolean;
+  totalAmount: number; status: VendorReturnStatus;
+  postedAt: string | null;
+  notes: string | null;
+  lines: VendorReturnLine[];
+}
+
+export interface VendorReturnLine {
+  id: string;
+  lineNo: number;
+  itemId: string; itemName: string | null;
+  uomId: string; uomCode: string | null;
+  returnedQty: number; unitPrice: number;
+  vatGroupId: string;
+  taxAmount: number; lineTotal: number;
+  originalLineId: string | null;
+}
+
+export interface VendorCreditNote {
+  id: string; uid: string; number: string;
+  supplierId: string; supplierUid: string | null;
+  vendorReturnId: string | null;
+  cnDate: string; currencyCode: string;
+  totalAmount: number; allocatedAmount: number; availableAmount: number;
+  status: VendorCreditNoteStatus;
+  notes: string | null;
+  allocations: VendorCreditNoteAllocation[] | null;
+}
+
+export interface VendorCreditNoteAllocation {
+  id: string;
+  supplierInvoiceId: string; supplierInvoiceNumber: string | null;
+  amount: number;
+  allocatedAt: string;
+  allocatedBy: string | null;
+}
+
+export interface CreateVendorReturnRequest {
+  supplierUid: string;
+  originalGrnUid?: string;
+  originalSupplierInvoiceUid?: string;
+  returnDate: string;
+  reason: ReturnReason;
+  restock: boolean;
+  notes?: string;
+  lines: Array<{
+    itemUid: string;
+    uomUid: string;
+    returnedQty: number;
+    unitPrice: number;
+    vatGroupUid: string;
+    originalLineId?: string;
+  }>;
+}
+
+export interface IssueVendorCreditNoteRequest {
+  cnDate: string;
+  notes?: string;
+}
+
+export interface ApplyVendorCreditNoteRequest {
+  supplierInvoiceUid: string;
+  amount: number;
+}
