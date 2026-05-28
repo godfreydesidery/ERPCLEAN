@@ -2,8 +2,10 @@ package com.orbix.engine.modules.stock.service;
 
 import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostAdjustmentRequestDto;
@@ -19,13 +21,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class AdjustmentServiceImpl implements AdjustmentService {
 
-    static final String APPROVE_PERMISSION = "STOCK.ADJUST_APPROVE";
+    static final String APPROVE_PERMISSION = Permissions.STOCK_ADJUST_APPROVE;
 
     private final StockMoveService stockMoveService;
     private final ItemBranchBalanceRepository balances;
@@ -33,6 +38,7 @@ public class AdjustmentServiceImpl implements AdjustmentService {
     private final RequestContext context;
     private final BranchScope branchScope;
     private final SettingsService settings;
+    private final EventPublisher events;
 
     @Override
     @Transactional
@@ -43,12 +49,30 @@ public class AdjustmentServiceImpl implements AdjustmentService {
         }
         branchScope.requireAccess(request.branchId());
         Long actorId = context.userId();
-        BigDecimal value = monetaryImpact(request);
-        boolean aboveThreshold = value.compareTo(settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD)) > 0;
+
+        // Pre-check the negative-stock invariant FIRST so a caller missing the
+        // STOCK.OVERSELL override receives the right hint (the StockMoveService
+        // throws the same shape but with this message, regardless of any
+        // authoriser dual-control path. Without this pre-check, the dual-control
+        // "authoriser required" message would win when the adjustment is also
+        // above the monetary threshold).
+        Optional<ItemBranchBalance> existing = balances.findById(
+            new ItemBranchBalanceId(request.itemId(), request.branchId()));
+        if (request.qty().signum() < 0 && !request.allowOversell()
+                && existing.map(b -> b.wouldGoNegative(request.qty().abs())).orElse(true)) {
+            throw new IllegalArgumentException(
+                "Insufficient stock for item " + request.itemId() + " at branch "
+                    + request.branchId() + " — caller needs " + Permissions.STOCK_OVERSELL
+                    + " to override");
+        }
+
+        BigDecimal value = monetaryImpact(request, existing);
+        boolean aboveThreshold = value.compareTo(
+            settings.getDecimal(SettingKey.STOCK_ADJUSTMENT_THRESHOLD)) > 0;
         boolean needsAuthoriser = aboveThreshold || request.allowOversell();
         validateAuthoriser(request.authorisedByUserId(), actorId, needsAuthoriser);
 
-        return stockMoveService.post(new PostStockMoveRequestDto(
+        StockMoveDto move = stockMoveService.post(new PostStockMoveRequestDto(
             request.itemId(),
             request.branchId(),
             request.qty(),
@@ -63,16 +87,35 @@ public class AdjustmentServiceImpl implements AdjustmentService {
             null,  // consumption_category not applicable to adjustments
             request.authorisedByUserId()
         ));
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("stockMoveId", move.id());
+        payload.put("itemId", request.itemId());
+        payload.put("branchId", request.branchId());
+        payload.put("qty", request.qty());
+        payload.put("unitCost", request.unitCost());
+        payload.put("direction", move.direction());
+        payload.put("moveType", move.moveType());
+        payload.put("refType", "Adjustment");
+        payload.put("refId", request.itemId());
+        payload.put("reason", request.reason());
+        payload.put("actorId", actorId);
+        payload.put("authorisedByUserId", request.authorisedByUserId());
+        payload.put("aboveThreshold", aboveThreshold);
+        payload.put("oversell", request.allowOversell());
+        events.publish("StockAdjusted.v1", "StockMove",
+            String.valueOf(move.id()), payload);
+
+        return move;
     }
 
-    private BigDecimal monetaryImpact(PostAdjustmentRequestDto request) {
+    private BigDecimal monetaryImpact(PostAdjustmentRequestDto request,
+                                      Optional<ItemBranchBalance> existing) {
         BigDecimal unitValue;
         if (request.qty().signum() > 0) {
             unitValue = request.unitCost() != null ? request.unitCost() : BigDecimal.ZERO;
         } else {
-            unitValue = balances.findById(new ItemBranchBalanceId(request.itemId(), request.branchId()))
-                .map(ItemBranchBalance::getAvgCost)
-                .orElse(BigDecimal.ZERO);
+            unitValue = existing.map(ItemBranchBalance::getAvgCost).orElse(BigDecimal.ZERO);
         }
         return request.qty().abs().multiply(unitValue);
     }

@@ -18,10 +18,10 @@ public interface CustomerService {
 
     CustomerResponseDto updateCustomerByPartyUid(String partyUid, UpdateCustomerRequestDto request);
 
-    /** Deactivates the underlying party (affects every role on it). */
-    void deactivateCustomerByPartyUid(String partyUid);
+    /** Archives the underlying party (affects every role on it). */
+    void archiveCustomerByPartyUid(String partyUid);
 
-    /** Reactivates the underlying party (affects every role on it). */
+    /** Restores the underlying party to ACTIVE (affects every role on it). */
     void activateCustomerByPartyUid(String partyUid);
 
     /** Provisions the synthetic per-branch walk-in customer; idempotent-friendly caller. */

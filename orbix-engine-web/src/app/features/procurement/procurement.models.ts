@@ -33,6 +33,7 @@ export interface LpoOrder {
   approvedBy: string | null;
   approvedAt: string | null;
   notes: string | null;
+  cancellationReason: string | null;
   lines: LpoOrderLine[];
 }
 
@@ -99,6 +100,7 @@ export interface Grn {
   postedAt: string | null;
   postedBy: string | null;
   notes: string | null;
+  cancellationReason: string | null;
   lines: GrnLine[];
 }
 

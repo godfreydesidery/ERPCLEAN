@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.service;
 
+import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockTransferRequestDto;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -48,6 +50,7 @@ class StockTransferServiceImplTest {
     @Mock private StockTransferLineRepository transferLines;
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private StockMoveService stockMoveService;
+    @Mock private EventPublisher events;
     @Mock private RequestContext context;
     @Mock private BranchScope branchScope;
 
@@ -117,6 +120,7 @@ class StockTransferServiceImplTest {
         verify(stockMoveService).post(move.capture());
         assertThat(move.getValue().qty()).isEqualByComparingTo("-5");
         assertThat(move.getValue().moveType()).isEqualTo(StockMoveType.TRANSFER_OUT);
+        verify(events).publish(eq("StockTransferIssued.v1"), eq("StockTransfer"), any(), any());
     }
 
     @Test
@@ -137,6 +141,7 @@ class StockTransferServiceImplTest {
         assertThat(move.getValue().branchId()).isEqualTo(TO_BRANCH);
         assertThat(move.getValue().qty()).isEqualByComparingTo("5");
         assertThat(move.getValue().moveType()).isEqualTo(StockMoveType.TRANSFER_IN);
+        verify(events).publish(eq("StockTransferReceived.v1"), eq("StockTransfer"), any(), any());
     }
 
     @Test

@@ -40,9 +40,10 @@ class LpoOrderDtoJsonTest {
             new BigDecimal("1000.0000"),
             new BigDecimal("180.0000"),
             new BigDecimal("1180.0000"),
-            LpoOrderStatus.DRAFT,
+            LpoOrderStatus.CANCELLED,
             null,
             null,
+            "Supplier withdrew; replacement quote pending",
             null,
             List.of()
         );
@@ -56,5 +57,8 @@ class LpoOrderDtoJsonTest {
         assertThat(json).contains("\"supplierId\":\"808\"");
         // Genuine numerics untouched.
         assertThat(json).contains("\"totalAmount\":1180.0000");
+        // Cancellation reason is a plain string (not an id, not a numeric).
+        assertThat(json).contains("\"cancellationReason\":\"Supplier withdrew; replacement quote pending\"");
+        assertThat(json).contains("\"status\":\"CANCELLED\"");
     }
 }

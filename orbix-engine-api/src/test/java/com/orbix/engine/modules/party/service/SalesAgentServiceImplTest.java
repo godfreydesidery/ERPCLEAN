@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Focused on the route-assignment validation added to sales agents. */
@@ -85,5 +86,19 @@ class SalesAgentServiceImplTest {
         assertThatThrownBy(() -> service.updateSalesAgentByPartyUid(PARTY_UID, req(ROUTE_ID)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("not active");
+    }
+
+    @Test
+    void archiveSalesAgent_delegatesToPartyService() {
+        service.archiveSalesAgentByPartyUid(PARTY_UID);
+
+        verify(partyService).archive(PARTY_ID);
+    }
+
+    @Test
+    void activateSalesAgent_delegatesToPartyService() {
+        service.activateSalesAgentByPartyUid(PARTY_UID);
+
+        verify(partyService).activate(PARTY_ID);
     }
 }

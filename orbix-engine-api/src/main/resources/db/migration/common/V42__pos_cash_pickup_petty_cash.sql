@@ -5,6 +5,7 @@
 
 CREATE TABLE cash_pickup (
     id                BIGINT         NOT NULL PRIMARY KEY,
+    uid               CHAR(26)       NOT NULL,
     till_session_id   BIGINT         NOT NULL,
     company_id        BIGINT         NOT NULL,
     branch_id         BIGINT         NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE cash_pickup (
     authorised_by     BIGINT         NOT NULL,
     note              VARCHAR(200),
     created_at        TIMESTAMP      NOT NULL,
+    CONSTRAINT uk_cash_pickup_uid UNIQUE (uid),
     CONSTRAINT fk_cash_pickup_session FOREIGN KEY (till_session_id) REFERENCES till_session (id),
     CONSTRAINT fk_cash_pickup_company FOREIGN KEY (company_id)      REFERENCES company      (id),
     CONSTRAINT fk_cash_pickup_branch  FOREIGN KEY (branch_id)       REFERENCES branch       (id)
@@ -24,6 +26,7 @@ CREATE INDEX ix_cash_pickup_branch_date ON cash_pickup (branch_id, business_date
 
 CREATE TABLE petty_cash (
     id                       BIGINT         NOT NULL PRIMARY KEY,
+    uid                      CHAR(26)       NOT NULL,
     till_session_id          BIGINT,
     company_id               BIGINT         NOT NULL,
     branch_id                BIGINT         NOT NULL,
@@ -37,6 +40,7 @@ CREATE TABLE petty_cash (
     description              VARCHAR(2000),
     receipt_attachment_key   VARCHAR(200),
     created_at               TIMESTAMP      NOT NULL,
+    CONSTRAINT uk_petty_cash_uid UNIQUE (uid),
     CONSTRAINT fk_petty_cash_session FOREIGN KEY (till_session_id) REFERENCES till_session (id),
     CONSTRAINT fk_petty_cash_company FOREIGN KEY (company_id)      REFERENCES company      (id),
     CONSTRAINT fk_petty_cash_branch  FOREIGN KEY (branch_id)       REFERENCES branch       (id)

@@ -10,6 +10,7 @@ import {
   Page,
   PostAdjustmentRequest,
   PostInternalConsumptionRequest,
+  PostStockCountRequest,
   ReceiveTransferRequest,
   RecallStockBatchRequest,
   RecordCountsRequest,
@@ -17,6 +18,7 @@ import {
   StockBatchStatus,
   StockCount,
   StockMove,
+  StockNegativeReportRow,
   StockTransfer
 } from './stock.models';
 
@@ -25,8 +27,19 @@ export class StockService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listBalances(branchId: string): Observable<ItemBranchBalance[]> {
-    const params = new HttpParams().set('branchId', branchId);
+  /**
+   * Slice F — list balances for a branch. {@code opts.negativeOnly} keeps
+   * only rows with {@code qtyOnHand < 0}; {@code opts.belowReorderOnly}
+   * keeps only rows at or below reorder min. Both default to false (today's
+   * behaviour). Backend pinned to {@code STOCK.COUNT}.
+   */
+  listBalances(
+    branchId: string,
+    opts?: { negativeOnly?: boolean; belowReorderOnly?: boolean }
+  ): Observable<ItemBranchBalance[]> {
+    let params = new HttpParams().set('branchId', branchId);
+    if (opts?.negativeOnly) params = params.set('negativeOnly', 'true');
+    if (opts?.belowReorderOnly) params = params.set('belowReorderOnly', 'true');
     return unwrap(this.http.get<ApiResponse<ItemBranchBalance[]>>(
       `${this.base}/balances`, { params }
     ));
@@ -68,8 +81,16 @@ export class StockService {
     return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/close`, {}));
   }
 
-  postCount(uid: string): Observable<StockCount> {
-    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/post`, {}));
+  /**
+   * Post the (closed) count. The optional {@code request.authorisedByUserId} is
+   * sent only when present; the backend requires it when the net variance value
+   * exceeds the dual-control threshold (STOCK.COUNT_APPROVE).
+   */
+  postCount(uid: string, request?: PostStockCountRequest): Observable<StockCount> {
+    const body = request?.authorisedByUserId
+      ? { authorisedByUserId: request.authorisedByUserId }
+      : {};
+    return unwrap(this.http.post<ApiResponse<StockCount>>(`${this.base}/stock-counts/uid/${uid}/post`, body));
   }
 
   // ---- stock transfers ------------------------------------------------------
@@ -139,13 +160,39 @@ export class StockService {
 
   // ---- adjustments + internal consumption (F2.5) ----------------------------
 
-  postAdjustment(request: PostAdjustmentRequest): Observable<StockMove> {
-    return unwrap(this.http.post<ApiResponse<StockMove>>(`${this.base}/adjustments`, request));
+  /**
+   * Post a stock adjustment. The optional {@code allowOversell} override
+   * shadows {@code request.allowOversell} — the inline override form in
+   * {@link AdjustComponent} calls this with {@code true} when re-submitting
+   * after the backend's negative-stock guard fires and the caller holds
+   * STOCK.OVERSELL.
+   */
+  postAdjustment(request: PostAdjustmentRequest, allowOversell?: boolean): Observable<StockMove> {
+    const body: PostAdjustmentRequest = allowOversell === undefined
+      ? request
+      : { ...request, allowOversell };
+    return unwrap(this.http.post<ApiResponse<StockMove>>(`${this.base}/adjustments`, body));
   }
 
   postInternalConsumption(request: PostInternalConsumptionRequest): Observable<StockMove> {
     return unwrap(this.http.post<ApiResponse<StockMove>>(
       `${this.base}/internal-consumption`, request
+    ));
+  }
+
+  // ---- Slice E1: negative-stock report --------------------------------------
+
+  /**
+   * Fetch the items currently in negative on-hand. {@code branchId=null} returns
+   * the company-wide list. Backed by {@code GET /api/v1/reports/stock-negative}
+   * (permission {@code STOCK.COUNT}); callers should treat 403 as a UX state,
+   * not an error.
+   */
+  getNegativeStockReport(branchId: string | null): Observable<StockNegativeReportRow[]> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    return unwrap(this.http.get<ApiResponse<StockNegativeReportRow[]>>(
+      `${this.base}/reports/stock-negative`, { params }
     ));
   }
 }

@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
@@ -35,13 +35,13 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
     @if (error()) {
       <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
         <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="error.set(null)"></button>
       </div>
     }
     @if (info()) {
       <div class="alert alert-success d-flex align-items-center gap-2 py-2">
         <i class="bi bi-check-circle-fill"></i><span class="flex-grow-1">{{ info() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="info.set(null)"></button>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss" (click)="info.set(null)"></button>
       </div>
     }
 
@@ -49,7 +49,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">Draft LPO</h2>
-          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
+          <button class="btn-close btn-sm" aria-label="Close" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3">
           <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
@@ -121,9 +121,21 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
     <div class="row g-3 g-md-4">
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <div class="card-header bg-white border-bottom p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h2 class="h6 fw-bold mb-0 text-dark">LPOs</h2>
-            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label small fw-semibold text-secondary mb-0" for="lpoStatusFilter">Status</label>
+              <select id="lpoStatusFilter"
+                      data-testid="status-filter"
+                      class="form-select form-select-sm"
+                      [(ngModel)]="statusFilter"
+                      (ngModelChange)="onStatusChange($event)">
+                @for (opt of statusOptions; track opt) {
+                  <option [value]="opt">{{ statusLabelFor(opt) }}</option>
+                }
+              </select>
+              <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            </div>
           </div>
           @if (lpos().length === 0) {
             <div class="p-5 text-center">
@@ -136,6 +148,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                 <li>
                   <button type="button" class="lpo-row"
                           [class.is-active]="selected()?.id === l.id"
+                          [title]="l.cancellationReason ? ('Cancelled: ' + l.cancellationReason) : null"
                           (click)="select(l)">
                     <div class="flex-grow-1 min-w-0">
                       <div class="d-flex align-items-center gap-2 mb-1">
@@ -181,7 +194,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                     <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="submit(lpo)">
                       <i class="bi bi-send"></i> Submit
                     </button>
-                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(lpo)">
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="openCancel(lpo)">
                       <i class="bi bi-x-circle"></i> Cancel
                     </button>
                   }
@@ -189,12 +202,48 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                     <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="approve(lpo)">
                       <i class="bi bi-check2-circle"></i> Approve
                     </button>
-                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="cancel(lpo)">
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" [disabled]="busy()" (click)="openCancel(lpo)">
+                      <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  }
+                  @if (lpo.status === 'APPROVED' && canCancelLpo()) {
+                    <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                            [disabled]="busy()" (click)="openCancel(lpo)"
+                            title="Cancel this approved LPO. Blocked if a GRN has already been posted against it.">
                       <i class="bi bi-x-circle"></i> Cancel
                     </button>
                   }
                 </div>
               </div>
+
+              @if (cancelTarget()?.id === lpo.id) {
+                <form (ngSubmit)="confirmCancel()" #cf="ngForm" class="cancel-form mb-3">
+                  <label class="form-label small fw-semibold text-secondary" [attr.for]="'lpo-cancel-reason-' + lpo.id">
+                    Reason
+                    @if (lpo.status === 'APPROVED') {
+                      <span class="text-danger" aria-hidden="true">*</span>
+                      <span class="visually-hidden">required</span>
+                    } @else {
+                      <span class="text-muted">(optional)</span>
+                    }
+                  </label>
+                  <textarea [id]="'lpo-cancel-reason-' + lpo.id"
+                            class="form-control" name="reason" rows="2" maxlength="500"
+                            [(ngModel)]="cancelReason"
+                            [required]="lpo.status === 'APPROVED'"
+                            placeholder="Why is this LPO being cancelled?"></textarea>
+                  <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1"
+                            [disabled]="busy() || cf.invalid">
+                      @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
+                      @else { <i class="bi bi-x-circle"></i> }
+                      Confirm cancel
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            [disabled]="busy()" (click)="closeCancel()">Keep LPO</button>
+                  </div>
+                </form>
+              }
 
               <div class="row g-2 totals-row mb-3">
                 <div class="col-6 col-md-4">
@@ -223,6 +272,10 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                 @if (lpo.notes) {
                   <dt class="col-4 text-secondary">Notes</dt>
                   <dd class="col-8 mb-1">{{ lpo.notes }}</dd>
+                }
+                @if (lpo.cancellationReason) {
+                  <dt class="col-4 text-secondary">Cancellation reason</dt>
+                  <dd class="col-8 mb-1">{{ lpo.cancellationReason }}</dd>
                 }
               </dl>
             </div>
@@ -343,13 +396,27 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
       background: #e0ecff; color: #1d4ed8; font-size: 1.75rem;
       display: flex; align-items: center; justify-content: center;
     }
+
+    .cancel-form {
+      background: #fff7f7; border: 1px solid #fecaca; border-radius: 10px;
+      padding: 0.875rem 1rem;
+    }
   `]
 })
 export class LposComponent implements OnInit {
   private readonly procurement = inject(ProcurementService);
   private readonly branchService = inject(BranchService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly currencyService = inject(CurrencyService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  /** Slice F — LPO status bucket (URL-driven). {@code ALL} is the local sentinel. */
+  protected readonly statusOptions = [
+    'ALL', 'DRAFT', 'PENDING_APPROVAL', 'APPROVED',
+    'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED',
+  ] as const;
+  protected statusFilter: typeof this.statusOptions[number] = 'ALL';
 
   protected readonly lpos = signal<LpoOrder[]>([]);
   protected readonly pageNo = signal(0);
@@ -361,6 +428,11 @@ export class LposComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
   protected readonly showForm = signal(false);
+  protected readonly cancelTarget = signal<LpoOrder | null>(null);
+  protected cancelReason = '';
+  protected readonly canCancelLpo = computed(() =>
+    this.auth.hasPermission('PROCUREMENT.CANCEL_LPO') || this.auth.hasPermission('PROCUREMENT.MANAGE_LPO')
+  );
   protected readonly currencies = signal<Currency[]>([]);
   protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
     this.currencies()
@@ -382,17 +454,44 @@ export class LposComponent implements OnInit {
   protected newUnitPrice: number | null = null;
 
   ngOnInit(): void {
-    this.refresh();
     this.currencyService.listCurrencies().subscribe({
       next: list => this.currencies.set(list),
       error: () => this.currencies.set([])
     });
+    // Slice F — query-param-driven status filter. Read on every URL change so
+    // deep-links from the dashboard alert pre-apply the matching bucket.
+    this.route.queryParamMap.subscribe(params => {
+      const status = params.get('status');
+      this.statusFilter = (status && this.isKnownStatus(status)) ? status : 'ALL';
+      this.pageNo.set(0);
+      this.refresh();
+    });
+  }
+
+  protected onStatusChange(value: string): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { status: value === 'ALL' ? null : value },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  protected statusLabelFor(opt: string): string {
+    if (opt === 'ALL') return 'All';
+    if (opt === 'PENDING_APPROVAL') return 'Pending';
+    if (opt === 'PARTIALLY_RECEIVED') return 'Part-recv';
+    return opt.charAt(0) + opt.slice(1).toLowerCase().replaceAll('_', ' ');
+  }
+
+  private isKnownStatus(s: string): s is typeof this.statusOptions[number] {
+    return (this.statusOptions as readonly string[]).includes(s);
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.procurement.listLpos(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+    const status = this.statusFilter === 'ALL' ? null : this.statusFilter;
+    this.procurement.listLpos(this.branchId(), this.pageNo(), this.pageSize, status).subscribe({
       next: page => {
         this.lpos.set(page.content);
         this.total.set(page.totalElements);
@@ -409,7 +508,10 @@ export class LposComponent implements OnInit {
     this.refresh();
   }
 
-  select(lpo: LpoOrder): void { this.selected.set(lpo); }
+  select(lpo: LpoOrder): void {
+    this.selected.set(lpo);
+    if (this.cancelTarget()?.id !== lpo.id) this.closeCancel();
+  }
 
   statusLabel(status: string): string {
     if (status === 'PENDING_APPROVAL') return 'PENDING';
@@ -458,9 +560,30 @@ export class LposComponent implements OnInit {
     this.run(this.procurement.approveLpo(lpo.uid), `LPO approved.`);
   }
 
-  cancel(lpo: LpoOrder): void {
-    if (!globalThis.confirm(`Cancel ${lpo.number}?`)) return;
-    this.run(this.procurement.cancelLpo(lpo.uid), `LPO cancelled.`);
+  openCancel(lpo: LpoOrder): void {
+    this.cancelTarget.set(lpo);
+    this.cancelReason = '';
+    this.error.set(null);
+  }
+
+  closeCancel(): void {
+    this.cancelTarget.set(null);
+    this.cancelReason = '';
+  }
+
+  confirmCancel(): void {
+    const lpo = this.cancelTarget();
+    if (!lpo) return;
+    const reason = this.cancelReason.trim();
+    if (lpo.status === 'APPROVED' && reason.length === 0) {
+      this.error.set('A reason is required when cancelling an approved LPO.');
+      return;
+    }
+    this.run(
+      this.procurement.cancelLpo(lpo.uid, reason.length > 0 ? reason : null),
+      `LPO ${lpo.number} cancelled.`
+    );
+    this.closeCancel();
   }
 
   private run(op: Observable<LpoOrder>, successMessage: string): void {

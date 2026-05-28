@@ -7,6 +7,7 @@ import com.orbix.engine.modules.stock.service.StockMoveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,9 +32,19 @@ public class StockController {
             PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "at")));
     }
 
+    /**
+     * Slice F — list (item, branch) balances for the drill-through.
+     * {@code negativeOnly} keeps only rows with {@code qtyOnHand &lt; 0};
+     * {@code belowReorderOnly} keeps only rows at or below reorder min.
+     * Pinned to {@code STOCK.COUNT} (closes Slice E1 GAP 5.A).
+     */
     @GetMapping("/balances")
-    public List<ItemBranchBalanceDto> listBalances(@RequestParam Long branchId) {
-        return service.listBalances(branchId);
+    @PreAuthorize("hasAuthority('STOCK.COUNT')")
+    public List<ItemBranchBalanceDto> listBalances(
+            @RequestParam Long branchId,
+            @RequestParam(defaultValue = "false") boolean negativeOnly,
+            @RequestParam(defaultValue = "false") boolean belowReorderOnly) {
+        return service.listBalances(branchId, negativeOnly, belowReorderOnly);
     }
 
     @GetMapping("/stock-card")

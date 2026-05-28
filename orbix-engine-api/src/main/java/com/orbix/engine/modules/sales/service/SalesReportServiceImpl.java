@@ -17,6 +17,7 @@ import com.orbix.engine.modules.pos.service.TillReportService;
 import com.orbix.engine.modules.procurement.domain.entity.Grn;
 import com.orbix.engine.modules.procurement.domain.enums.GrnStatus;
 import com.orbix.engine.modules.procurement.repository.GrnRepository;
+import com.orbix.engine.modules.sales.domain.dto.ArSummaryDto;
 import com.orbix.engine.modules.sales.domain.dto.DailySalesRowDto;
 import com.orbix.engine.modules.sales.domain.dto.DailySummaryDto;
 import com.orbix.engine.modules.sales.domain.dto.ZHistoryEntryDto;
@@ -175,6 +176,26 @@ public class SalesReportServiceImpl implements SalesReportService {
     // ---------------------------------------------------------------------
     // Z-history (US-RPT-003)
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // AR-summary (Slice C — dashboard tile feed)
+    // ---------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public ArSummaryDto arSummary(Long branchId) {
+        Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
+        LocalDate today = LocalDate.now();
+        BigDecimal outstanding = invoices.sumOutstandingForBranch(companyId, scope);
+        long openInvoices = invoices.countOpenForBranch(companyId, scope);
+        long overdueInvoices = invoices.countOverdueForBranch(companyId, scope, today);
+        // TZS is the Orbix Tanzania default; the company-wide currency setting
+        // is not yet a first-class app_setting (tracked under §16 open
+        // questions). Frontend re-reads it from the company profile when
+        // multi-currency lands.
+        return new ArSummaryDto(outstanding, overdueInvoices, openInvoices, "TZS");
+    }
 
     @Override
     @Transactional(readOnly = true)

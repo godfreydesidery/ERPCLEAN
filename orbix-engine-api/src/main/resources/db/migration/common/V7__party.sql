@@ -99,7 +99,7 @@ CREATE TABLE sales_agent (
     party_id        BIGINT         NOT NULL PRIMARY KEY,
     app_user_id     BIGINT,
     agent_code      VARCHAR(40)    NOT NULL,
-    route_code      VARCHAR(40),
+    -- route_id FK is added by V59 once the route table exists.
     commission_rate DECIMAL(10, 4),
     branch_id       BIGINT         NOT NULL,
     CONSTRAINT fk_sales_agent_party  FOREIGN KEY (party_id)  REFERENCES party (id),

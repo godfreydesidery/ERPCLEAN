@@ -6,6 +6,9 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
+import com.orbix.engine.modules.iam.service.BranchScope;
+import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockMoveDto;
 import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalance;
@@ -26,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,6 +54,8 @@ class StockMoveServiceImplTest {
     @Mock private DayGuard dayGuard;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private BranchScope branchScope;
+    @Mock private PermissionResolverService permissions;
 
     @InjectMocks private StockMoveServiceImpl service;
 
@@ -134,20 +140,48 @@ class StockMoveServiceImplTest {
 
         assertThatThrownBy(() -> service.post(req(new BigDecimal("-5"), null, false)))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("STOCK.OVERSELL");
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
         verify(moves, never()).save(any());
+        verify(events).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
     }
 
     @Test
-    void post_outboundBelowZero_isAllowedWithOverride() {
+    void post_outboundBelowZero_isAllowedWithOverrideAndPermission() {
         when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
             .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of(Permissions.STOCK_OVERSELL));
 
         service.post(req(new BigDecimal("-5"), null, true));
 
         ArgumentCaptor<ItemBranchBalance> saved = ArgumentCaptor.forClass(ItemBranchBalance.class);
         verify(balances).save(saved.capture());
         assertThat(saved.getValue().getQtyOnHand()).isEqualByComparingTo("-2");
+        verify(events, never()).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
+    }
+
+    @Test
+    void post_outboundBelowZero_withOverrideButNoPermission_isBlocked() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID)).thenReturn(Set.of());
+
+        assertThatThrownBy(() -> service.post(req(new BigDecimal("-5"), null, true)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining(Permissions.STOCK_OVERSELL);
+        verify(moves, never()).save(any());
+        verify(events).publish(eq("NegativeStockBlocked.v1"), any(), any(), any());
+    }
+
+    @Test
+    void post_outboundNotNegative_doesNotConsultPermissionResolver() {
+        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+            .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
+
+        // -4 leaves 6 on-hand; OVERSELL gate must not fire.
+        service.post(req(new BigDecimal("-4"), null, true));
+
+        verify(permissions, never()).resolve(any(), any(), any());
     }
 
     @Test
@@ -178,6 +212,69 @@ class StockMoveServiceImplTest {
 
         verify(events).publish(eq("StockMoved.v1"), any(), any(), any());
         verify(events).publish(eq("BalanceUpdated.v1"), any(), any(), any());
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice F — listBalances filter flags (GAP 7.C)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void listBalances_noFlags_returnsAllRows() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        ItemBranchBalance low = balance(new BigDecimal("5"), new BigDecimal("100"));
+        low.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance ok = balance(new BigDecimal("50"), new BigDecimal("100"));
+        ok.setReorderMin(new BigDecimal("10"));
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, low, ok));
+
+        var result = service.listBalances(BRANCH_ID, false, false);
+
+        assertThat(result).hasSize(3);
+    }
+
+    @Test
+    void listBalances_negativeOnly_filtersToNegativeRows() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        ItemBranchBalance ok = balance(new BigDecimal("50"), new BigDecimal("100"));
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, ok));
+
+        var result = service.listBalances(BRANCH_ID, true, false);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).qtyOnHand()).isEqualByComparingTo("-3");
+    }
+
+    @Test
+    void listBalances_belowReorderOnly_filtersToAtOrBelowMin() {
+        ItemBranchBalance below = balance(new BigDecimal("5"), new BigDecimal("100"));
+        below.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance atMin = balance(new BigDecimal("10"), new BigDecimal("100"));
+        atMin.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance above = balance(new BigDecimal("50"), new BigDecimal("100"));
+        above.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance noMin = balance(new BigDecimal("0"), new BigDecimal("100")); // reorderMin null -> filtered out
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(below, atMin, above, noMin));
+
+        var result = service.listBalances(BRANCH_ID, false, true);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(b -> b.qtyOnHand().toPlainString())
+            .containsExactlyInAnyOrder("5", "10");
+    }
+
+    @Test
+    void listBalances_bothFlags_composeAsAnd() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        neg.setReorderMin(new BigDecimal("10"));    // qty<0 AND below min -> kept
+        ItemBranchBalance lowNotNeg = balance(new BigDecimal("5"), new BigDecimal("100"));
+        lowNotNeg.setReorderMin(new BigDecimal("10")); // below min but qty>=0 -> filtered
+        ItemBranchBalance negNoMin = balance(new BigDecimal("-1"), new BigDecimal("100")); // qty<0 but reorderMin null -> filtered
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, lowNotNeg, negNoMin));
+
+        var result = service.listBalances(BRANCH_ID, true, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).qtyOnHand()).isEqualByComparingTo("-3");
     }
 
     @Test

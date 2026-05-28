@@ -14,6 +14,12 @@ public interface GrnRepository extends JpaRepository<Grn, Long> {
 
     boolean existsByBranchIdAndNumber(Long branchId, String number);
 
+    /** Used to gate APPROVED-LPO cancel: refuse if any GRN already drew against the LPO. */
+    boolean existsByLpoOrderId(Long lpoOrderId);
+
+    /** Lists every GRN for a given LPO, oldest first. Used on POSTED-cancel to rewind LPO state. */
+    List<Grn> findByLpoOrderIdOrderByIdAsc(Long lpoOrderId);
+
     Optional<Grn> findByUid(String uid);
 
     List<Grn> findByCompanyIdOrderByIdDesc(Long companyId);

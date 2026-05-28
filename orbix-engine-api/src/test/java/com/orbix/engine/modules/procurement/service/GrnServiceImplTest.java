@@ -40,6 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -207,7 +208,8 @@ class GrnServiceImplTest {
     }
 
     @Test
-    void post_writesStockMoveForEachLine_andEmitsGrnPosted() {
+    @SuppressWarnings("unchecked")
+    void post_writesStockMoveForEachLine_andEmitsGrnPosted_withLinesPayload() {
         Grn grn = postable(null);
         GrnLine line = grnLineRow(grn.getId(), null, new BigDecimal("10"), new BigDecimal("90"), null, null);
         when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
@@ -224,7 +226,20 @@ class GrnServiceImplTest {
         assertThat(posted.unitCost()).isEqualByComparingTo("90");
         assertThat(posted.batchId()).isNull();
         assertThat(grn.getStatus()).isEqualTo(GrnStatus.POSTED);
-        verify(events).publish(eq("GrnPosted.v1"), any(), any(), any());
+
+        // GAP 9.A — pin the widened GrnPosted.v1 payload shape.
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publish(eq("GrnPosted.v1"), eq("Grn"), any(), payloadCaptor.capture());
+        Map<String, Object> payload = (Map<String, Object>) payloadCaptor.getValue();
+        assertThat(payload).containsKeys("grnId", "number", "supplierId", "totalAmount",
+            "lineCount", "lpoOrderId", "lines");
+        List<Map<String, Object>> linesPayload = (List<Map<String, Object>>) payload.get("lines");
+        assertThat(linesPayload).hasSize(1);
+        assertThat(linesPayload.get(0))
+            .containsEntry("itemId", ITEM_ID)
+            .containsEntry("qty", new BigDecimal("10"))
+            .containsEntry("unitCost", new BigDecimal("90"))
+            .containsEntry("vatGroupId", VAT_GROUP_ID);
     }
 
     @Test
@@ -295,10 +310,101 @@ class GrnServiceImplTest {
         Grn grn = postable(null);
         when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
 
-        GrnDto dto = service.cancel(grn.getUid());
+        GrnDto dto = service.cancel(grn.getUid(), "supplier sent the wrong consignment");
 
         assertThat(dto.status()).isEqualTo(GrnStatus.CANCELLED);
+        assertThat(dto.cancellationReason()).isEqualTo("supplier sent the wrong consignment");
         verify(events).publish(eq("GrnCancelled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void cancel_fromDraft_nullReasonAllowed() {
+        Grn grn = postable(null);
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
+
+        GrnDto dto = service.cancel(grn.getUid(), null);
+
+        assertThat(dto.status()).isEqualTo(GrnStatus.CANCELLED);
+        assertThat(dto.cancellationReason()).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cancelPosted_postedGrn_writesCompensatingMoveAndEmitsCompensatingEvent() {
+        Grn grn = postable(null);
+        grn.post(ACTOR_ID); // → POSTED
+        GrnLine line = grnLineRow(grn.getId(), null, new BigDecimal("10"), new BigDecimal("90"), null, null);
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
+        when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
+
+        GrnDto dto = service.cancelPosted(grn.getUid(), "wrong items received");
+
+        assertThat(dto.status()).isEqualTo(GrnStatus.CANCELLED);
+        assertThat(dto.cancellationReason()).isEqualTo("wrong items received");
+
+        // Compensating stock_move is opposite-direction, same qty + cost.
+        ArgumentCaptor<PostStockMoveRequestDto> moveCaptor =
+            ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
+        verify(stockMoveService).post(moveCaptor.capture());
+        PostStockMoveRequestDto compensating = moveCaptor.getValue();
+        assertThat(compensating.qty()).isEqualByComparingTo("-10");
+        assertThat(compensating.unitCost()).isEqualByComparingTo("90");
+        assertThat(compensating.moveType()).isEqualTo(StockMoveType.GRN);
+        assertThat(compensating.allowOversell()).isTrue();
+
+        // Outbox event: compensating=true, priorStatus=POSTED, reason set.
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(events).publish(eq("GrnCancelled.v1"), eq("Grn"), any(), payloadCaptor.capture());
+        Map<String, Object> payload = (Map<String, Object>) payloadCaptor.getValue();
+        assertThat(payload).containsEntry("compensating", true);
+        assertThat(payload).containsEntry("priorStatus", "POSTED");
+        assertThat(payload).containsEntry("reason", "wrong items received");
+    }
+
+    @Test
+    void cancelPosted_lpoBound_rewindsLpoLineAndFlipsHeader() {
+        LpoOrder lpo = approvedLpo();
+        LpoOrderLine lpoLine = lpoLine(601L, new BigDecimal("10"), new BigDecimal("6"));
+        // Header was previously bumped to PARTIALLY_RECEIVED by the original GRN posting.
+        lpo.markReceiveProgress(false, ACTOR_ID);
+        when(lpos.findById(500L)).thenReturn(Optional.of(lpo));
+        when(lpoLines.findByLpoOrderIdOrderByLineNoAsc(500L)).thenReturn(List.of(lpoLine));
+
+        Grn grn = postable(500L);
+        grn.post(ACTOR_ID);
+        GrnLine line = grnLineRow(grn.getId(), 601L, new BigDecimal("6"), new BigDecimal("90"), null, null);
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
+        when(grnLines.findByGrnIdOrderByIdAsc(grn.getId())).thenReturn(List.of(line));
+
+        service.cancelPosted(grn.getUid(), "reverse the receipt");
+
+        assertThat(lpoLine.getReceivedQty()).isEqualByComparingTo("0");
+        // Sole GRN against the LPO → header rewinds to APPROVED.
+        assertThat(lpo.getStatus()).isEqualTo(LpoOrderStatus.APPROVED);
+    }
+
+    @Test
+    void cancelPosted_nonPostedGrn_isRejected() {
+        Grn grn = postable(null); // still DRAFT
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
+
+        String uid = grn.getUid();
+        assertThatThrownBy(() -> service.cancelPosted(uid, "nope"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("POSTED");
+        verify(stockMoveService, never()).post(any());
+    }
+
+    @Test
+    void cancelPosted_doubleCancel_isRejected() {
+        Grn grn = postable(null);
+        grn.post(ACTOR_ID);
+        grn.cancelPosted("first cancel", ACTOR_ID); // already CANCELLED
+        when(grns.findByUid(grn.getUid())).thenReturn(Optional.of(grn));
+
+        String uid = grn.getUid();
+        assertThatThrownBy(() -> service.cancelPosted(uid, "again"))
+            .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

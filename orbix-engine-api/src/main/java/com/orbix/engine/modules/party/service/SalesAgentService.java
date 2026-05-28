@@ -17,11 +17,12 @@ public interface SalesAgentService {
 
     SalesAgentResponseDto updateSalesAgentByPartyUid(String partyUid, UpdateSalesAgentRequestDto request);
 
-    void deactivateSalesAgentByPartyUid(String partyUid);
+    /** Archives the underlying party (affects every role on it). */
+    void archiveSalesAgentByPartyUid(String partyUid);
 
     /**
-     * Reactivates the underlying party. Affects every other role on the party
-     * (a deactivated customer-and-agent comes back as both).
+     * Restores the underlying party to ACTIVE. Affects every other role on the
+     * party (an archived customer-and-agent comes back as both).
      */
     void activateSalesAgentByPartyUid(String partyUid);
 }

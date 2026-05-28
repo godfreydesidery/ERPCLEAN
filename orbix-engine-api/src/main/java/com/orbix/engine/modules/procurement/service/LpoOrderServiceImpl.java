@@ -15,6 +15,7 @@ import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrder;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrderLine;
 import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
+import com.orbix.engine.modules.procurement.repository.GrnRepository;
 import com.orbix.engine.modules.procurement.repository.LpoOrderLineRepository;
 import com.orbix.engine.modules.procurement.repository.LpoOrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,7 @@ public class LpoOrderServiceImpl implements LpoOrderService {
 
     private final LpoOrderRepository orders;
     private final LpoOrderLineRepository lines;
+    private final GrnRepository grns;
     private final ItemRepository items;
     private final VatGroupRepository vatGroups;
     private final EventPublisher events;
@@ -125,22 +127,47 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     @Override
     @Transactional
     @Auditable(action = "CANCEL", entityType = AGG)
-    public LpoOrderDto cancel(String uid) {
+    public LpoOrderDto cancel(String uid, String reason) {
         LpoOrder order = requireOrderByUid(uid);
-        order.cancel(context.userId());
-        events.publish("LpoOrderCancelled.v1", AGG, String.valueOf(order.getId()),
-            Map.of(F_ID, order.getId(), F_NUMBER, order.getNumber()));
+        LpoOrderStatus priorStatus = order.getStatus();
+        // PARTIALLY_RECEIVED / RECEIVED cancel deferred to Slice C.
+        if (priorStatus == LpoOrderStatus.PARTIALLY_RECEIVED
+                || priorStatus == LpoOrderStatus.RECEIVED) {
+            throw new IllegalArgumentException(
+                "Cancelling an LPO in status " + priorStatus + " is not supported yet");
+        }
+        // APPROVED cancel is allowed only when no GRN already draws against the LPO.
+        if (priorStatus == LpoOrderStatus.APPROVED && grns.existsByLpoOrderId(order.getId())) {
+            throw new IllegalArgumentException(
+                "Cannot cancel LPO " + order.getNumber() + " — at least one GRN draws against it");
+        }
+        order.cancel(reason, context.userId());
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put(F_ID, order.getId());
+        payload.put(F_NUMBER, order.getNumber());
+        payload.put("priorStatus", priorStatus.name());
+        payload.put("reason", reason);
+        payload.put("cancelledBy", context.userId());
+        payload.put("cancelledAt", order.getUpdatedAt());
+        events.publish("LpoOrderCancelled.v1", AGG, String.valueOf(order.getId()), payload);
         return LpoOrderDto.from(order, lines.findByLpoOrderIdOrderByLineNoAsc(order.getId()));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<LpoOrderDto> list(Long branchId, Pageable pageable) {
+    public PageDto<LpoOrderDto> list(Long branchId, LpoOrderStatus status, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        Page<LpoOrder> page = scope == null
-            ? orders.findByCompanyIdOrderByIdDesc(companyId, pageable)
-            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        Page<LpoOrder> page;
+        if (status == null) {
+            page = scope == null
+                ? orders.findByCompanyIdOrderByIdDesc(companyId, pageable)
+                : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        } else {
+            page = scope == null
+                ? orders.findByCompanyIdAndStatusOrderByIdDesc(companyId, status, pageable)
+                : orders.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(companyId, scope, status, pageable);
+        }
         return PageDto.of(page, o -> LpoOrderDto.from(o, lines.findByLpoOrderIdOrderByLineNoAsc(o.getId())));
     }
 
@@ -149,6 +176,16 @@ public class LpoOrderServiceImpl implements LpoOrderService {
     public LpoOrderDto get(String uid) {
         LpoOrder order = requireOrderByUid(uid);
         return LpoOrderDto.from(order, lines.findByLpoOrderIdOrderByLineNoAsc(order.getId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingApproval(Long branchId) {
+        Long companyId = context.companyId();
+        Long scope = branchScope.requireReadable(branchId);
+        return scope == null
+            ? orders.countByCompanyIdAndStatus(companyId, LpoOrderStatus.PENDING_APPROVAL)
+            : orders.countByCompanyIdAndBranchIdAndStatus(companyId, scope, LpoOrderStatus.PENDING_APPROVAL);
     }
 
     private List<LpoOrderLine> saveLinesAndRollUp(LpoOrder order,
@@ -194,6 +231,21 @@ public class LpoOrderServiceImpl implements LpoOrderService {
             .orElseThrow(() -> new NoSuchElementException("LPO not found: " + uid));
         if (!Objects.equals(order.getCompanyId(), context.companyId())) {
             throw new NoSuchElementException("LPO not found: " + uid);
+        }
+        branchScope.requireAccess(order.getBranchId());
+        return order;
+    }
+
+    /**
+     * Internal numeric-id lookup paired with {@link #requireOrderByUid(String)} for cross-aggregate joins
+     * (Slice C three-way match etc). Same tenant + branch guard, never invoked from controllers.
+     */
+    @SuppressWarnings("unused")
+    private LpoOrder requireOrderById(Long id) {
+        LpoOrder order = orders.findById(id)
+            .orElseThrow(() -> new NoSuchElementException("LPO not found: " + id));
+        if (!Objects.equals(order.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("LPO not found: " + id);
         }
         branchScope.requireAccess(order.getBranchId());
         return order;

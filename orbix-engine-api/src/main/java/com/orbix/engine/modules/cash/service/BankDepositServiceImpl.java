@@ -2,6 +2,7 @@ package com.orbix.engine.modules.cash.service;
 
 import com.orbix.engine.modules.admin.repository.CompanyRepository;
 import com.orbix.engine.modules.cash.domain.dto.BankDepositDto;
+import com.orbix.engine.modules.cash.domain.dto.CashEntryDto;
 import com.orbix.engine.modules.cash.domain.dto.PostBankDepositRequestDto;
 import com.orbix.engine.modules.cash.domain.entity.BankDeposit;
 import com.orbix.engine.modules.cash.domain.enums.CashAccount;
@@ -22,9 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -71,12 +74,15 @@ public class BankDepositServiceImpl implements BankDepositService {
             CashRefType.BANK_DEPOSIT, saved.getId(), GlCategory.BANK,
             request.reference(), actorId);
 
-        events.publish("BankDepositPosted.v1", AGG, String.valueOf(saved.getId()),
-            Map.of("bankDepositId", saved.getId(),
-                "branchId", saved.getBranchId(),
-                "amount", saved.getAmount(),
-                "reference", saved.getReference(),
-                "businessDate", saved.getBusinessDate()));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("bankDepositUid", saved.getUid());
+        payload.put("bankDepositId", saved.getId());
+        payload.put("branchId", saved.getBranchId());
+        payload.put("amount", saved.getAmount());
+        payload.put("currencyCode", saved.getCurrencyCode());
+        payload.put("reference", saved.getReference());
+        payload.put("businessDate", saved.getBusinessDate());
+        events.publish("BankDepositPosted.v1", AGG, String.valueOf(saved.getId()), payload);
         return BankDepositDto.from(saved);
     }
 
@@ -87,6 +93,65 @@ public class BankDepositServiceImpl implements BankDepositService {
         return deposits.findByBranchIdAndBusinessDateOrderByAtAsc(branchId, businessDate).stream()
             .map(BankDepositDto::from)
             .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BankDepositDto getBankDepositByUid(String uid) {
+        return BankDepositDto.from(requireBankDepositByUid(uid));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ARCHIVE", entityType = AGG)
+    public BankDepositDto archiveBankDepositByUid(String uid) {
+        BankDeposit original = requireBankDepositByUid(uid);
+        if (original.isReversed()) {
+            throw new IllegalArgumentException(
+                "Bank deposit is already reversed: " + original.getUid());
+        }
+        Long actorId = context.userId();
+        Instant at = Instant.now();
+
+        // Compensating pair: CASH_BOX gets the money back (IN) and BANK loses
+        // it (OUT). Same ref_id, NEW ref_type (BANK_DEPOSIT_REVERSAL) — a
+        // direction-flip on the original ref_type would collide on the
+        // (ref_type, ref_id, direction) UNIQUE because the original IN/OUT
+        // pair already occupies both rows under BANK_DEPOSIT.
+        CashEntryDto outEntry = cashLedger.post(at,
+            original.getCompanyId(), original.getBranchId(), original.getBusinessDate(),
+            CashAccount.CASH_BOX, CashDirection.IN, original.getAmount(),
+            BigDecimal.ONE, original.getCurrencyCode(),
+            CashRefType.BANK_DEPOSIT_REVERSAL, original.getId(), GlCategory.CASH,
+            "REVERSAL: " + original.getReference(), actorId);
+        CashEntryDto inEntry = cashLedger.post(at,
+            original.getCompanyId(), original.getBranchId(), original.getBusinessDate(),
+            CashAccount.BANK, CashDirection.OUT, original.getAmount(),
+            BigDecimal.ONE, original.getCurrencyCode(),
+            CashRefType.BANK_DEPOSIT_REVERSAL, original.getId(), GlCategory.BANK,
+            "REVERSAL: " + original.getReference(), actorId);
+
+        original.markReversed(actorId, outEntry.id(), inEntry.id());
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("bankDepositUid", original.getUid());
+        payload.put("bankDepositId", original.getId());
+        payload.put("reversingCashEntryIds", List.of(outEntry.id(), inEntry.id()));
+        payload.put("reversedBy", actorId);
+        payload.put("branchId", original.getBranchId());
+        payload.put("businessDate", original.getBusinessDate());
+        events.publish("BankDepositReversed.v1", AGG, String.valueOf(original.getId()), payload);
+        return BankDepositDto.from(original);
+    }
+
+    private BankDeposit requireBankDepositByUid(String uid) {
+        BankDeposit deposit = deposits.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Bank deposit not found: " + uid));
+        if (!Objects.equals(deposit.getCompanyId(), context.companyId())) {
+            throw new NoSuchElementException("Bank deposit not found: " + uid);
+        }
+        branchScope.requireAccess(deposit.getBranchId());
+        return deposit;
     }
 
     private String requireCompanyCurrency(Long companyId) {

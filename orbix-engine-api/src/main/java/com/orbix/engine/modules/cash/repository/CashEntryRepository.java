@@ -11,6 +11,9 @@ import java.util.Optional;
 
 public interface CashEntryRepository extends JpaRepository<CashEntry, Long> {
 
+    /** External lookup by ULID (URL handle). Append-only — no write counterpart. */
+    Optional<CashEntry> findByUid(String uid);
+
     /** Idempotency probe — producer checks before inserting. */
     Optional<CashEntry> findByRefTypeAndRefIdAndDirection(String refType, Long refId, CashDirection direction);
 

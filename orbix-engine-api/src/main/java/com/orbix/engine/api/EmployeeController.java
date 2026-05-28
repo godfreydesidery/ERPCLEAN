@@ -17,11 +17,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
-/** Employee management (F1.7). Gated by {@code PARTY.MANAGE_EMPLOYEES}. */
+/**
+ * Employee management (F1.7). Per-action permissions:
+ * {@code EMPLOYEE.CREATE}, {@code EMPLOYEE.UPDATE}, {@code EMPLOYEE.ARCHIVE}
+ * (archive perm also gates re-activation, the inverse of archive).
+ */
 @RestController
 @RequestMapping("/api/v1/employees")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('PARTY.MANAGE_EMPLOYEES')")
 @Validated
 public class EmployeeController {
 
@@ -42,6 +45,7 @@ public class EmployeeController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('EMPLOYEE.CREATE')")
     public ResponseEntity<EmployeeResponseDto> createEmployee(
             @Valid @RequestBody CreateEmployeeRequestDto request) {
         EmployeeResponseDto employee = service.createEmployee(request);
@@ -50,18 +54,21 @@ public class EmployeeController {
     }
 
     @PatchMapping("/uid/{partyUid}")
+    @PreAuthorize("hasAuthority('EMPLOYEE.UPDATE')")
     public EmployeeResponseDto updateEmployee(@PathVariable @ValidUlid String partyUid,
                                               @Valid @RequestBody UpdateEmployeeRequestDto request) {
         return service.updateEmployeeByPartyUid(partyUid, request);
     }
 
-    @PostMapping("/uid/{partyUid}/deactivate")
-    public ResponseEntity<Void> deactivateEmployee(@PathVariable @ValidUlid String partyUid) {
-        service.deactivateEmployeeByPartyUid(partyUid);
+    @PostMapping("/uid/{partyUid}/archive")
+    @PreAuthorize("hasAuthority('EMPLOYEE.ARCHIVE')")
+    public ResponseEntity<Void> archiveEmployee(@PathVariable @ValidUlid String partyUid) {
+        service.archiveEmployeeByPartyUid(partyUid);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/uid/{partyUid}/activate")
+    @PreAuthorize("hasAuthority('EMPLOYEE.ARCHIVE')")
     public ResponseEntity<Void> activateEmployee(@PathVariable @ValidUlid String partyUid) {
         service.activateEmployeeByPartyUid(partyUid);
         return ResponseEntity.noContent().build();

@@ -2,6 +2,7 @@ package com.orbix.engine.api;
 
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.stock.domain.dto.CreateStockCountRequestDto;
+import com.orbix.engine.modules.stock.domain.dto.PostStockCountRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.RecordCountsRequestDto;
 import com.orbix.engine.modules.stock.domain.dto.StockCountDto;
 import com.orbix.engine.modules.stock.service.StockCountService;
@@ -63,7 +64,8 @@ public class StockCountController {
     }
 
     @PostMapping("/uid/{uid}/post")
-    public StockCountDto postCount(@PathVariable @ValidUlid String uid) {
-        return service.postCount(uid);
+    public StockCountDto postCount(@PathVariable @ValidUlid String uid,
+                                   @RequestBody(required = false) PostStockCountRequestDto request) {
+        return service.postCount(uid, request);
     }
 }

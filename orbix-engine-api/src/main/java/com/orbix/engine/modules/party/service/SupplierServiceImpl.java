@@ -100,12 +100,12 @@ public class SupplierServiceImpl implements SupplierService {
 
     @Override
     @Transactional
-    @Auditable(action = "DEACTIVATE", entityType = "Supplier")
-    public void deactivateSupplierByPartyUid(String partyUid) {
+    @Auditable(action = "ARCHIVE", entityType = "Supplier")
+    public void archiveSupplierByPartyUid(String partyUid) {
         Party party = partyService.requireInCompanyByUid(partyUid);
         suppliers.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_A_SUPPLIER + partyUid));
-        partyService.deactivate(party.getId());
+        partyService.archive(party.getId());
     }
 
     @Override

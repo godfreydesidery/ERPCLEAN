@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
@@ -13,15 +14,22 @@ import { BusinessDay } from './day.models';
 @Component({
   selector: 'orbix-day',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe, HasPermissionDirective],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, HasPermissionDirective],
   template: `
-    <header class="mb-4">
-      <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Operations</p>
-      <h1 class="h3 fw-bold mb-1 text-dark">Business day</h1>
-      <p class="text-secondary mb-0 small">
-        @if (branchId() !== null) { Branch #{{ branchId() }} — open, close and review trading days. }
-        @else { Pick a branch to open or close its trading day. }
-      </p>
+    <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+      <div>
+        <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Operations</p>
+        <h1 class="h3 fw-bold mb-1 text-dark">Business day</h1>
+        <p class="text-secondary mb-0 small">
+          @if (branchId() !== null) { Branch #{{ branchId() }} — open, close and review trading days. }
+          @else { Pick a branch to open or close its trading day. }
+        </p>
+      </div>
+      <a routerLink="overrides" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+         *orbixHasPermission="'DAY.OVERRIDE_LIST'"
+         title="Review back-dated postings into closed days">
+        <i class="bi bi-clipboard-check"></i> Back-dated overrides
+      </a>
     </header>
 
     @if (error()) {
@@ -69,17 +77,31 @@ import { BusinessDay } from './day.models';
           <div class="d-flex gap-2 flex-wrap">
             @if (current(); as d) {
               @if (d.status === 'OPEN') {
-                <button class="btn btn-warning text-dark d-inline-flex align-items-center gap-2"
-                        (click)="startClosing(d)" [disabled]="busy()"
-                        *orbixHasPermission="'DAY.CLOSE'">
-                  <i class="bi bi-clipboard-check"></i> Start closing
-                </button>
+                <div class="d-flex gap-2 flex-wrap" *orbixHasPermission="'DAY.CLOSE'">
+                  <button class="btn btn-warning text-dark d-inline-flex align-items-center gap-2"
+                          (click)="startClosing(d)" [disabled]="busy()"
+                          title="Move the day into CLOSING so the Z-report can be attached.">
+                    <i class="bi bi-clipboard-check"></i> Start closing
+                  </button>
+                  <button class="btn btn-success d-inline-flex align-items-center gap-2"
+                          (click)="endDay(d)" [disabled]="busy()"
+                          title="Close this day and open the next one in a single step.">
+                    <i class="bi bi-lock-fill"></i> End of day
+                  </button>
+                </div>
               } @else if (d.status === 'CLOSING') {
-                <div class="input-group close-day-group" *orbixHasPermission="'DAY.CLOSE'">
-                  <input class="form-control" placeholder="EOD report key (optional)"
-                         [(ngModel)]="eodReportObjectKey" name="eod">
-                  <button class="btn btn-success d-inline-flex align-items-center gap-1" (click)="closeDay(d)" [disabled]="busy()">
-                    <i class="bi bi-lock"></i> Close day
+                <div class="d-flex gap-2 flex-wrap align-items-center" *orbixHasPermission="'DAY.CLOSE'">
+                  <div class="input-group close-day-group">
+                    <input class="form-control" placeholder="EOD report key (optional)"
+                           [(ngModel)]="eodReportObjectKey" name="eod">
+                    <button class="btn btn-success d-inline-flex align-items-center gap-1" (click)="closeDay(d)" [disabled]="busy()">
+                      <i class="bi bi-lock"></i> Close day
+                    </button>
+                  </div>
+                  <button class="btn btn-outline-success d-inline-flex align-items-center gap-2"
+                          (click)="endDay(d)" [disabled]="busy()"
+                          title="Close this day and open the next one in a single step.">
+                    <i class="bi bi-lock-fill"></i> End of day
                   </button>
                 </div>
               }
@@ -118,7 +140,7 @@ import { BusinessDay } from './day.models';
                 </tr>
               </thead>
               <tbody>
-                @for (day of days(); track day.businessDate) {
+                @for (day of days(); track day.uid) {
                   <tr>
                     <td class="fw-semibold text-dark">{{ day.businessDate | date:'mediumDate' }}</td>
                     <td>
@@ -223,12 +245,16 @@ export class DayComponent implements OnInit {
   }
 
   startClosing(day: BusinessDay): void {
-    this.run(this.dayService.startClosing(day.branchId, day.businessDate));
+    this.run(this.dayService.startClosing(day.uid));
   }
 
   closeDay(day: BusinessDay): void {
-    this.run(this.dayService.closeDay(day.branchId, day.businessDate,
-      this.eodReportObjectKey.trim() || null));
+    this.run(this.dayService.closeDay(day.uid, this.eodReportObjectKey.trim() || null));
+  }
+
+  endDay(day: BusinessDay): void {
+    if (!confirm('End the business day? This closes it and opens the next day.')) return;
+    this.run(this.dayService.endDay(day.uid, this.eodReportObjectKey.trim() || null));
   }
 
   private run(source: Observable<BusinessDay>): void {

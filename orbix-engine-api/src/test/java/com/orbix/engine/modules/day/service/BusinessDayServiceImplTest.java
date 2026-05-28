@@ -5,10 +5,14 @@ import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayDto;
+import com.orbix.engine.modules.day.domain.dto.BusinessDayOverrideDto;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.domain.entity.BusinessDayId;
+import com.orbix.engine.modules.day.domain.entity.BusinessDayOverride;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
+import com.orbix.engine.modules.day.repository.BusinessDayOverrideRepository;
 import com.orbix.engine.modules.day.repository.BusinessDayRepository;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -40,6 +45,7 @@ class BusinessDayServiceImplTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 5, 14);
 
     @Mock private BusinessDayRepository businessDays;
+    @Mock private BusinessDayOverrideRepository businessDayOverrides;
     @Mock private BranchRepository branches;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
@@ -56,7 +62,8 @@ class BusinessDayServiceImplTest {
         // here so the tests focus on the state-machine without per-module
         // guard plumbing. EodGuard behaviour is unit-tested per-module.
         service = new BusinessDayServiceImpl(
-            businessDays, branches, List.of(), events, context, branchScope);
+            businessDays, businessDayOverrides, branches, List.of(),
+            events, context, branchScope);
     }
 
     private static Branch branch(Long companyId) {
@@ -69,14 +76,29 @@ class BusinessDayServiceImplTest {
     private static BusinessDay day(LocalDate date, BusinessDayStatus status) {
         BusinessDay day = new BusinessDay(BRANCH_ID, date, ACTOR_ID);
         day.setStatus(status);
+        // Bypass @PrePersist — pin a stable uid so equality / payload
+        // assertions are deterministic.
+        ReflectionTestUtils.setField(day, "uid", UidGenerator.next());
         return day;
+    }
+
+    private static BusinessDayOverride override(Long branchId, LocalDate targetDate) {
+        BusinessDayOverride o = new BusinessDayOverride(branchId, targetDate,
+            "POS_SALE", 42L, "back-dated sales tally", ACTOR_ID);
+        ReflectionTestUtils.setField(o, "id", 7L);
+        ReflectionTestUtils.setField(o, "uid", UidGenerator.next());
+        return o;
     }
 
     @Test
     void openDay_opensFreshDayAndEmitsEvent() {
         when(businessDays.findFirstByBranchIdAndStatusIn(eq(BRANCH_ID), any())).thenReturn(Optional.empty());
         when(businessDays.findByBranchIdOrderByBusinessDateDesc(BRANCH_ID)).thenReturn(List.of());
-        when(businessDays.save(any(BusinessDay.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(businessDays.save(any(BusinessDay.class))).thenAnswer(inv -> {
+            BusinessDay saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "uid", UidGenerator.next());
+            return saved;
+        });
 
         BusinessDayDto result = service.openDay(BRANCH_ID, TODAY);
 
@@ -151,7 +173,11 @@ class BusinessDayServiceImplTest {
             .thenReturn(Optional.empty());
         when(businessDays.findByBranchIdOrderByBusinessDateDesc(BRANCH_ID))
             .thenReturn(List.of(closing));
-        when(businessDays.save(any(BusinessDay.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(businessDays.save(any(BusinessDay.class))).thenAnswer(inv -> {
+            BusinessDay saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "uid", UidGenerator.next());
+            return saved;
+        });
 
         BusinessDayDto result = service.closeDay(BRANCH_ID, TODAY, "eod/2026-05-14.pdf");
 
@@ -179,5 +205,125 @@ class BusinessDayServiceImplTest {
             .thenReturn(Optional.of(day(TODAY, BusinessDayStatus.OPEN)));
 
         assertThat(service.getCurrentDay(BRANCH_ID)).isPresent();
+    }
+
+    // ---- uid entry points --------------------------------------------------
+
+    @Test
+    void getBusinessDayByUid_returnsDayWhenTenantMatches() {
+        BusinessDay open = day(TODAY, BusinessDayStatus.OPEN);
+        when(businessDays.findByUid(open.getUid())).thenReturn(Optional.of(open));
+
+        BusinessDayDto result = service.getBusinessDayByUid(open.getUid());
+
+        assertThat(result.uid()).isEqualTo(open.getUid());
+        assertThat(result.status()).isEqualTo(BusinessDayStatus.OPEN);
+    }
+
+    @Test
+    void getBusinessDayByUid_throwsWhenNotFound() {
+        when(businessDays.findByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getBusinessDayByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F"))
+            .isInstanceOf(NoSuchElementException.class)
+            .hasMessageContaining("Business day not found");
+    }
+
+    @Test
+    void getBusinessDayByUid_throwsWhenBranchBelongsToAnotherCompany() {
+        BusinessDay open = day(TODAY, BusinessDayStatus.OPEN);
+        when(businessDays.findByUid(open.getUid())).thenReturn(Optional.of(open));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(branch(999L)));
+
+        assertThatThrownBy(() -> service.getBusinessDayByUid(open.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    void startClosingByUid_movesOpenDayToClosing() {
+        BusinessDay open = day(TODAY, BusinessDayStatus.OPEN);
+        when(businessDays.findByUid(open.getUid())).thenReturn(Optional.of(open));
+
+        BusinessDayDto result = service.startClosingByUid(open.getUid());
+
+        assertThat(result.status()).isEqualTo(BusinessDayStatus.CLOSING);
+        verify(events).publish(eq("BusinessDayClosingStarted.v1"), any(), any(), any());
+    }
+
+    // ---- business-day overrides --------------------------------------------
+
+    @Test
+    void postOverrideByDayUid_persistsAndEmitsEvent() {
+        BusinessDay open = day(TODAY, BusinessDayStatus.OPEN);
+        when(businessDays.findByUid(open.getUid())).thenReturn(Optional.of(open));
+        when(businessDayOverrides.save(any(BusinessDayOverride.class))).thenAnswer(inv -> {
+            BusinessDayOverride saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 99L);
+            ReflectionTestUtils.setField(saved, "uid", UidGenerator.next());
+            return saved;
+        });
+
+        BusinessDayOverrideDto result = service.postOverrideByDayUid(
+            open.getUid(), "POS_SALE", 42L, "back-dated sales tally");
+
+        assertThat(result.entityType()).isEqualTo("POS_SALE");
+        assertThat(result.entityId()).isEqualTo(42L);
+        assertThat(result.reason()).isEqualTo("back-dated sales tally");
+        assertThat(result.archivedAt()).isNull();
+        verify(events).publish(eq("BusinessDayOverridden.v1"), any(), any(), any());
+    }
+
+    @Test
+    void postOverrideByDayUid_rejectsBlankReason() {
+        // Bean-validation belongs to the controller; service guards as a
+        // defence-in-depth check so internal producers can't smuggle blanks.
+        BusinessDay open = day(TODAY, BusinessDayStatus.OPEN);
+
+        assertThatThrownBy(() -> service.postOverrideByDayUid(open.getUid(), "POS_SALE", 1L, "  "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("reason is required");
+        verify(businessDayOverrides, never()).save(any());
+    }
+
+    @Test
+    void archiveBusinessDayOverrideByUid_voidsTheGrant() {
+        BusinessDayOverride o = override(BRANCH_ID, TODAY);
+        when(businessDayOverrides.findByUid(o.getUid())).thenReturn(Optional.of(o));
+
+        BusinessDayOverrideDto result = service.archiveBusinessDayOverrideByUid(o.getUid());
+
+        assertThat(result.archivedAt()).isNotNull();
+        assertThat(result.archivedBy()).isEqualTo(ACTOR_ID);
+    }
+
+    @Test
+    void archiveBusinessDayOverrideByUid_rejectsDoubleArchive() {
+        BusinessDayOverride o = override(BRANCH_ID, TODAY);
+        o.archive(ACTOR_ID);
+        when(businessDayOverrides.findByUid(o.getUid())).thenReturn(Optional.of(o));
+
+        assertThatThrownBy(() -> service.archiveBusinessDayOverrideByUid(o.getUid()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("already archived");
+    }
+
+    @Test
+    void archiveBusinessDayOverrideByUid_throwsWhenNotFound() {
+        when(businessDayOverrides.findByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F"))
+            .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                service.archiveBusinessDayOverrideByUid("01HZ8X7M3K9PJK2D7Q5BCN8W4F"))
+            .isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    void archiveBusinessDayOverrideByUid_throwsOnCrossCompanyBranch() {
+        BusinessDayOverride o = override(BRANCH_ID, TODAY);
+        when(businessDayOverrides.findByUid(o.getUid())).thenReturn(Optional.of(o));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(branch(999L)));
+
+        assertThatThrownBy(() -> service.archiveBusinessDayOverrideByUid(o.getUid()))
+            .isInstanceOf(NoSuchElementException.class);
     }
 }

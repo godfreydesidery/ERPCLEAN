@@ -21,9 +21,21 @@ export class ProcurementService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listLpos(branchId: string | null, page: number, size: number): Observable<Page<LpoOrder>> {
+  /**
+   * Slice F — list LPOs. {@code status} accepts any
+   * {@link import('./procurement.models').LpoOrderStatus} value (e.g.
+   * {@code PENDING_APPROVAL} for the dashboard drill-through).
+   */
+  listLpos(
+    branchId: string | null,
+    page: number,
+    size: number,
+    status?: string | null,
+  ): Observable<Page<LpoOrder>> {
+    let params = branchPageParams(branchId, page, size);
+    if (status) params = params.set('status', status);
     return unwrap(this.http.get<ApiResponse<Page<LpoOrder>>>(
-      `${this.base}/lpos`, { params: branchPageParams(branchId, page, size) }
+      `${this.base}/lpos`, { params }
     ));
   }
 
@@ -47,8 +59,9 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/approve`, {}));
   }
 
-  cancelLpo(uid: string): Observable<LpoOrder> {
-    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, {}));
+  cancelLpo(uid: string, reason?: string | null): Observable<LpoOrder> {
+    const body = reason && reason.trim().length > 0 ? { reason: reason.trim() } : {};
+    return unwrap(this.http.post<ApiResponse<LpoOrder>>(`${this.base}/lpos/uid/${uid}/cancel`, body));
   }
 
   // ---- GRN (F3.2) ----------------------------------------------------------
@@ -71,8 +84,17 @@ export class ProcurementService {
     return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}/post`, {}));
   }
 
-  cancelGrn(uid: string): Observable<Grn> {
-    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}/cancel`, {}));
+  cancelGrn(uid: string, reason?: string | null): Observable<Grn> {
+    const body = reason && reason.trim().length > 0 ? { reason: reason.trim() } : {};
+    return unwrap(this.http.post<ApiResponse<Grn>>(`${this.base}/grns/uid/${uid}/cancel`, body));
+  }
+
+  /** Cancel a POSTED GRN — backend writes a compensating stock_move and emits GrnCancelled.v1. */
+  cancelPostedGrn(uid: string, reason: string): Observable<Grn> {
+    return unwrap(this.http.post<ApiResponse<Grn>>(
+      `${this.base}/grns/uid/${uid}/cancel-posted`,
+      { reason: reason.trim() }
+    ));
   }
 
   // ---- supplier invoices (F3.3) -------------------------------------------

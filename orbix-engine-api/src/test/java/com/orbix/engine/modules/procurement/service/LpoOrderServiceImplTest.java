@@ -16,6 +16,7 @@ import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrder;
 import com.orbix.engine.modules.procurement.domain.entity.LpoOrderLine;
 import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
+import com.orbix.engine.modules.procurement.repository.GrnRepository;
 import com.orbix.engine.modules.procurement.repository.LpoOrderLineRepository;
 import com.orbix.engine.modules.procurement.repository.LpoOrderRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -55,6 +60,7 @@ class LpoOrderServiceImplTest {
 
     @Mock private LpoOrderRepository orders;
     @Mock private LpoOrderLineRepository lines;
+    @Mock private GrnRepository grns;
     @Mock private ItemRepository items;
     @Mock private VatGroupRepository vatGroups;
     @Mock private EventPublisher events;
@@ -216,21 +222,66 @@ class LpoOrderServiceImplTest {
         LpoOrder order = createdOrder("LPO-CXL", new BigDecimal("10"));
         when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
 
-        LpoOrderDto dto = service.cancel(order.getUid());
+        LpoOrderDto dto = service.cancel(order.getUid(), "duplicate raised in error");
 
         assertThat(dto.status()).isEqualTo(LpoOrderStatus.CANCELLED);
+        assertThat(dto.cancellationReason()).isEqualTo("duplicate raised in error");
         verify(events).publish(eq("LpoOrderCancelled.v1"), any(), any(), any());
     }
 
     @Test
-    void cancel_fromApproved_isRejected() {
+    void cancel_fromPendingApproval_succeeds() {
+        LpoOrder order = createdOrder("LPO-CXP", new BigDecimal("10"));
+        order.submit(ACTOR_ID);
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
+
+        LpoOrderDto dto = service.cancel(order.getUid(), null);
+
+        assertThat(dto.status()).isEqualTo(LpoOrderStatus.CANCELLED);
+        // Pre-stable schema: no GRN check needed for PENDING_APPROVAL — no repo touch.
+        verify(grns, never()).existsByLpoOrderId(any());
+    }
+
+    @Test
+    void cancel_fromApproved_withNoGrn_succeeds() {
         LpoOrder order = createdOrder("LPO-CXLA", new BigDecimal("10"));
         order.approve(ACTOR_ID);
         when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
+        when(grns.existsByLpoOrderId(order.getId())).thenReturn(false);
+
+        LpoOrderDto dto = service.cancel(order.getUid(), "supplier reneged");
+
+        assertThat(dto.status()).isEqualTo(LpoOrderStatus.CANCELLED);
+        assertThat(dto.cancellationReason()).isEqualTo("supplier reneged");
+        verify(events).publish(eq("LpoOrderCancelled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void cancel_fromApproved_withExistingGrn_isRejected() {
+        LpoOrder order = createdOrder("LPO-CXLG", new BigDecimal("10"));
+        order.approve(ACTOR_ID);
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
+        when(grns.existsByLpoOrderId(order.getId())).thenReturn(true);
 
         String uid = order.getUid();
-        assertThatThrownBy(() -> service.cancel(uid))
-            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> service.cancel(uid, "shouldn't work"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("GRN");
+        verify(events, never()).publish(eq("LpoOrderCancelled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void cancel_fromPartiallyReceived_isRejected_deferredToSliceC() {
+        LpoOrder order = createdOrder("LPO-CXLP", new BigDecimal("10"));
+        order.approve(ACTOR_ID);
+        order.markReceiveProgress(false, ACTOR_ID); // → PARTIALLY_RECEIVED
+        when(orders.findByUid(order.getUid())).thenReturn(Optional.of(order));
+
+        String uid = order.getUid();
+        assertThatThrownBy(() -> service.cancel(uid, "nope"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("PARTIALLY_RECEIVED");
+        verify(grns, never()).existsByLpoOrderId(any());
     }
 
     @Test
@@ -263,6 +314,68 @@ class LpoOrderServiceImplTest {
         assertThat(dto.subtotalAmount()).isEqualByComparingTo("1000");
         assertThat(dto.totalAmount()).isEqualByComparingTo("1180");
         verify(lines).deleteByLpoOrderId(order.getId());
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice F — list with optional status filter (GAP 7.A)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void list_nullStatus_companyWide_callsCompanyOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdOrderByIdDesc(eq(COMPANY_ID), eq(pageable))).thenReturn(empty);
+
+        service.list(null, null, pageable);
+
+        verify(orders).findByCompanyIdOrderByIdDesc(COMPANY_ID, pageable);
+        verify(orders, never()).findByCompanyIdAndStatusOrderByIdDesc(any(), any(), any());
+    }
+
+    @Test
+    void list_nullStatus_branchScoped_callsBranchOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndBranchIdOrderByIdDesc(eq(COMPANY_ID), eq(BRANCH_ID), eq(pageable)))
+            .thenReturn(empty);
+
+        service.list(BRANCH_ID, null, pageable);
+
+        verify(orders).findByCompanyIdAndBranchIdOrderByIdDesc(COMPANY_ID, BRANCH_ID, pageable);
+        verify(orders, never()).findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(any(), any(), any(), any());
+    }
+
+    @Test
+    void list_pendingApprovalStatus_companyWide_callsStatusVariant() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndStatusOrderByIdDesc(eq(COMPANY_ID),
+                eq(LpoOrderStatus.PENDING_APPROVAL), eq(pageable))).thenReturn(empty);
+
+        service.list(null, LpoOrderStatus.PENDING_APPROVAL, pageable);
+
+        verify(orders).findByCompanyIdAndStatusOrderByIdDesc(
+            COMPANY_ID, LpoOrderStatus.PENDING_APPROVAL, pageable);
+        verify(orders, never()).findByCompanyIdOrderByIdDesc(any(Long.class), any(Pageable.class));
+    }
+
+    @Test
+    void list_otherStatus_branchScoped_callsBranchAndStatusVariant() {
+        Pageable pageable = PageRequest.of(1, 50);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(eq(COMPANY_ID),
+                eq(BRANCH_ID), eq(LpoOrderStatus.APPROVED), eq(pageable))).thenReturn(empty);
+
+        service.list(BRANCH_ID, LpoOrderStatus.APPROVED, pageable);
+
+        verify(orders).findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(
+            COMPANY_ID, BRANCH_ID, LpoOrderStatus.APPROVED, pageable);
+        verify(orders, never()).findByCompanyIdAndBranchIdOrderByIdDesc(
+            any(Long.class), any(Long.class), any(Pageable.class));
     }
 
     private LpoOrder createdOrder(String number, BigDecimal total) {

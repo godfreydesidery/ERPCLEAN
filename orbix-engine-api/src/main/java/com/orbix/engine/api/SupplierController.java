@@ -17,11 +17,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
-/** Supplier management (F1.7). Gated by {@code PARTY.MANAGE_SUPPLIERS}. */
+/**
+ * Supplier management (F1.7). Per-action permissions:
+ * {@code SUPPLIER.CREATE}, {@code SUPPLIER.UPDATE}, {@code SUPPLIER.ARCHIVE}
+ * (archive perm also gates re-activation, the inverse of archive).
+ */
 @RestController
 @RequestMapping("/api/v1/suppliers")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('PARTY.MANAGE_SUPPLIERS')")
 @Validated
 public class SupplierController {
 
@@ -42,6 +45,7 @@ public class SupplierController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SUPPLIER.CREATE')")
     public ResponseEntity<SupplierResponseDto> createSupplier(
             @Valid @RequestBody CreateSupplierRequestDto request) {
         SupplierResponseDto supplier = service.createSupplier(request);
@@ -50,18 +54,21 @@ public class SupplierController {
     }
 
     @PatchMapping("/uid/{partyUid}")
+    @PreAuthorize("hasAuthority('SUPPLIER.UPDATE')")
     public SupplierResponseDto updateSupplier(@PathVariable @ValidUlid String partyUid,
                                               @Valid @RequestBody UpdateSupplierRequestDto request) {
         return service.updateSupplierByPartyUid(partyUid, request);
     }
 
-    @PostMapping("/uid/{partyUid}/deactivate")
-    public ResponseEntity<Void> deactivateSupplier(@PathVariable @ValidUlid String partyUid) {
-        service.deactivateSupplierByPartyUid(partyUid);
+    @PostMapping("/uid/{partyUid}/archive")
+    @PreAuthorize("hasAuthority('SUPPLIER.ARCHIVE')")
+    public ResponseEntity<Void> archiveSupplier(@PathVariable @ValidUlid String partyUid) {
+        service.archiveSupplierByPartyUid(partyUid);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/uid/{partyUid}/activate")
+    @PreAuthorize("hasAuthority('SUPPLIER.ARCHIVE')")
     public ResponseEntity<Void> activateSupplier(@PathVariable @ValidUlid String partyUid) {
         service.activateSupplierByPartyUid(partyUid);
         return ResponseEntity.noContent().build();

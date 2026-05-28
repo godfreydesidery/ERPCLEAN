@@ -190,10 +190,18 @@ import {
       @if (suppliers().length === 0) {
         <div class="p-5 text-center">
           <div class="empty-icon mx-auto mb-3"><i class="bi bi-truck"></i></div>
-          <h2 class="h6 fw-bold mb-1 text-dark">No suppliers match</h2>
+          <h2 class="h6 fw-bold mb-1 text-dark">
+            @if (searchTerm || statusFilter()) {
+              No suppliers match
+            } @else {
+              No suppliers yet
+            }
+          </h2>
           <p class="small text-secondary mb-0">
             @if (searchTerm) {
               Try a different code, name or TIN.
+            } @else if (statusFilter()) {
+              Try clearing the status filter.
             } @else {
               Add your first supplier to start receiving stock.
             }
@@ -234,14 +242,14 @@ import {
                         <i class="bi bi-pencil"></i>
                       </button>
                       @if (supplier.party.status === 'ACTIVE') {
-                        <button class="btn btn-outline-danger" (click)="deactivate(supplier)"
-                                [disabled]="busy()" title="Deactivate. Affects every role on the underlying party.">
-                          <i class="bi bi-pause-circle"></i>
+                        <button class="btn btn-outline-danger" (click)="archive(supplier)"
+                                [disabled]="busy()" title="Archive. Affects every role on the underlying party.">
+                          <i class="bi bi-archive"></i>
                         </button>
                       } @else {
                         <button class="btn btn-outline-success" (click)="activate(supplier)"
                                 [disabled]="busy()" title="Reactivate. Affects every role on the underlying party.">
-                          <i class="bi bi-play-circle"></i>
+                          <i class="bi bi-arrow-up-circle"></i>
                         </button>
                       }
                     </div>
@@ -277,14 +285,14 @@ import {
                   <i class="bi bi-pencil me-1"></i> Edit
                 </button>
                 @if (supplier.party.status === 'ACTIVE') {
-                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="deactivate(supplier)"
+                  <button class="btn btn-sm btn-outline-danger flex-grow-1" (click)="archive(supplier)"
                           [disabled]="busy()">
-                    <i class="bi bi-pause-circle me-1"></i> Deactivate
+                    <i class="bi bi-archive me-1"></i> Archive
                   </button>
                 } @else {
                   <button class="btn btn-sm btn-outline-success flex-grow-1" (click)="activate(supplier)"
                           [disabled]="busy()">
-                    <i class="bi bi-play-circle me-1"></i> Activate
+                    <i class="bi bi-arrow-up-circle me-1"></i> Activate
                   </button>
                 }
               </div>
@@ -336,8 +344,6 @@ import {
     .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
     .status-badge--active   { background: #d1fae5; color: #047857; }
     .status-badge--active .status-badge__dot   { background: #10b981; }
-    .status-badge--inactive { background: #fef3c7; color: #92400e; }
-    .status-badge--inactive .status-badge__dot { background: #f59e0b; }
     .status-badge--archived { background: #f3f4f6; color: #4b5563; }
     .status-badge--archived .status-badge__dot { background: #9ca3af; }
 
@@ -420,13 +426,12 @@ export class SuppliersComponent implements OnInit {
       : 'Save the new party and assign the supplier role in one transaction';
   });
 
-  protected readonly statusFilter = signal<'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null>(null);
+  protected readonly statusFilter = signal<'ACTIVE' | 'ARCHIVED' | null>(null);
   protected searchTerm = '';
 
   protected readonly statusOptions = [
     { label: 'All',      value: null },
     { label: 'Active',   value: 'ACTIVE' as const },
-    { label: 'Inactive', value: 'INACTIVE' as const },
     { label: 'Archived', value: 'ARCHIVED' as const },
   ];
 
@@ -497,9 +502,9 @@ export class SuppliersComponent implements OnInit {
     }
   }
 
-  deactivate(supplier: Supplier): void {
+  archive(supplier: Supplier): void {
     this.busy.set(true);
-    this.party.deactivateSupplier(supplier.party.uid).subscribe({
+    this.party.archiveSupplier(supplier.party.uid).subscribe({
       next: () => { this.busy.set(false); this.load(); },
       error: err => { this.busy.set(false); this.showError(err); }
     });
@@ -575,7 +580,7 @@ export class SuppliersComponent implements OnInit {
     this.searchTimer = setTimeout(() => { this.pageNo.set(0); this.load(); }, 300);
   }
 
-  setFilter(status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | null): void {
+  setFilter(status: 'ACTIVE' | 'ARCHIVED' | null): void {
     this.statusFilter.set(status);
     this.pageNo.set(0);
     this.load();

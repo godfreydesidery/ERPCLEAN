@@ -13,4 +13,10 @@ public interface CashQueryService {
     List<CashEntryDto> listEntries(Long branchId, CashAccount account, LocalDate businessDate);
 
     List<CashBookDto> listCashBook(Long branchId, LocalDate businessDate);
+
+    /** uid-keyed read for an immutable ledger row. */
+    CashEntryDto getCashEntryByUid(String uid);
+
+    /** uid-keyed read for a cash-book projection row. */
+    CashBookDto getCashBookByUid(String uid);
 }

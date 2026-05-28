@@ -9,7 +9,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/**
+ * Append-only ledger-row response. Surrogate-Long PK aggregate: carries both
+ * {@code id} (stringified on the wire) and {@code uid} (external URL handle).
+ * Slice D — no archive / activate lifecycle, immutable wire shape.
+ */
 public record CashEntryDto(
+    String uid,
     Long id,
     Instant at,
     Long companyId,
@@ -33,6 +39,7 @@ public record CashEntryDto(
 ) {
     public static CashEntryDto from(CashEntry entry) {
         return new CashEntryDto(
+            entry.getUid(),
             entry.getId(), entry.getAt(), entry.getCompanyId(), entry.getBranchId(),
             entry.getBusinessDate(), entry.getAccount(), entry.getDirection(),
             entry.getAmount(), entry.getTenderAmount(), entry.getFxRateSnapshot(),

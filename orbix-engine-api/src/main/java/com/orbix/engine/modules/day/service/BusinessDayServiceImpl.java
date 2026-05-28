@@ -6,9 +6,12 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayDto;
+import com.orbix.engine.modules.day.domain.dto.BusinessDayOverrideDto;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.domain.entity.BusinessDayId;
+import com.orbix.engine.modules.day.domain.entity.BusinessDayOverride;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
+import com.orbix.engine.modules.day.repository.BusinessDayOverrideRepository;
 import com.orbix.engine.modules.day.repository.BusinessDayRepository;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -32,12 +36,14 @@ public class BusinessDayServiceImpl implements BusinessDayService {
     private static final Logger log = LoggerFactory.getLogger(BusinessDayServiceImpl.class);
     private static final long SYSTEM_ACTOR_ID = 0L;
     private static final String AGG = "BusinessDay";
+    private static final String AGG_OVERRIDE = "BusinessDayOverride";
     private static final String F_BRANCH = "branchId";
     private static final String F_DATE = "businessDate";
     private static final List<BusinessDayStatus> NOT_CLOSED =
         List.of(BusinessDayStatus.OPEN, BusinessDayStatus.CLOSING);
 
     private final BusinessDayRepository businessDays;
+    private final BusinessDayOverrideRepository businessDayOverrides;
     private final BranchRepository branches;
     private final List<EodGuard> eodGuards;
     private final EventPublisher events;
@@ -68,7 +74,8 @@ public class BusinessDayServiceImpl implements BusinessDayService {
         requireBranch(branchId);
         BusinessDay day = openInternal(branchId, businessDate, context.userId());
         events.publish("BusinessDayOpened.v1", AGG, branchId + ":" + businessDate,
-            Map.of(F_BRANCH, branchId, F_DATE, businessDate.toString(),
+            Map.of("uid", day.getUid(),
+                F_BRANCH, branchId, F_DATE, businessDate.toString(),
                 "openedBy", day.getOpenedBy()));
         return BusinessDayDto.from(day);
     }
@@ -85,21 +92,7 @@ public class BusinessDayServiceImpl implements BusinessDayService {
     @Auditable(action = "START_CLOSING", entityType = AGG)
     public BusinessDayDto startClosing(Long branchId, LocalDate businessDate) {
         BusinessDay day = requireDay(branchId, businessDate);
-        if (day.getStatus() == BusinessDayStatus.CLOSING
-                || day.getStatus() == BusinessDayStatus.CLOSED) {
-            return BusinessDayDto.from(day);
-        }
-        if (day.getStatus() != BusinessDayStatus.OPEN) {
-            throw new IllegalArgumentException("Business day is not OPEN: " + day.getStatus());
-        }
-        List<EodBlockerDto> blockers = aggregateBlockers(branchId, businessDate);
-        if (!blockers.isEmpty()) {
-            throw new EodBlockedException(blockers);
-        }
-        day.startClosing();
-        events.publish("BusinessDayClosingStarted.v1", AGG, branchId + ":" + businessDate,
-            Map.of(F_BRANCH, branchId, F_DATE, businessDate.toString()));
-        return BusinessDayDto.from(day);
+        return startClosingInternal(day);
     }
 
     @Override
@@ -107,6 +100,142 @@ public class BusinessDayServiceImpl implements BusinessDayService {
     @Auditable(action = "CLOSE", entityType = AGG)
     public BusinessDayDto closeDay(Long branchId, LocalDate businessDate, String eodReportObjectKey) {
         BusinessDay day = requireDay(branchId, businessDate);
+        return closeInternal(day, eodReportObjectKey);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "END", entityType = AGG)
+    public BusinessDayDto endDay(Long branchId, LocalDate businessDate, String eodReportObjectKey) {
+        BusinessDay day = requireDay(branchId, businessDate);
+        return endInternal(day, eodReportObjectKey);
+    }
+
+    // ---- uid entry points --------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public BusinessDayDto getBusinessDayByUid(String uid) {
+        return BusinessDayDto.from(requireBusinessDayByUid(uid));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "START_CLOSING", entityType = AGG)
+    public BusinessDayDto startClosingByUid(String uid) {
+        return startClosingInternal(requireBusinessDayByUid(uid));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "CLOSE", entityType = AGG)
+    public BusinessDayDto closeDayByUid(String uid, String eodReportObjectKey) {
+        return closeInternal(requireBusinessDayByUid(uid), eodReportObjectKey);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "END", entityType = AGG)
+    public BusinessDayDto endDayByUid(String uid, String eodReportObjectKey) {
+        return endInternal(requireBusinessDayByUid(uid), eodReportObjectKey);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EodBlockerDto> previewBlockersByUid(String uid) {
+        BusinessDay day = requireBusinessDayByUid(uid);
+        return aggregateBlockers(day.getBranchId(), day.getBusinessDate());
+    }
+
+    // ---- business-day overrides --------------------------------------------
+
+    @Override
+    @Transactional
+    @Auditable(action = "POST_OVERRIDE", entityType = AGG_OVERRIDE)
+    public BusinessDayOverrideDto postOverrideByDayUid(String dayUid,
+                                                       String entityType,
+                                                       Long entityId,
+                                                       String reason) {
+        if (entityType == null || entityType.isBlank()) {
+            throw new IllegalArgumentException("entityType is required");
+        }
+        if (entityId == null) {
+            throw new IllegalArgumentException("entityId is required");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("reason is required");
+        }
+        BusinessDay day = requireBusinessDayByUid(dayUid);
+        BusinessDayOverride override = businessDayOverrides.save(new BusinessDayOverride(
+            day.getBranchId(),
+            day.getBusinessDate(),
+            entityType.trim(),
+            entityId,
+            reason.trim(),
+            context.userId()
+        ));
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("uid", override.getUid());
+        payload.put("dayUid", day.getUid());
+        payload.put(F_BRANCH, override.getBranchId());
+        payload.put(F_DATE, override.getTargetBusinessDate().toString());
+        payload.put("entityType", override.getEntityType());
+        payload.put("entityId", override.getEntityId());
+        payload.put("reason", override.getReason());
+        payload.put("overriddenBy", override.getAuthorisedBy());
+        payload.put("overriddenAt", override.getAt().toString());
+        events.publish("BusinessDayOverridden.v1", AGG_OVERRIDE,
+            String.valueOf(override.getId()), payload);
+        return BusinessDayOverrideDto.from(override);
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = "ARCHIVE_OVERRIDE", entityType = AGG_OVERRIDE)
+    public BusinessDayOverrideDto archiveBusinessDayOverrideByUid(String uid) {
+        BusinessDayOverride override = requireOverrideByUid(uid);
+        if (override.isArchived()) {
+            throw new IllegalArgumentException(
+                "Business day override is already archived: " + override.getUid());
+        }
+        override.archive(context.userId());
+        return BusinessDayOverrideDto.from(override);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BusinessDayOverrideDto> listOverrides(Long branchId) {
+        requireBranch(branchId);
+        // Repository already sorts by `at DESC`; map straight to DTOs.
+        return businessDayOverrides.findByBranchIdOrderByAtDesc(branchId).stream()
+            .map(BusinessDayOverrideDto::from)
+            .toList();
+    }
+
+    // ---- shared internals --------------------------------------------------
+
+    private BusinessDayDto startClosingInternal(BusinessDay day) {
+        if (day.getStatus() == BusinessDayStatus.CLOSING
+                || day.getStatus() == BusinessDayStatus.CLOSED) {
+            return BusinessDayDto.from(day);
+        }
+        if (day.getStatus() != BusinessDayStatus.OPEN) {
+            throw new IllegalArgumentException("Business day is not OPEN: " + day.getStatus());
+        }
+        List<EodBlockerDto> blockers = aggregateBlockers(day.getBranchId(), day.getBusinessDate());
+        if (!blockers.isEmpty()) {
+            throw new EodBlockedException(blockers);
+        }
+        day.startClosing();
+        events.publish("BusinessDayClosingStarted.v1", AGG,
+            day.getBranchId() + ":" + day.getBusinessDate(),
+            Map.of("uid", day.getUid(),
+                F_BRANCH, day.getBranchId(),
+                F_DATE, day.getBusinessDate().toString()));
+        return BusinessDayDto.from(day);
+    }
+
+    private BusinessDayDto closeInternal(BusinessDay day, String eodReportObjectKey) {
         if (day.getStatus() == BusinessDayStatus.CLOSED) {
             return BusinessDayDto.from(day);
         }
@@ -115,38 +244,45 @@ public class BusinessDayServiceImpl implements BusinessDayService {
                 "Business day must be CLOSING to close: " + day.getStatus());
         }
         day.close(context.userId(), eodReportObjectKey);
-        events.publish("BusinessDayClosed.v1", AGG, branchId + ":" + businessDate,
-            Map.of(F_BRANCH, branchId, F_DATE, businessDate.toString(),
+        events.publish("BusinessDayClosed.v1", AGG,
+            day.getBranchId() + ":" + day.getBusinessDate(),
+            Map.of("uid", day.getUid(),
+                F_BRANCH, day.getBranchId(),
+                F_DATE, day.getBusinessDate().toString(),
                 "closedBy", day.getClosedBy(),
+                "closedAt", day.getClosedAt() == null ? "" : day.getClosedAt().toString(),
                 "eodReportObjectKey", eodReportObjectKey == null ? "" : eodReportObjectKey));
-        autoRoll(branchId, businessDate);
+        autoRoll(day.getBranchId(), day.getBusinessDate());
         return BusinessDayDto.from(day);
     }
 
-    @Override
-    @Transactional
-    @Auditable(action = "END", entityType = AGG)
-    public BusinessDayDto endDay(Long branchId, LocalDate businessDate, String eodReportObjectKey) {
-        BusinessDay day = requireDay(branchId, businessDate);
-        // Already-closed days return as-is (TC-DAY-025 idempotency).
+    private BusinessDayDto endInternal(BusinessDay day, String eodReportObjectKey) {
         if (day.getStatus() == BusinessDayStatus.CLOSED) {
             return BusinessDayDto.from(day);
         }
         if (day.getStatus() == BusinessDayStatus.OPEN) {
-            List<EodBlockerDto> blockers = aggregateBlockers(branchId, businessDate);
+            List<EodBlockerDto> blockers =
+                aggregateBlockers(day.getBranchId(), day.getBusinessDate());
             if (!blockers.isEmpty()) {
                 throw new EodBlockedException(blockers);
             }
             day.startClosing();
-            events.publish("BusinessDayClosingStarted.v1", AGG, branchId + ":" + businessDate,
-                Map.of(F_BRANCH, branchId, F_DATE, businessDate.toString()));
+            events.publish("BusinessDayClosingStarted.v1", AGG,
+                day.getBranchId() + ":" + day.getBusinessDate(),
+                Map.of("uid", day.getUid(),
+                    F_BRANCH, day.getBranchId(),
+                    F_DATE, day.getBusinessDate().toString()));
         }
         day.close(context.userId(), eodReportObjectKey);
-        events.publish("BusinessDayClosed.v1", AGG, branchId + ":" + businessDate,
-            Map.of(F_BRANCH, branchId, F_DATE, businessDate.toString(),
+        events.publish("BusinessDayClosed.v1", AGG,
+            day.getBranchId() + ":" + day.getBusinessDate(),
+            Map.of("uid", day.getUid(),
+                F_BRANCH, day.getBranchId(),
+                F_DATE, day.getBusinessDate().toString(),
                 "closedBy", day.getClosedBy(),
+                "closedAt", day.getClosedAt() == null ? "" : day.getClosedAt().toString(),
                 "eodReportObjectKey", eodReportObjectKey == null ? "" : eodReportObjectKey));
-        autoRoll(branchId, businessDate);
+        autoRoll(day.getBranchId(), day.getBusinessDate());
         return BusinessDayDto.from(day);
     }
 
@@ -162,7 +298,8 @@ public class BusinessDayServiceImpl implements BusinessDayService {
         }
         BusinessDay next = openInternal(branchId, nextDate, SYSTEM_ACTOR_ID);
         events.publish("BusinessDayOpened.v1", AGG, branchId + ":" + nextDate,
-            Map.of(F_BRANCH, branchId, F_DATE, nextDate.toString(),
+            Map.of("uid", next.getUid(),
+                F_BRANCH, branchId, F_DATE, nextDate.toString(),
                 "openedBy", next.getOpenedBy(),
                 "autoRolledFrom", closedDate.toString()));
     }
@@ -215,5 +352,24 @@ public class BusinessDayServiceImpl implements BusinessDayService {
         return businessDays.findById(new BusinessDayId(branchId, businessDate))
             .orElseThrow(() -> new NoSuchElementException(
                 "Business day not found: " + branchId + ":" + businessDate));
+    }
+
+    private BusinessDay requireBusinessDayByUid(String uid) {
+        BusinessDay day = businessDays.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException("Business day not found: " + uid));
+        // Tenant predicate: the parent branch must belong to the caller's
+        // company. requireBranch also checks BranchScope (per-user branch
+        // access) so cross-branch reads inside a single company are blocked
+        // for non-superusers.
+        requireBranch(day.getBranchId());
+        return day;
+    }
+
+    private BusinessDayOverride requireOverrideByUid(String uid) {
+        BusinessDayOverride override = businessDayOverrides.findByUid(uid)
+            .orElseThrow(() -> new NoSuchElementException(
+                "Business day override not found: " + uid));
+        requireBranch(override.getBranchId());
+        return override;
     }
 }

@@ -3,6 +3,7 @@ package com.orbix.engine.modules.cash.domain.entity;
 import com.orbix.engine.modules.cash.domain.enums.CashAccount;
 import com.orbix.engine.modules.cash.domain.enums.CashDirection;
 import com.orbix.engine.modules.cash.domain.enums.GlCategory;
+import com.orbix.engine.modules.common.domain.entity.UidEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
@@ -20,15 +21,24 @@ import java.time.LocalDate;
  * no updated_at. UNIQUE {@code (ref_type, ref_id, direction)} is the
  * idempotency key — producers calling the ledger twice for the same source
  * doc resolve to the same triple and the constraint kicks in.
+ *
+ * <p>Slice D — entries carry {@code uid} (inherited from {@link UidEntity})
+ * as the external URL handle. The append-only invariant is preserved: no
+ * archive / activate / reversal endpoint on this aggregate. Reversals
+ * happen on the audit-doc that produced the entry (CashAdjustment,
+ * BankDeposit) and post a fresh compensating entry under a new ref_type.
  */
 @Entity
 @Table(name = "cash_entry",
-    uniqueConstraints = @UniqueConstraint(name = "uk_cash_entry_ref",
-        columnNames = {"ref_type", "ref_id", "direction"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_cash_entry_ref",
+            columnNames = {"ref_type", "ref_id", "direction"}),
+        @UniqueConstraint(name = "uk_cash_entry_uid", columnNames = {"uid"})
+    })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@EqualsAndHashCode(of = "id")
-public class CashEntry {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class CashEntry extends UidEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cash_entry_seq")
