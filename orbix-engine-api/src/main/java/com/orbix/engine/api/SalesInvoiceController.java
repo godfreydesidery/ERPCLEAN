@@ -33,11 +33,18 @@ public class SalesInvoiceController {
 
     private final SalesInvoiceService service;
 
+    /**
+     * Slice F — {@code status} optional. Accepts the bucket aliases
+     * {@code "OPEN"} / {@code "OVERDUE"} for the dashboard drill-through
+     * contract, or any raw {@link com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus}
+     * value for exact filtering.
+     */
     @GetMapping
     public PageDto<SalesInvoiceDto> list(@RequestParam(required = false) Long branchId,
+                                         @RequestParam(required = false) String status,
                                          @RequestParam(defaultValue = "0") int page,
                                          @RequestParam(defaultValue = "20") int size) {
-        return service.list(branchId, PageRequest.of(page, size));
+        return service.list(branchId, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{uid}")

@@ -153,4 +153,58 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     long countOverdueForBranch(@Param("companyId") Long companyId,
                                @Param("branchId") Long branchId,
                                @Param("today") LocalDate today);
+
+    /**
+     * Slice F — paged list of "open" invoices (POSTED + PARTIALLY_PAID with
+     * outstanding &gt; 0). Backed by {@code ix_sales_invoice_branch_status}.
+     * {@code branchId} nullable — null = company-wide.
+     */
+    @Query("""
+        select s from SalesInvoice s
+         where s.companyId = :companyId
+           and (:branchId is null or s.branchId = :branchId)
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID)
+           and s.totalAmount > s.paidAmount
+         order by s.id desc
+        """)
+    Page<SalesInvoice> findOpenForBranch(@Param("companyId") Long companyId,
+                                         @Param("branchId") Long branchId,
+                                         Pageable pageable);
+
+    /**
+     * Slice F — paged list of "overdue" invoices (OPEN + dueDate &lt; today).
+     * Backed by {@code ix_sales_invoice_branch_due}. {@code branchId} nullable.
+     */
+    @Query("""
+        select s from SalesInvoice s
+         where s.companyId = :companyId
+           and (:branchId is null or s.branchId = :branchId)
+           and s.status in (
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.POSTED,
+              com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus.PARTIALLY_PAID)
+           and s.dueDate is not null
+           and s.dueDate < :today
+           and s.totalAmount > s.paidAmount
+         order by s.id desc
+        """)
+    Page<SalesInvoice> findOverdueForBranch(@Param("companyId") Long companyId,
+                                            @Param("branchId") Long branchId,
+                                            @Param("today") LocalDate today,
+                                            Pageable pageable);
+
+    /**
+     * Slice F — paged list filtered by an exact {@link com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus}.
+     * {@code branchId} nullable. For the {@code OPEN} / {@code OVERDUE} bucket
+     * aliases use {@link #findOpenForBranch} / {@link #findOverdueForBranch}.
+     */
+    Page<SalesInvoice> findByCompanyIdAndStatusOrderByIdDesc(Long companyId,
+                                                             com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus status,
+                                                             Pageable pageable);
+
+    /** Slice F — same as {@link #findByCompanyIdAndStatusOrderByIdDesc} but branch-scoped. */
+    Page<SalesInvoice> findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(Long companyId, Long branchId,
+                                                                        com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus status,
+                                                                        Pageable pageable);
 }

@@ -214,6 +214,69 @@ class StockMoveServiceImplTest {
         verify(events).publish(eq("BalanceUpdated.v1"), any(), any(), any());
     }
 
+    // ---------------------------------------------------------------------
+    // Slice F — listBalances filter flags (GAP 7.C)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void listBalances_noFlags_returnsAllRows() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        ItemBranchBalance low = balance(new BigDecimal("5"), new BigDecimal("100"));
+        low.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance ok = balance(new BigDecimal("50"), new BigDecimal("100"));
+        ok.setReorderMin(new BigDecimal("10"));
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, low, ok));
+
+        var result = service.listBalances(BRANCH_ID, false, false);
+
+        assertThat(result).hasSize(3);
+    }
+
+    @Test
+    void listBalances_negativeOnly_filtersToNegativeRows() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        ItemBranchBalance ok = balance(new BigDecimal("50"), new BigDecimal("100"));
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, ok));
+
+        var result = service.listBalances(BRANCH_ID, true, false);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).qtyOnHand()).isEqualByComparingTo("-3");
+    }
+
+    @Test
+    void listBalances_belowReorderOnly_filtersToAtOrBelowMin() {
+        ItemBranchBalance below = balance(new BigDecimal("5"), new BigDecimal("100"));
+        below.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance atMin = balance(new BigDecimal("10"), new BigDecimal("100"));
+        atMin.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance above = balance(new BigDecimal("50"), new BigDecimal("100"));
+        above.setReorderMin(new BigDecimal("10"));
+        ItemBranchBalance noMin = balance(new BigDecimal("0"), new BigDecimal("100")); // reorderMin null -> filtered out
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(below, atMin, above, noMin));
+
+        var result = service.listBalances(BRANCH_ID, false, true);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(b -> b.qtyOnHand().toPlainString())
+            .containsExactlyInAnyOrder("5", "10");
+    }
+
+    @Test
+    void listBalances_bothFlags_composeAsAnd() {
+        ItemBranchBalance neg = balance(new BigDecimal("-3"), new BigDecimal("100"));
+        neg.setReorderMin(new BigDecimal("10"));    // qty<0 AND below min -> kept
+        ItemBranchBalance lowNotNeg = balance(new BigDecimal("5"), new BigDecimal("100"));
+        lowNotNeg.setReorderMin(new BigDecimal("10")); // below min but qty>=0 -> filtered
+        ItemBranchBalance negNoMin = balance(new BigDecimal("-1"), new BigDecimal("100")); // qty<0 but reorderMin null -> filtered
+        when(balances.findByBranchId(BRANCH_ID)).thenReturn(java.util.List.of(neg, lowNotNeg, negNoMin));
+
+        var result = service.listBalances(BRANCH_ID, true, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).qtyOnHand()).isEqualByComparingTo("-3");
+    }
+
     @Test
     void post_passesBatchIdThroughToStockMoveRow() {
         when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))

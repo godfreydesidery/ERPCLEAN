@@ -27,8 +27,19 @@ export class StockService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listBalances(branchId: string): Observable<ItemBranchBalance[]> {
-    const params = new HttpParams().set('branchId', branchId);
+  /**
+   * Slice F — list balances for a branch. {@code opts.negativeOnly} keeps
+   * only rows with {@code qtyOnHand < 0}; {@code opts.belowReorderOnly}
+   * keeps only rows at or below reorder min. Both default to false (today's
+   * behaviour). Backend pinned to {@code STOCK.COUNT}.
+   */
+  listBalances(
+    branchId: string,
+    opts?: { negativeOnly?: boolean; belowReorderOnly?: boolean }
+  ): Observable<ItemBranchBalance[]> {
+    let params = new HttpParams().set('branchId', branchId);
+    if (opts?.negativeOnly) params = params.set('negativeOnly', 'true');
+    if (opts?.belowReorderOnly) params = params.set('belowReorderOnly', 'true');
     return unwrap(this.http.get<ApiResponse<ItemBranchBalance[]>>(
       `${this.base}/balances`, { params }
     ));

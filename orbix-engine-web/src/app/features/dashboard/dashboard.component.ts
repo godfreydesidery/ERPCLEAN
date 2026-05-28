@@ -1,20 +1,30 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { DayService } from '../day/day.service';
 import { BusinessDay } from '../day/day.models';
 import { CompanyService } from '../admin/company/company.service';
-import { DashboardService, DASHBOARD_LIVE } from './dashboard.service';
+import { DashboardService, DASHBOARD_LIVE, DashboardRollupResponse } from './dashboard.service';
 
+/**
+ * A single KPI tile descriptor. {@code testId} pins the wrapper for the
+ * Slice F drill-through Playwright spec. When {@code link} is null OR
+ * {@code denied} is true OR {@code value} is the "—" / "Permission required"
+ * placeholder, the wrapper renders as an inert {@code <span>} with the
+ * {@code data-testid} but no anchor (per QA's contract).
+ */
 interface Kpi {
   label: string;
   value: string;
   icon: string;
   tint: 'blue' | 'green' | 'amber' | 'rose';
   live: boolean;
+  testId: string;
+  link: string | null;
+  queryParams: Record<string, string> | null;
+  denied: boolean;
 }
 
 interface Alert {
@@ -22,8 +32,27 @@ interface Alert {
   desc: string;
   tint: 'amber' | 'rose' | 'blue' | 'green';
   link: string;
+  queryParams: Record<string, string>;
   cta: string;
   live: boolean;
+  testId: string;
+}
+
+/**
+ * Materialised inputs to {@link DashboardComponent.buildKpis} — collected
+ * once from the signals so each per-tile builder reads pure data.
+ */
+interface KpiContext {
+  ccy: string;
+  arDenied: boolean;
+  negDenied: boolean;
+  branchId: string | null;
+  businessDate: string;
+  todaysSalesValue: number | null;
+  stockAlertsValue: number | null;
+  negativeStockNumeric: number | null;
+  openInvoicesNumeric: number | null;
+  arOutstandingNumeric: number | null;
 }
 
 interface QuickAction {
@@ -109,23 +138,45 @@ interface QuickAction {
     <!-- KPI grid -->
     <section class="row g-3 g-md-4 mb-4">
       @for (kpi of kpis(); track kpi.label) {
-        <div class="col-12 col-sm-6 col-lg-3">
-          <div class="card border-0 shadow-sm h-100 kpi-card">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-start mb-3">
-                <span class="kpi-icon kpi-icon--{{ kpi.tint }}">
-                  <i class="bi {{ kpi.icon }}"></i>
-                </span>
-                @if (!kpi.live) {
-                  <span class="sample-pill" title="Depicted value — not yet wired to a live source">sample</span>
-                }
+        <div class="col-12 col-sm-6 col-lg-3" [attr.data-testid]="kpi.testId">
+          @if (kpi.link !== null && !kpi.denied) {
+            <a [routerLink]="kpi.link"
+               [queryParams]="kpi.queryParams"
+               class="card border-0 shadow-sm h-100 kpi-card kpi-card--link text-decoration-none"
+               [attr.aria-label]="kpi.label + ': ' + kpi.value">
+              <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                  <span class="kpi-icon kpi-icon--{{ kpi.tint }}">
+                    <i class="bi {{ kpi.icon }}"></i>
+                  </span>
+                  @if (!kpi.live) {
+                    <span class="sample-pill" title="Depicted value — not yet wired to a live source">sample</span>
+                  }
+                </div>
+                <p class="text-secondary small fw-semibold mb-1 text-uppercase" style="letter-spacing:0.06em;">
+                  {{ kpi.label }}
+                </p>
+                <h3 class="h4 fw-bold mb-0 text-dark">{{ kpi.value }}</h3>
               </div>
-              <p class="text-secondary small fw-semibold mb-1 text-uppercase" style="letter-spacing:0.06em;">
-                {{ kpi.label }}
-              </p>
-              <h3 class="h4 fw-bold mb-0 text-dark">{{ kpi.value }}</h3>
-            </div>
-          </div>
+            </a>
+          } @else {
+            <span class="card border-0 shadow-sm h-100 kpi-card d-block">
+              <span class="card-body p-4 d-block">
+                <span class="d-flex justify-content-between align-items-start mb-3">
+                  <span class="kpi-icon kpi-icon--{{ kpi.tint }}">
+                    <i class="bi {{ kpi.icon }}"></i>
+                  </span>
+                  @if (!kpi.live) {
+                    <span class="sample-pill" title="Depicted value — not yet wired to a live source">sample</span>
+                  }
+                </span>
+                <span class="text-secondary small fw-semibold mb-1 text-uppercase d-block" style="letter-spacing:0.06em;">
+                  {{ kpi.label }}
+                </span>
+                <span class="h4 fw-bold mb-0 text-dark d-block">{{ kpi.value }}</span>
+              </span>
+            </span>
+          }
         </div>
       }
     </section>
@@ -164,7 +215,8 @@ interface QuickAction {
             </div>
             <ul class="list-unstyled mb-0">
               @for (alert of alerts(); track alert.title; let last = $last) {
-                <li class="alert-row" [class.alert-row--last]="last">
+                <li class="alert-row" [class.alert-row--last]="last"
+                    [attr.data-testid]="alert.testId">
                   <span class="alert-row__dot alert-row__dot--{{ alert.tint }}"></span>
                   <div class="flex-grow-1">
                     <p class="mb-0 fw-semibold text-dark small">
@@ -175,7 +227,9 @@ interface QuickAction {
                     </p>
                     <p class="mb-0 small text-secondary">{{ alert.desc }}</p>
                   </div>
-                  <a [routerLink]="alert.link" class="btn btn-sm btn-outline-secondary">{{ alert.cta }}</a>
+                  <a [routerLink]="alert.link"
+                     [queryParams]="alert.queryParams"
+                     class="btn btn-sm btn-outline-secondary">{{ alert.cta }}</a>
                 </li>
               } @empty {
                 <li class="alert-row alert-row--last">
@@ -225,8 +279,9 @@ interface QuickAction {
     .day-meta { opacity: 0.8; }
 
     /* ---- KPI tiles ---- */
-    .kpi-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-    .kpi-card:hover {
+    .kpi-card { transition: transform 0.15s ease, box-shadow 0.15s ease; color: inherit; }
+    .kpi-card--link { cursor: pointer; }
+    .kpi-card--link:hover {
       transform: translateY(-2px);
       box-shadow: 0 0.5rem 1.5rem rgba(13, 42, 91, 0.08) !important;
     }
@@ -362,42 +417,131 @@ export class DashboardComponent implements OnInit {
   /** Negative-stock tile shows "Permission required" when the caller lacks STOCK.COUNT. */
   protected readonly negativeStockPermissionDenied = signal<boolean>(false);
 
-  protected readonly kpis = computed<Kpi[]>(() => {
-    const ccy = this.currencyCode();
-    const arDenied = this.arPermissionDenied();
-    const arValue = arDenied ? 'Permission required' : this.money(this.arOutstanding(), ccy);
-    const openValue = arDenied ? 'Permission required' : this.count(this.openInvoices());
-    const negativeStockValue = this.negativeStockPermissionDenied()
-      ? 'Permission required'
-      : this.count(this.negativeStockCount());
+  protected readonly kpis = computed<Kpi[]>(() => this.buildKpis());
+
+  /**
+   * Slice F — drill-through contract per Plan §3. Each tile carries an
+   * {@code data-testid} (QA's contract) and resolves to either a link
+   * (when the value is loaded AND the relevant permission is granted) or
+   * an inert {@code <span>} (otherwise). The wrapper renders regardless
+   * — only the inner anchor toggles, matching the spec's
+   * {@code assertInertTile} pattern.
+   */
+  private buildKpis(): Kpi[] {
+    const ctx = this.kpiContext();
     return [
-      { label: "Today's sales",  value: this.money(this.todaysSales(), ccy), icon: 'bi-cash-coin', tint: 'green', live: DASHBOARD_LIVE.todaysSales },
-      { label: 'Stock alerts',   value: this.count(this.stockAlerts()),      icon: 'bi-box-seam',  tint: 'amber', live: DASHBOARD_LIVE.stockAlertCount },
-      { label: 'Negative stock', value: negativeStockValue,                   icon: 'bi-exclamation-octagon', tint: 'rose', live: DASHBOARD_LIVE.negativeStockCount },
-      { label: 'Open invoices',  value: openValue,                            icon: 'bi-receipt',   tint: 'blue',  live: DASHBOARD_LIVE.openInvoiceCount },
-      { label: 'AR outstanding', value: arValue,                              icon: 'bi-people',    tint: 'rose',  live: DASHBOARD_LIVE.arOutstanding },
+      this.todaysSalesKpi(ctx),
+      this.stockAlertsKpi(ctx),
+      this.negativeStockKpi(ctx),
+      this.openInvoicesKpi(ctx),
+      this.arOutstandingKpi(ctx),
     ];
-  });
+  }
+
+  private kpiContext(): KpiContext {
+    return {
+      ccy: this.currencyCode(),
+      arDenied: this.arPermissionDenied(),
+      negDenied: this.negativeStockPermissionDenied(),
+      branchId: this.activeBranchId(),
+      businessDate: this.currentDay()?.businessDate
+        ?? this.today().toISOString().slice(0, 10),
+      todaysSalesValue: this.todaysSales(),
+      stockAlertsValue: this.stockAlerts(),
+      negativeStockNumeric: this.negativeStockCount(),
+      openInvoicesNumeric: this.openInvoices(),
+      arOutstandingNumeric: this.arOutstanding(),
+    };
+  }
+
+  private todaysSalesKpi(c: KpiContext): Kpi {
+    const branchId = c.branchId;
+    const linked = c.todaysSalesValue !== null && branchId !== null;
+    return {
+      label: "Today's sales", value: this.money(c.todaysSalesValue, c.ccy),
+      icon: 'bi-cash-coin', tint: 'green', live: DASHBOARD_LIVE.todaysSales,
+      testId: 'kpi-todays-sales',
+      link: linked ? '/reports/sales-daily' : null,
+      queryParams: linked && branchId !== null
+        ? { branchId, businessDate: c.businessDate }
+        : null,
+      denied: false,
+    };
+  }
+
+  private stockAlertsKpi(c: KpiContext): Kpi {
+    const linked = c.stockAlertsValue !== null;
+    return {
+      label: 'Stock alerts', value: this.count(c.stockAlertsValue),
+      icon: 'bi-box-seam', tint: 'amber', live: DASHBOARD_LIVE.stockAlertCount,
+      testId: 'kpi-stock-alerts',
+      link: linked ? '/stock/balances' : null,
+      queryParams: linked ? { belowReorderOnly: 'true' } : null,
+      denied: false,
+    };
+  }
+
+  private negativeStockKpi(c: KpiContext): Kpi {
+    const linked = c.negativeStockNumeric !== null && c.negDenied === false;
+    return {
+      label: 'Negative stock',
+      value: c.negDenied ? 'Permission required' : this.count(c.negativeStockNumeric),
+      icon: 'bi-exclamation-octagon', tint: 'rose',
+      live: DASHBOARD_LIVE.negativeStockCount, testId: 'kpi-negative-stock',
+      link: linked ? '/stock/balances' : null,
+      queryParams: linked ? { negativeOnly: 'true' } : null,
+      denied: c.negDenied,
+    };
+  }
+
+  private openInvoicesKpi(c: KpiContext): Kpi {
+    const linked = c.openInvoicesNumeric !== null && c.arDenied === false;
+    return {
+      label: 'Open invoices',
+      value: c.arDenied ? 'Permission required' : this.count(c.openInvoicesNumeric),
+      icon: 'bi-receipt', tint: 'blue', live: DASHBOARD_LIVE.openInvoiceCount,
+      testId: 'kpi-open-invoices',
+      link: linked ? '/sales/invoices' : null,
+      queryParams: linked ? { status: 'OPEN' } : null,
+      denied: c.arDenied,
+    };
+  }
+
+  private arOutstandingKpi(c: KpiContext): Kpi {
+    const linked = c.arOutstandingNumeric !== null && c.arDenied === false;
+    return {
+      label: 'AR outstanding',
+      value: c.arDenied ? 'Permission required' : this.money(c.arOutstandingNumeric, c.ccy),
+      icon: 'bi-people', tint: 'rose', live: DASHBOARD_LIVE.arOutstanding,
+      testId: 'kpi-ar-outstanding',
+      link: linked ? '/sales/invoices' : null,
+      queryParams: linked ? { status: 'OPEN', sort: 'outstanding,desc' } : null,
+      denied: c.arDenied,
+    };
+  }
 
   protected readonly alerts = computed<Alert[]>(() => {
     const out: Alert[] = [];
     this.pushIfPositive(out, this.stockAlerts(), n =>
       ({ tint: 'amber', title: `${n} SKU${n === 1 ? '' : 's'} at or below reorder level`,
-        desc: 'Review balances and raise a purchase order.', link: '/stock/balances', cta: 'Review',
-        live: DASHBOARD_LIVE.stockAlertCount }));
+        desc: 'Review balances and raise a purchase order.',
+        link: '/stock/balances', queryParams: { belowReorderOnly: 'true' }, cta: 'Review',
+        live: DASHBOARD_LIVE.stockAlertCount, testId: 'alert-stock-alerts' }));
     this.pushIfPositive(out, this.negativeStockCount(), n =>
       ({ tint: 'rose', title: `${n} item${n === 1 ? '' : 's'} in negative stock`,
         desc: 'OVERSELL moves have driven on-hand below zero — reconcile soon.',
-        link: '/stock/balances', cta: 'Review',
-        live: DASHBOARD_LIVE.negativeStockCount }));
+        link: '/stock/balances', queryParams: { negativeOnly: 'true' }, cta: 'Review',
+        live: DASHBOARD_LIVE.negativeStockCount, testId: 'alert-negative-stock' }));
     this.pushIfPositive(out, this.overdueInvoices(), n =>
       ({ tint: 'rose', title: `${n} invoice${n === 1 ? '' : 's'} past due`,
-        desc: 'Chase outstanding receivables under Debt.', link: '/debt', cta: 'Chase',
-        live: DASHBOARD_LIVE.overdueInvoiceCount }));
+        desc: 'Chase outstanding receivables on the sales invoices view.',
+        link: '/sales/invoices', queryParams: { status: 'OVERDUE' }, cta: 'Chase',
+        live: DASHBOARD_LIVE.overdueInvoiceCount, testId: 'alert-overdue-invoices' }));
     this.pushIfPositive(out, this.lposPending(), n =>
       ({ tint: 'blue', title: `${n} LPO${n === 1 ? '' : 's'} awaiting approval`,
-        desc: 'Procurement approvals are pending.', link: '/procurement', cta: 'Open',
-        live: DASHBOARD_LIVE.lposPendingApproval }));
+        desc: 'Procurement approvals are pending.',
+        link: '/procurement/lpos', queryParams: { status: 'PENDING_APPROVAL' }, cta: 'Open',
+        live: DASHBOARD_LIVE.lposPendingApproval, testId: 'alert-lpos-pending' }));
     return out;
   });
 
@@ -459,93 +603,101 @@ export class DashboardComponent implements OnInit {
       error: () => { /* keep default */ },
     });
 
-    // AR tiles — live via /sales/reports/ar-summary. Branch-scoped when an
-    // active branch is set; company-wide otherwise. 403 surfaces as the
-    // "Permission required" state on the tiles.
-    this.loadArSummary();
-
-    // Negative-stock tile — live via /reports/stock-negative (Slice E1).
-    // Mirrors AR: branch-scoped when active, company-wide on null. 403
-    // surfaces as "Permission required" on the tile.
-    this.loadNegativeStockCount();
-
-    // LPO approvals tile — live via /lpos/pending-approval/count. Branch-scoped
-    // when active, company-wide on null. 403 leaves the tile in null state so
-    // the alert simply doesn't surface for callers without procurement perms.
-    this.dashboard.lposPendingApproval(this.branch.activeBranchId()).subscribe({
-      next: v => this.lposPending.set(v),
-      error: () => this.lposPending.set(null),
-    });
-
+    // Business day still needs its own round-trip (read-side context used by
+    // the day banner + the rollup's businessDate). The KPI tiles + alert
+    // counts now come from a single rollup call below.
     const branchId = this.branch.activeBranchId();
     if (branchId == null) {
       this.dayLoaded.set(true);
+      this.loadRollup(null, this.today().toISOString().slice(0, 10));
       return;
     }
     this.dayService.currentDay(branchId).subscribe({
-      next: d => { this.currentDay.set(d); this.dayLoaded.set(true); this.loadBranchMetrics(branchId); },
-      error: () => { this.dayLoaded.set(true); this.loadBranchMetrics(branchId); },
-    });
-  }
-
-  private loadBranchMetrics(branchId: string): void {
-    const businessDate = this.currentDay()?.businessDate ?? this.today().toISOString().slice(0, 10);
-    this.dashboard.todaysSales(branchId, businessDate).subscribe({
-      next: v => this.todaysSales.set(v),
-      error: () => this.todaysSales.set(null),
-    });
-    this.dashboard.stockAlertCount(branchId).subscribe({
-      next: v => this.stockAlerts.set(v),
-      error: () => this.stockAlerts.set(null),
-    });
-  }
-
-  private loadNegativeStockCount(): void {
-    const branchId = this.branch.activeBranchId();
-    this.dashboard.negativeStockCount(branchId).subscribe({
-      next: count => {
-        this.negativeStockPermissionDenied.set(false);
-        this.negativeStockCount.set(count);
+      next: d => {
+        this.currentDay.set(d);
+        this.dayLoaded.set(true);
+        const isoToday = this.today().toISOString().slice(0, 10);
+        this.loadRollup(branchId, d?.businessDate ?? isoToday);
       },
-      error: err => {
-        if (err instanceof HttpErrorResponse && err.status === 403) {
-          this.negativeStockPermissionDenied.set(true);
-          this.negativeStockCount.set(null);
-        } else {
-          // Other errors leave the tile in "—" state; don't crash.
-          this.negativeStockCount.set(null);
-        }
-      }
+      error: () => {
+        this.dayLoaded.set(true);
+        this.loadRollup(branchId, this.today().toISOString().slice(0, 10));
+      },
     });
   }
 
-  private loadArSummary(): void {
-    const branchId = this.branch.activeBranchId();
-    this.dashboard.arSummary(branchId).subscribe({
-      next: summary => {
-        this.arPermissionDenied.set(false);
-        const outstandingNum = Number(summary.arOutstanding);
-        this.arOutstanding.set(Number.isFinite(outstandingNum) ? outstandingNum : null);
-        this.overdueInvoices.set(summary.overdueInvoices);
-        this.openInvoices.set(summary.openInvoices);
-        // The summary carries its own currency code (company default) — adopt
-        // it so AR-tile formatting matches the backend's currency.
-        if (summary.currencyCode) this.currencyCode.set(summary.currencyCode);
-      },
-      error: err => {
-        if (err instanceof HttpErrorResponse && err.status === 403) {
-          this.arPermissionDenied.set(true);
-          this.arOutstanding.set(null);
-          this.overdueInvoices.set(null);
-          this.openInvoices.set(null);
-        } else {
-          // Other errors leave the tiles in the "—" state; don't crash.
-          this.arOutstanding.set(null);
-          this.overdueInvoices.set(null);
-          this.openInvoices.set(null);
-        }
-      }
+  /**
+   * Slice F — single round-trip replacing the four parallel per-fragment
+   * calls (ar-summary + stock-negative + lpo-pending-count + sales-summary
+   * + balances-derived stock-alert-count). Per-fragment authorisation:
+   * fragments the caller lacks the perm for serialise as {@code null};
+   * the component renders {@code null} as "Permission required" via the
+   * existing {@code arPermissionDenied} / {@code negativeStockPermissionDenied}
+   * signals.
+   */
+  private loadRollup(branchId: string | null, businessDate: string): void {
+    this.dashboard.rollup(branchId, businessDate).subscribe({
+      next: r => this.applyRollup(r),
+      error: () => this.applyRollup(null),
     });
+  }
+
+  private applyRollup(r: DashboardRollupResponse | null): void {
+    if (r == null) {
+      // Whole-call failure — leave every tile in "—" state. Don't surface as
+      // a permission error since we can't tell what the underlying cause was.
+      this.todaysSales.set(null);
+      this.stockAlerts.set(null);
+      this.negativeStockCount.set(null);
+      this.openInvoices.set(null);
+      this.arOutstanding.set(null);
+      this.overdueInvoices.set(null);
+      this.lposPending.set(null);
+      return;
+    }
+
+    if (r.currencyCode) this.currencyCode.set(r.currencyCode);
+
+    // KPI section
+    const kpi = r.kpi;
+    if (kpi == null) {
+      // Caller saw 403 on every per-fragment auth inside the KPI section.
+      // Treat the AR / negative-stock tiles as permission-denied so the
+      // existing UX still applies.
+      this.arPermissionDenied.set(true);
+      this.negativeStockPermissionDenied.set(true);
+      this.todaysSales.set(null);
+      this.stockAlerts.set(null);
+      this.negativeStockCount.set(null);
+      this.openInvoices.set(null);
+      this.arOutstanding.set(null);
+    } else {
+      // Today's sales + stock-alerts have no permission gate today, so a null
+      // value there means "no branch" / "data unavailable", not "permission
+      // denied".
+      this.todaysSales.set(kpi.todaysSales === null ? null : Number(kpi.todaysSales));
+      this.stockAlerts.set(kpi.stockAlerts);
+
+      // Negative-stock tile — null fragment means STOCK.COUNT denied.
+      const negDenied = kpi.negativeStockCount === null;
+      this.negativeStockPermissionDenied.set(negDenied);
+      this.negativeStockCount.set(kpi.negativeStockCount);
+
+      // AR tiles — both gated by SALES.REPORT.AR_SUMMARY. Either both come
+      // back or neither (the same sub-call backs both).
+      const arDenied = kpi.openInvoices === null && kpi.arOutstanding === null;
+      this.arPermissionDenied.set(arDenied);
+      this.openInvoices.set(kpi.openInvoices === null ? null : Number(kpi.openInvoices));
+      this.arOutstanding.set(kpi.arOutstanding === null ? null : Number(kpi.arOutstanding));
+    }
+
+    // Alert section — counts drive the alert rows; null = perm-denied, the
+    // alert simply does not surface (the spec asserts the row's testid is
+    // absent in that case).
+    const overdue = r.alerts?.overdueInvoiceCount;
+    this.overdueInvoices.set(overdue == null ? null : Number(overdue));
+    const lpos = r.alerts?.lposPendingApproval;
+    this.lposPending.set(lpos == null ? null : Number(lpos));
   }
 
   private money(n: number | null, ccy: string): string {

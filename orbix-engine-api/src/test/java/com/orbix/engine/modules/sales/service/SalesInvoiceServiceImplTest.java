@@ -41,6 +41,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -536,6 +540,101 @@ class SalesInvoiceServiceImplTest {
         assertThatThrownBy(() -> service.reprint(uid, req))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Cannot reprint");
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice F — list with bucket-alias status filter (GAP 7.B)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void list_nullStatus_companyWide_callsCompanyOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findByCompanyIdOrderByIdDesc(COMPANY_ID, pageable)).thenReturn(empty);
+
+        service.list(null, null, pageable);
+
+        verify(invoices).findByCompanyIdOrderByIdDesc(COMPANY_ID, pageable);
+        verify(invoices, never()).findOpenForBranch(any(), any(), any());
+        verify(invoices, never()).findOverdueForBranch(any(), any(), any(), any());
+    }
+
+    @Test
+    void list_blankStatus_branchScoped_callsBranchOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findByCompanyIdAndBranchIdOrderByIdDesc(COMPANY_ID, BRANCH_ID, pageable)).thenReturn(empty);
+
+        service.list(BRANCH_ID, "   ", pageable);
+
+        verify(invoices).findByCompanyIdAndBranchIdOrderByIdDesc(COMPANY_ID, BRANCH_ID, pageable);
+    }
+
+    @Test
+    void list_openBucket_callsFindOpenForBranch() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findOpenForBranch(COMPANY_ID, null, pageable)).thenReturn(empty);
+
+        service.list(null, "OPEN", pageable);
+
+        verify(invoices).findOpenForBranch(COMPANY_ID, null, pageable);
+        verify(invoices, never()).findByCompanyIdOrderByIdDesc(any(Long.class), any(Pageable.class));
+    }
+
+    @Test
+    void list_overdueBucket_callsFindOverdueForBranch_withToday() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findOverdueForBranch(eq(COMPANY_ID), eq(BRANCH_ID), any(LocalDate.class), eq(pageable)))
+            .thenReturn(empty);
+
+        service.list(BRANCH_ID, "OVERDUE", pageable);
+
+        verify(invoices).findOverdueForBranch(eq(COMPANY_ID), eq(BRANCH_ID),
+            eq(LocalDate.now()), eq(pageable));
+    }
+
+    @Test
+    void list_rawStatusValue_callsStatusEqualityVariant() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findByCompanyIdAndStatusOrderByIdDesc(COMPANY_ID, SalesInvoiceStatus.DRAFT, pageable))
+            .thenReturn(empty);
+
+        service.list(null, "DRAFT", pageable);
+
+        verify(invoices).findByCompanyIdAndStatusOrderByIdDesc(
+            COMPANY_ID, SalesInvoiceStatus.DRAFT, pageable);
+    }
+
+    @Test
+    void list_rawStatusValue_branchScoped_callsBranchAndStatusVariant() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<SalesInvoice> empty = new PageImpl<>(List.of());
+        when(invoices.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(
+                COMPANY_ID, BRANCH_ID, SalesInvoiceStatus.VOIDED, pageable)).thenReturn(empty);
+
+        service.list(BRANCH_ID, "voided", pageable);  // case-insensitive
+
+        verify(invoices).findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(
+            COMPANY_ID, BRANCH_ID, SalesInvoiceStatus.VOIDED, pageable);
+    }
+
+    @Test
+    void list_unknownStatusToken_throws() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.list(null, "BOGUS_NOT_A_STATUS", pageable))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("BOGUS_NOT_A_STATUS");
     }
 
     private SalesInvoice postableInvoice(String number, PaymentTerms terms, BigDecimal total) {

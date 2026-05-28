@@ -127,6 +127,18 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // Slice-C-pending perm — bootstrap drops it gracefully if absent.
       // The accountant is the only persona who can read AR-summary reports.
       'SALES.REPORT.AR_SUMMARY',
+      // Slice F widening — accountant is the happy-path persona for the
+      // dashboard drill-through suite. They chase overdue invoices, review
+      // stock variance ahead of EOD, and triage pending LPOs.
+      //   - SALES.MANAGE_INVOICE: drill into /sales/invoices?status=OPEN/OVERDUE
+      //   - STOCK.COUNT: drill into /stock/balances (once StockController is
+      //     pinned to STOCK.COUNT — Slice E1 GAP 5.A, folded into Slice F).
+      //   - PROCUREMENT.MANAGE_LPO.READ (id 110, V68): list LPOs without edit
+      //     access — the right "read-only LPO" perm for the accountant chasing
+      //     the lposPending alert. Already seeded.
+      'SALES.MANAGE_INVOICE',
+      'STOCK.COUNT',
+      'PROCUREMENT.MANAGE_LPO.READ',
     ],
   },
   'procurement-officer': {

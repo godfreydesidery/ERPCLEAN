@@ -40,7 +40,14 @@ public interface SalesInvoiceService {
      */
     SalesInvoiceDto reprint(String uid, ReprintInvoiceRequestDto request);
 
-    PageDto<SalesInvoiceDto> list(Long branchId, Pageable pageable);
+    /**
+     * Slice F — drill-through-friendly list. {@code status} accepts either
+     * a bucket alias ({@code "OPEN"} = POSTED+PARTIALLY_PAID with outstanding,
+     * {@code "OVERDUE"} = OPEN + dueDate&lt;today) or a raw
+     * {@link com.orbix.engine.modules.sales.domain.enums.SalesInvoiceStatus}
+     * value for exact filtering. {@code null} = today's behaviour.
+     */
+    PageDto<SalesInvoiceDto> list(Long branchId, String status, Pageable pageable);
 
     SalesInvoiceDto get(String uid);
 }

@@ -25,6 +25,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -310,6 +314,68 @@ class LpoOrderServiceImplTest {
         assertThat(dto.subtotalAmount()).isEqualByComparingTo("1000");
         assertThat(dto.totalAmount()).isEqualByComparingTo("1180");
         verify(lines).deleteByLpoOrderId(order.getId());
+    }
+
+    // ---------------------------------------------------------------------
+    // Slice F — list with optional status filter (GAP 7.A)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void list_nullStatus_companyWide_callsCompanyOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdOrderByIdDesc(eq(COMPANY_ID), eq(pageable))).thenReturn(empty);
+
+        service.list(null, null, pageable);
+
+        verify(orders).findByCompanyIdOrderByIdDesc(COMPANY_ID, pageable);
+        verify(orders, never()).findByCompanyIdAndStatusOrderByIdDesc(any(), any(), any());
+    }
+
+    @Test
+    void list_nullStatus_branchScoped_callsBranchOrderByIdDesc() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndBranchIdOrderByIdDesc(eq(COMPANY_ID), eq(BRANCH_ID), eq(pageable)))
+            .thenReturn(empty);
+
+        service.list(BRANCH_ID, null, pageable);
+
+        verify(orders).findByCompanyIdAndBranchIdOrderByIdDesc(COMPANY_ID, BRANCH_ID, pageable);
+        verify(orders, never()).findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(any(), any(), any(), any());
+    }
+
+    @Test
+    void list_pendingApprovalStatus_companyWide_callsStatusVariant() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(branchScope.requireReadable(null)).thenReturn(null);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndStatusOrderByIdDesc(eq(COMPANY_ID),
+                eq(LpoOrderStatus.PENDING_APPROVAL), eq(pageable))).thenReturn(empty);
+
+        service.list(null, LpoOrderStatus.PENDING_APPROVAL, pageable);
+
+        verify(orders).findByCompanyIdAndStatusOrderByIdDesc(
+            COMPANY_ID, LpoOrderStatus.PENDING_APPROVAL, pageable);
+        verify(orders, never()).findByCompanyIdOrderByIdDesc(any(Long.class), any(Pageable.class));
+    }
+
+    @Test
+    void list_otherStatus_branchScoped_callsBranchAndStatusVariant() {
+        Pageable pageable = PageRequest.of(1, 50);
+        when(branchScope.requireReadable(BRANCH_ID)).thenReturn(BRANCH_ID);
+        Page<LpoOrder> empty = new PageImpl<>(List.of());
+        when(orders.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(eq(COMPANY_ID),
+                eq(BRANCH_ID), eq(LpoOrderStatus.APPROVED), eq(pageable))).thenReturn(empty);
+
+        service.list(BRANCH_ID, LpoOrderStatus.APPROVED, pageable);
+
+        verify(orders).findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(
+            COMPANY_ID, BRANCH_ID, LpoOrderStatus.APPROVED, pageable);
+        verify(orders, never()).findByCompanyIdAndBranchIdOrderByIdDesc(
+            any(Long.class), any(Long.class), any(Pageable.class));
     }
 
     private LpoOrder createdOrder(String number, BigDecimal total) {

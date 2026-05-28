@@ -4,6 +4,7 @@ import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
+import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
 import org.springframework.data.domain.Pageable;
 
 /**
@@ -34,7 +35,12 @@ public interface LpoOrderService {
      */
     LpoOrderDto cancel(String uid, String reason);
 
-    PageDto<LpoOrderDto> list(Long branchId, Pageable pageable);
+    /**
+     * Slice F — drill-through-friendly list. {@code status} is optional; when
+     * null, the result is the full company / branch list ordered by id desc;
+     * when set, it filters to LPOs in that status.
+     */
+    PageDto<LpoOrderDto> list(Long branchId, LpoOrderStatus status, Pageable pageable);
 
     LpoOrderDto get(String uid);
 

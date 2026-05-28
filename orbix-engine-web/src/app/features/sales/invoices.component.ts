@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
@@ -194,9 +194,21 @@ interface LineRow {
       <!-- Invoice list -->
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <div class="card-header bg-white border-bottom p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h2 class="h6 fw-bold mb-0 text-dark">Invoices</h2>
-            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label small fw-semibold text-secondary mb-0" for="invoiceStatusFilter">Status</label>
+              <select id="invoiceStatusFilter"
+                      data-testid="status-filter"
+                      class="form-select form-select-sm"
+                      [(ngModel)]="statusFilter"
+                      (ngModelChange)="onStatusChange($event)">
+                @for (opt of statusOptions; track opt) {
+                  <option [value]="opt">{{ statusLabelFor(opt) }}</option>
+                }
+              </select>
+              <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            </div>
           </div>
           @if (invoices().length === 0) {
             <div class="p-5 text-center">
@@ -558,6 +570,8 @@ export class InvoicesComponent implements OnInit {
   private readonly party = inject(PartyService);
   private readonly catalog = inject(CatalogService);
   private readonly currencyService = inject(CurrencyService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   protected readonly currencies = signal<Currency[]>([]);
   protected readonly currencyOptions = computed<SearchSelectOption[]>(() =>
@@ -623,13 +637,55 @@ export class InvoicesComponent implements OnInit {
   protected newDiscountApproverId: string | null = null;
   protected newLines: LineRow[] = [{ itemId: null, qty: null, unitPrice: null, discountPct: null }];
 
+  /**
+   * Slice F — status bucket dropdown. {@code ALL} is the local sentinel for
+   * "no filter" (translated to {@code null} on the wire). {@code OPEN} and
+   * {@code OVERDUE} are backend bucket aliases (POSTED+PARTIALLY_PAID with
+   * outstanding > 0; OPEN + due_date < today). The remaining values map
+   * directly to the raw {@code SalesInvoiceStatus} enum.
+   */
+  protected readonly statusOptions = [
+    'ALL', 'OPEN', 'OVERDUE',
+    'DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'VOIDED', 'CANCELLED',
+  ] as const;
+  protected statusFilter: typeof this.statusOptions[number] = 'ALL';
+  /** Optional sort override (e.g. {@code outstanding,desc} for the AR drill-through). */
+  protected sortFilter: string | null = null;
+
   ngOnInit(): void {
-    this.refresh();
     this.loadSelectables();
     this.currencyService.listCurrencies().subscribe({
       next: list => this.currencies.set(list),
       error: () => this.currencies.set([])
     });
+    // Slice F — query-param-driven status + sort. On every URL change re-read
+    // the filters and refresh. The component is the source of truth for the
+    // dropdown state; the URL is the initial / deep-link state.
+    this.route.queryParamMap.subscribe(params => {
+      const status = params.get('status');
+      this.statusFilter = (status && this.isKnownStatus(status)) ? status : 'ALL';
+      this.sortFilter = params.get('sort');
+      this.pageNo.set(0);
+      this.refresh();
+    });
+  }
+
+  protected statusLabelFor(opt: string): string {
+    if (opt === 'ALL') return 'All';
+    if (opt === 'PARTIALLY_PAID') return 'Part-paid';
+    return opt.charAt(0) + opt.slice(1).toLowerCase().replaceAll('_', ' ');
+  }
+
+  protected onStatusChange(value: string): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { status: value === 'ALL' ? null : value },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private isKnownStatus(s: string): s is typeof this.statusOptions[number] {
+    return (this.statusOptions as readonly string[]).includes(s);
   }
 
   private loadSelectables(): void {
@@ -658,7 +714,8 @@ export class InvoicesComponent implements OnInit {
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.sales.listInvoices(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+    const status = this.statusFilter === 'ALL' ? null : this.statusFilter;
+    this.sales.listInvoices(this.branchId(), this.pageNo(), this.pageSize, status, this.sortFilter).subscribe({
       next: page => {
         this.invoices.set(page.content);
         this.total.set(page.totalElements);
