@@ -4,6 +4,7 @@ import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.party.domain.dto.CreatePartyNoteRequestDto;
 import com.orbix.engine.modules.party.domain.dto.PartyNoteDto;
+import com.orbix.engine.modules.party.domain.enums.PartyNoteKind;
 import com.orbix.engine.modules.party.service.PartyNoteService;
 import com.orbix.engine.modules.sales.domain.dto.AdjustCreditLimitRequestDto;
 import com.orbix.engine.modules.sales.domain.dto.CustomerStatementDto;
@@ -111,8 +112,9 @@ public class DebtController {
     public java.util.List<PartyNoteDto> listNotes(
             @RequestParam String customerUid,
             @RequestParam(defaultValue = "false") boolean includeArchived,
-            @RequestParam(defaultValue = "50") int limit) {
-        return notes.listNotesForCustomerUid(customerUid, includeArchived, limit);
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(required = false, defaultValue = "AR_CHASE") PartyNoteKind kind) {
+        return notes.listNotesForPartyUid(customerUid, kind, includeArchived, limit);
     }
 
     @GetMapping("/notes/uid/{uid}")

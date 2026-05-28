@@ -30,6 +30,12 @@ public interface PartyNoteService {
      */
     List<PartyNoteDto> listNotesForCustomerUid(String customerUid, boolean includeArchived, int limit);
 
+    /**
+     * Activity-log for any party (customer or supplier) filtered by note kind.
+     * Slice G.1 — AP chase notes reuse this path with {@code kind = AP_CHASE}.
+     */
+    List<PartyNoteDto> listNotesForPartyUid(String partyUid, PartyNoteKind kind, boolean includeArchived, int limit);
+
     /** Same as {@link #listNotesForCustomerUid} but by party id (internal joins). */
     List<PartyNoteDto> listRecentForPartyId(Long partyId, PartyNoteKind kind, PartyNoteStatus status, int limit);
 }

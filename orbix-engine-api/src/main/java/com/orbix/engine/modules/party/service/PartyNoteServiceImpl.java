@@ -95,6 +95,29 @@ public class PartyNoteServiceImpl implements PartyNoteService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<PartyNoteDto> listNotesForPartyUid(String partyUid, PartyNoteKind kind,
+                                                    boolean includeArchived, int limit) {
+        Party party = partyService.requireInCompanyByUid(partyUid);
+        int capped = clampLimit(limit);
+        List<PartyNote> rows;
+        if (kind != null) {
+            PartyNoteStatus status = includeArchived ? null : PartyNoteStatus.ACTIVE;
+            rows = (status != null)
+                ? notes.findByPartyIdAndKindAndStatusOrderByCreatedAtDescIdDesc(
+                    party.getId(), kind, status, PageRequest.of(0, capped))
+                : notes.findByPartyIdAndKindOrderByCreatedAtDescIdDesc(
+                    party.getId(), kind, PageRequest.of(0, capped));
+        } else {
+            rows = includeArchived
+                ? notes.findByPartyIdOrderByCreatedAtDescIdDesc(party.getId(), PageRequest.of(0, capped))
+                : notes.findByPartyIdAndStatusOrderByCreatedAtDescIdDesc(
+                    party.getId(), PartyNoteStatus.ACTIVE, PageRequest.of(0, capped));
+        }
+        return rows.stream().map(PartyNoteDto::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<PartyNoteDto> listRecentForPartyId(Long partyId,
                                                    PartyNoteKind kind,
                                                    PartyNoteStatus status,

@@ -132,3 +132,92 @@ export interface CreatePartyNoteRequest {
   kind: PartyNoteKind;
   body: string;
 }
+
+// ---------------------------------------------------------------------------
+// Slice G.1 — Supplier-AP models (mirrors the AR side with supplier* names)
+// All Long-id fields typed string (global IdLongAsStringSerializerModifier).
+// ---------------------------------------------------------------------------
+
+/** GET /api/v1/debt/supplier-aging → SupplierAgingDto. */
+export interface SupplierAging {
+  asOf: string;
+  branchId: string | null;
+  currencyCode: string;
+  totals: SupplierAgingTotals;
+  rows: SupplierAgingRow[];
+}
+
+export interface SupplierAgingTotals {
+  current: number;
+  d1_30: number;
+  d31_60: number;
+  d61_90: number;
+  d90_plus: number;
+  totalOutstanding: number;
+  supplierCount: number;
+}
+
+export interface SupplierAgingRow {
+  supplierId: string;
+  supplierUid: string;
+  supplierName: string;
+  current: number;
+  d1_30: number;
+  d31_60: number;
+  d61_90: number;
+  d90_plus: number;
+  totalOutstanding: number;
+  oldestDaysOverdue: number | null;
+  paymentTermsDays: number | null;
+}
+
+/** GET /api/v1/debt/supplier-dunning row → SupplierDunningQueueRowDto. */
+export interface SupplierDunningQueueRow {
+  supplierId: string;
+  supplierUid: string;
+  supplierName: string;
+  paymentTermsDays: number | null;
+  totalOutstanding: number;
+  oldestDaysOverdue: number | null;
+  oldestDueDate: string | null;
+  worstBucket: AgingBucket;
+  overdueInvoiceCount: number;
+}
+
+/** GET /api/v1/debt/supplier/uid/{uid} → SupplierStatementDto. */
+export interface SupplierStatement {
+  supplierId: string;
+  supplierUid: string;
+  supplierName: string;
+  currencyCode: string;
+  paymentTermsDays: number | null;
+  totalOutstanding: number;
+  openInvoiceCount: number;
+  overdueInvoiceCount: number;
+  asOf: string;
+  openInvoices: OpenSupplierInvoiceRow[];
+  recentPayments: RecentSupplierPaymentRow[];
+}
+
+export interface OpenSupplierInvoiceRow {
+  invoiceId: string;
+  invoiceUid: string;
+  number: string;
+  supplierInvoiceNo: string | null;
+  invoiceDate: string;
+  dueDate: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  outstanding: number;
+  daysOverdue: number | null;
+  status: string;
+}
+
+export interface RecentSupplierPaymentRow {
+  paymentId: string;
+  paymentUid: string;
+  number: string;
+  paymentDate: string;
+  totalAmount: number;
+  currencyCode: string;
+}

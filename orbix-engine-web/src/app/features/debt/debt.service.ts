@@ -11,7 +11,11 @@ import {
   CustomerStatement,
   DebtAging,
   DunningQueueRow,
-  PartyNote
+  PartyNote,
+  PartyNoteKind,
+  SupplierAging,
+  SupplierDunningQueueRow,
+  SupplierStatement
 } from './debt.models';
 
 /**
@@ -106,16 +110,19 @@ export class DebtService {
   }
 
   /**
-   * List chase notes for a customer, newest-first. {@code includeArchived}
-   * default false; {@code limit} default 50.
+   * List chase notes for a party (customer or supplier), newest-first.
+   * Pass {@code kind} to filter by note type; backend defaults to {@code AR_CHASE}
+   * when omitted (backwards-compat). {@code includeArchived} default false;
+   * {@code limit} default 50.
    * Backed by {@code GET /api/v1/debt/notes}; inherits class-level
    * {@code DEBT.READ}.
    */
   listNotes(
-    customerUid: string,
-    opts?: { includeArchived?: boolean; limit?: number }
+    partyUid: string,
+    opts?: { includeArchived?: boolean; limit?: number; kind?: PartyNoteKind }
   ): Observable<PartyNote[]> {
-    let params = new HttpParams().set('customerUid', customerUid);
+    let params = new HttpParams().set('customerUid', partyUid);
+    if (opts?.kind) params = params.set('kind', opts.kind);
     if (opts?.includeArchived) params = params.set('includeArchived', 'true');
     if (opts?.limit != null) params = params.set('limit', opts.limit);
     return unwrap(this.http.get<ApiResponse<PartyNote[]>>(
@@ -141,6 +148,51 @@ export class DebtService {
   archiveNote(noteUid: string): Observable<PartyNote> {
     return unwrap(this.http.post<ApiResponse<PartyNote>>(
       `${this.base}/debt/notes/uid/${noteUid}/archive`, {}
+    ));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Slice G.1 — Supplier-AP methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 5-bucket AP aging snapshot. {@code branchId} null = company-wide.
+   * Backed by {@code GET /api/v1/debt/supplier-aging}; permission {@code DEBT.READ}.
+   */
+  supplierAging(branchId?: string | null, asOf?: string | null): Observable<SupplierAging> {
+    let params = new HttpParams();
+    if (branchId != null) params = params.set('branchId', branchId);
+    if (asOf) params = params.set('asOf', asOf);
+    return unwrap(this.http.get<ApiResponse<SupplierAging>>(
+      `${this.base}/debt/supplier-aging`, { params }
+    ));
+  }
+
+  /**
+   * Paged supplier obligations queue.
+   * Backed by {@code GET /api/v1/debt/supplier-dunning}; permission {@code DEBT.READ}.
+   */
+  supplierDunning(
+    branchId?: string | null,
+    bucketFilter?: AgingBucket | null,
+    page = 0,
+    size = 25
+  ): Observable<Page<SupplierDunningQueueRow>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (branchId != null) params = params.set('branchId', branchId);
+    if (bucketFilter) params = params.set('bucket', bucketFilter);
+    return unwrap(this.http.get<ApiResponse<Page<SupplierDunningQueueRow>>>(
+      `${this.base}/debt/supplier-dunning`, { params }
+    ));
+  }
+
+  /**
+   * Per-supplier debt drill-down. Open AP invoices + recent payments.
+   * Backed by {@code GET /api/v1/debt/supplier/uid/{uid}}; permission {@code DEBT.READ}.
+   */
+  supplierStatement(uid: string): Observable<SupplierStatement> {
+    return unwrap(this.http.get<ApiResponse<SupplierStatement>>(
+      `${this.base}/debt/supplier/uid/${uid}`
     ));
   }
 }

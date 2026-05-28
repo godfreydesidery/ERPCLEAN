@@ -833,3 +833,397 @@ test.describe('Slice G — debt · sales-clerk partial path', () => {
     },
   );
 });
+
+// =============================================================================
+// 4. Slice G.1 — AP-side scenarios (expected-fail until backend G.1 lands)
+//
+// All tests below are tagged test.fail — the supplier-AP endpoints do not
+// exist yet. When backend task G.1 (DebtController supplier endpoints +
+// SupplierDebtReadModelServiceImpl) lands, flip these to plain `test(...)`.
+//
+// Backend gaps captured here (must close to flip the failures):
+//   1. `GET /api/v1/debt/supplier-aging` endpoint does not exist (plan §5.1.1).
+//   2. `GET /api/v1/debt/supplier-dunning` paged endpoint does not exist (§5.1.2).
+//   3. `GET /api/v1/debt/supplier/uid/{uid}` drill-down does not exist (§5.1.3).
+//   4. `POST /api/v1/debt/notes` with `kind=AP_CHASE` — service-layer exists but
+//      the DTO field rename (`customerUid` → `partyUid`) may not yet be deployed.
+//   5. `/debt` AP tab does not exist in the Angular component.
+//   6. `/debt/supplier/uid/:uid` route + supplier drill-down component do not exist.
+//
+// Wire shapes expected once backend lands (pinned here so type guards compile):
+//   GET /api/v1/debt/supplier-aging →
+//     SupplierAgingDto { asOf, branchId, currencyCode,
+//       totals: { current, d1_30, d31_60, d61_90, d90_plus,
+//                 totalOutstanding, supplierCount },
+//       rows: [{ supplierId, supplierUid, supplierName, paymentTermsDays,
+//                current, d1_30, d31_60, d61_90, d90_plus,
+//                totalOutstanding, oldestDaysOverdue, oldestDueDate,
+//                worstBucket }] }
+//   GET /api/v1/debt/supplier-dunning?bucket=&branchId=&page=&size= →
+//     PageDto<SupplierDunningQueueRowDto>
+//       { supplierId, supplierUid, supplierName, paymentTermsDays,
+//         totalOutstanding, oldestDaysOverdue, oldestDueDate,
+//         worstBucket, overdueInvoiceCount }
+//   GET /api/v1/debt/supplier/uid/{uid} →
+//     SupplierStatementDto { header, agingRow, openInvoices[], recentPayments[] }
+//   GET /api/v1/debt/notes?partyUid=...&kind=AP_CHASE →
+//     chase notes list (kind=AP_CHASE filter; kind defaults to AR_CHASE for
+//     backward compat — plan §3.B)
+//
+// Long-id fields stringify on the wire (global IdLongAsStringSerializerModifier).
+// Supplier uid format: Crockford ULID /^[0-9A-HJKMNP-TV-Z]{26}$/.
+//
+// AP — flips when backend G.1 lands
+// =============================================================================
+
+// test-id reference for frontend agent (AP surface mirrors AR; new ids needed):
+//   data-testid                       | Component                        | Purpose
+//   ----------------------------------|----------------------------------|--------------------------------------------
+//   debt-ap-tab                       | debt.component.ts                | Tab toggle — switches dunning queue to AP
+//   debt-ap-dunning-table             | debt.component.ts (AP tab)       | Wrapper around the AP dunning queue table
+//   debt-ap-bucket-current            | debt.component.ts (AP tab)       | Totals header — CURRENT bucket
+//   debt-ap-bucket-30                 | debt.component.ts (AP tab)       | Totals header — D_1_30 bucket
+//   debt-ap-bucket-60                 | debt.component.ts (AP tab)       | Totals header — D_31_60 bucket
+//   debt-ap-bucket-90                 | debt.component.ts (AP tab)       | Totals header — D_61_90 bucket
+//   debt-ap-bucket-over-90            | debt.component.ts (AP tab)       | Totals header — D_90_PLUS bucket
+//   debt-ap-supplier-row              | debt.component.ts (AP tab)       | Clickable supplier row (one per row)
+//   debt-supplier-detail              | supplier-debt-position.component | AP drill-down container
+//   debt-ap-chase-notes-list          | supplier-debt-position.component | AP chase-notes activity log list
+//   debt-ap-chase-note-add            | supplier-debt-position.component | Append-form textarea
+//   debt-ap-chase-note-save           | supplier-debt-position.component | Append-form submit button
+//   debt-ap-payment-terms-display     | supplier-debt-position.component | Read-only payment-terms-days panel
+
+// =============================================================================
+// 4.1 Slice G.1 — ACCOUNTANT happy path on the AP surface
+// =============================================================================
+
+test.describe('Slice G.1 — AP debt · accountant happy path', () => {
+  // AP — flips when backend G.1 lands
+  test.use({ persona: 'accountant' as Persona });
+
+  // ---------------------------------------------------------------------------
+  // 4.1.A — /debt AP tab renders the supplier dunning queue
+  // ---------------------------------------------------------------------------
+  test.fail(
+    // AP — flips when backend G.1 lands
+    '/debt AP tab renders 5-bucket totals row + supplier dunning queue (empty or populated)',
+    async ({ page }) => {
+      await page.goto('/debt');
+      // The AP tab toggle must be present.
+      await expect(page.locator('[data-testid="debt-ap-tab"]')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-testid="debt-ap-tab"]').click();
+
+      // After switching to AP: the AP dunning-queue table wrapper must appear.
+      await expect(page.locator('[data-testid="debt-ap-dunning-table"]')).toBeVisible({ timeout: 15_000 });
+
+      // 5 bucket totals must render (CURRENT / D_1_30 / D_31_60 / D_61_90 / D_90_PLUS).
+      await expect(page.locator('[data-testid="debt-ap-bucket-current"]')).toBeVisible();
+      await expect(page.locator('[data-testid="debt-ap-bucket-30"]')).toBeVisible();
+      await expect(page.locator('[data-testid="debt-ap-bucket-60"]')).toBeVisible();
+      await expect(page.locator('[data-testid="debt-ap-bucket-90"]')).toBeVisible();
+      await expect(page.locator('[data-testid="debt-ap-bucket-over-90"]')).toBeVisible();
+
+      // The AR placeholder copy must NOT appear on the AP tab.
+      await expect(page.getByText(/Debt module coming soon/i)).toHaveCount(0);
+
+      // A11y sweep on the AP tab view — wcag2aa, no serious violations.
+      await dismissDismissableAlerts(page);
+      await assertNoSeriousA11yViolations(page, '/debt (AP tab)');
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // 4.1.B — Supplier aging API contract pins the 5 bucket keys
+  // ---------------------------------------------------------------------------
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'GET /api/v1/debt/supplier-aging returns 5 bucket keys + supplierCount in totals',
+    async ({ page }) => {
+      await page.goto('/dashboard');
+      const r = await apiGet(page, `/api/v1/debt/supplier-aging?branchId=${BRANCH_ID}`, {
+        acceptStatuses: [200],
+      });
+      expect(r.status).toBe(200);
+
+      // Type-guard the wire shape against the locked SupplierAgingDto contract.
+      const body = unwrap<{
+        asOf: string;
+        branchId: string | number;
+        currencyCode: string;
+        totals: {
+          current: number | string;
+          d1_30: number | string;
+          d31_60: number | string;
+          d61_90: number | string;
+          d90_plus: number | string;
+          totalOutstanding: number | string;
+          supplierCount: number | string;
+        };
+        rows: Array<{
+          supplierId: string | number;
+          supplierUid: string;
+          supplierName: string;
+          paymentTermsDays: number | string;
+          current: number | string;
+          d1_30: number | string;
+          d31_60: number | string;
+          d61_90: number | string;
+          d90_plus: number | string;
+          totalOutstanding: number | string;
+          oldestDaysOverdue: number | string;
+          worstBucket: string;
+        }>;
+      }>(r);
+
+      // Pin the 5 documented bucket keys verbatim (plan §4 mirrored from AR).
+      expect(body.totals).toHaveProperty('current');
+      expect(body.totals).toHaveProperty('d1_30');
+      expect(body.totals).toHaveProperty('d31_60');
+      expect(body.totals).toHaveProperty('d61_90');
+      expect(body.totals).toHaveProperty('d90_plus');
+      expect(body.totals).toHaveProperty('totalOutstanding');
+      expect(body.totals).toHaveProperty('supplierCount');
+      expect(Array.isArray(body.rows), 'rows is an array').toBe(true);
+
+      // If rows are present, validate supplier uid format (Crockford ULID).
+      const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+      for (const row of body.rows) {
+        expect(row.supplierUid, `supplierUid "${row.supplierUid}" must be a Crockford ULID`)
+          .toMatch(ULID_RE);
+        expect(row).toHaveProperty('paymentTermsDays');
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // 4.1.C — Supplier drill-down at /debt/supplier/uid/:uid renders 5 panels
+  // ---------------------------------------------------------------------------
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'accountant drills into a supplier → /debt/supplier/uid/:uid renders 5 panels',
+    async ({ page }) => {
+      await page.goto('/debt');
+      // Switch to the AP tab.
+      await expect(page.locator('[data-testid="debt-ap-tab"]')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-testid="debt-ap-tab"]').click();
+      await expect(page.locator('[data-testid="debt-ap-dunning-table"]')).toBeVisible({ timeout: 15_000 });
+
+      // Click the first supplier row in the dunning queue (if none exist, empty
+      // state renders cleanly — the tab-render assertion above already covers
+      // the empty path; this test requires at least one supplier row).
+      const firstRow = page.locator('[data-testid="debt-ap-supplier-row"]').first();
+      await expect(firstRow).toBeVisible({ timeout: 15_000 });
+      const supplierUid = await firstRow.getAttribute('data-supplier-uid');
+      await firstRow.click();
+
+      // URL must resolve to the AP drill-down.
+      await expect(page).toHaveURL(new RegExp('/debt/supplier/uid/[0-9A-HJKMNP-TV-Z]{26}'));
+
+      // The drill-down container must be present.
+      await expect(page.locator('[data-testid="debt-supplier-detail"]')).toBeVisible({ timeout: 15_000 });
+
+      // 5 panels: header (payment-terms read-only), aging row, open invoices,
+      // recent payments, AP chase notes list.
+      await expect(page.locator('[data-testid="debt-ap-payment-terms-display"]')).toBeVisible();
+      await expect(page.locator('[data-testid="debt-ap-chase-notes-list"]')).toBeVisible();
+
+      // The supplier uid in the URL must be a valid Crockford ULID.
+      if (supplierUid) {
+        expect(supplierUid).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+      }
+
+      // A11y sweep on the AP drill-down — wcag2aa, no serious violations.
+      await dismissDismissableAlerts(page);
+      await assertNoSeriousA11yViolations(page, '/debt/supplier/uid/:uid');
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // 4.1.D — Accountant appends an AP_CHASE note; note appears in activity log
+  // ---------------------------------------------------------------------------
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'accountant appends an AP_CHASE note; note appears in activity log + party_note row written',
+    async ({ page }) => {
+      await page.goto('/debt');
+      await expect(page.locator('[data-testid="debt-ap-tab"]')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-testid="debt-ap-tab"]').click();
+      await expect(page.locator('[data-testid="debt-ap-dunning-table"]')).toBeVisible({ timeout: 15_000 });
+
+      const firstRow = page.locator('[data-testid="debt-ap-supplier-row"]').first();
+      await expect(firstRow).toBeVisible({ timeout: 15_000 });
+      const supplierUid = await firstRow.getAttribute('data-supplier-uid');
+      await firstRow.click();
+
+      await expect(page.locator('[data-testid="debt-supplier-detail"]')).toBeVisible({ timeout: 15_000 });
+
+      const noteBody = `AP chase note ${RUN_TAG} — called supplier re: overdue payable`;
+      const addBox = page.locator('[data-testid="debt-ap-chase-note-add"]');
+      const saveBtn = page.locator('[data-testid="debt-ap-chase-note-save"]');
+      await expect(addBox).toBeVisible({ timeout: 10_000 });
+      await addBox.fill(noteBody);
+      await saveBtn.click();
+
+      // Note must appear at the top of the activity log immediately after save.
+      const notesList = page.locator('[data-testid="debt-ap-chase-notes-list"]');
+      await expect(notesList.getByText(noteBody)).toBeVisible({ timeout: 10_000 });
+
+      // Contract pin: POST hit /api/v1/debt/notes with kind='AP_CHASE'.
+      // DB probe: party_note row written with kind=AP_CHASE + status=ACTIVE.
+      if (supplierUid) {
+        // Resolve numeric party_id from the uid for the DB probe.
+        const partyId = dbQuery(`SELECT id FROM party WHERE uid='${escapeSql(supplierUid)}' LIMIT 1`);
+        if (partyId) {
+          const noteRow = dbCount(
+            `SELECT COUNT(*) FROM party_note WHERE party_id=${partyId} `
+            + `AND kind='AP_CHASE' AND body='${escapeSql(noteBody)}' AND status='ACTIVE'`,
+          );
+          expect(noteRow, 'party_note row inserted with kind=AP_CHASE').toBeGreaterThanOrEqual(1);
+
+          const ev = dbCount(
+            `SELECT COUNT(*) FROM domain_event WHERE type='DebtNoteCreated.v1' `
+            + `AND payload_json LIKE '%AP_CHASE%' AND payload_json LIKE '%${escapeSql(RUN_TAG)}%'`,
+          );
+          expect(ev, 'DebtNoteCreated.v1 with AP_CHASE in the outbox').toBeGreaterThanOrEqual(1);
+        }
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // 4.1.E — Accountant archives the AP chase note; note disappears / shows archived
+  // ---------------------------------------------------------------------------
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'accountant archives an AP_CHASE note; note disappears from the active list',
+    async ({ page }) => {
+      await page.goto('/debt');
+      await expect(page.locator('[data-testid="debt-ap-tab"]')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-testid="debt-ap-tab"]').click();
+
+      const firstRow = page.locator('[data-testid="debt-ap-supplier-row"]').first();
+      await expect(firstRow).toBeVisible({ timeout: 15_000 });
+      const supplierUid = await firstRow.getAttribute('data-supplier-uid');
+      await firstRow.click();
+
+      await expect(page.locator('[data-testid="debt-supplier-detail"]')).toBeVisible({ timeout: 15_000 });
+
+      // Seed a note directly via the API so this test is self-contained.
+      const archiveBody = `AP archive-me note ${RUN_TAG}`;
+      const notePost = await apiPost(
+        page,
+        '/api/v1/debt/notes',
+        { partyUid: supplierUid, kind: 'AP_CHASE', body: archiveBody },
+        { acceptStatuses: [200, 201] },
+      );
+      const noteDto = unwrap<{ uid: string }>(notePost);
+      expect(noteDto.uid, 'note uid from POST').toBeTruthy();
+      expect(noteDto.uid).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+
+      // Reload the drill-down so the new note is visible.
+      await page.reload();
+      await expect(page.locator('[data-testid="debt-supplier-detail"]')).toBeVisible({ timeout: 15_000 });
+
+      const notesList = page.locator('[data-testid="debt-ap-chase-notes-list"]');
+      await expect(notesList.getByText(archiveBody)).toBeVisible({ timeout: 10_000 });
+
+      // Archive the note.
+      await apiPost(
+        page,
+        `/api/v1/debt/notes/uid/${noteDto.uid}/archive`,
+        {},
+        { acceptStatuses: [200, 204] },
+      );
+      await page.reload();
+      await expect(page.locator('[data-testid="debt-supplier-detail"]')).toBeVisible({ timeout: 15_000 });
+
+      // After archiving, the note body must NOT appear in the active list.
+      await expect(notesList.getByText(archiveBody)).toHaveCount(0);
+
+      // DB probe: status must be ARCHIVED.
+      const archived = dbCount(
+        `SELECT COUNT(*) FROM party_note WHERE uid='${escapeSql(noteDto.uid)}' AND status='ARCHIVED'`,
+      );
+      expect(archived, 'party_note archived in DB').toBeGreaterThanOrEqual(1);
+    },
+  );
+});
+
+// =============================================================================
+// 4.2 Slice G.1 — SALES-CLERK blocked on AP surface (no DEBT.READ)
+// =============================================================================
+
+test.describe('Slice G.1 — AP debt · sales-clerk 403 gate', () => {
+  // AP — flips when backend G.1 lands
+  test.use({ persona: 'sales-clerk' as Persona });
+
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'sales-clerk GETting /api/v1/debt/supplier-aging is 403 (DEBT.READ gate)',
+    async ({ page }) => {
+      await page.goto('/dashboard');
+      const r = await apiGet(page,
+        `/api/v1/debt/supplier-aging?branchId=${BRANCH_ID}`,
+        { acceptStatuses: [403] },
+      );
+      expect(r.status).toBe(403);
+    },
+  );
+
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'sales-clerk on /debt sees no AP tab content (DEBT.READ not held)',
+    async ({ page }) => {
+      await page.goto('/debt');
+      // Either: the AP tab is absent, or clicking it yields no dunning table.
+      // The safest assertion: no AP supplier rows render (same inert-state
+      // pattern as the AR side).
+      await expect(page.locator('[data-testid="debt-ap-dunning-table"]')).toHaveCount(0);
+      // The inert-state wrapper from the AR side must cover the AP tab too.
+      await expect(page.locator('[data-testid="debt-permission-required"]')).toBeVisible({ timeout: 15_000 });
+    },
+  );
+});
+
+// =============================================================================
+// 4.3 Slice G.1 — PROCUREMENT-OFFICER blocked on AP debt surface
+//
+// Intuition says procurement owns supplier payables — but DEBT.* is the
+// credit-controller permission band, not a procurement grant. The
+// procurement-officer must NOT see the AP debt surface; those reads are
+// controlled by DEBT.READ (accountant / credit-controller persona only).
+// This cross-checks that scope creep hasn't leaked DEBT.READ into the
+// procurement permission set.
+// AP — flips when backend G.1 lands
+// =============================================================================
+
+test.describe('Slice G.1 — AP debt · procurement-officer 403 gate', () => {
+  // AP — flips when backend G.1 lands
+  test.use({ persona: 'procurement-officer' as Persona });
+
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'procurement-officer GETting /api/v1/debt/supplier-aging is 403 (DEBT.READ not a procurement perm)',
+    async ({ page }) => {
+      await page.goto('/dashboard');
+      const r = await apiGet(page,
+        `/api/v1/debt/supplier-aging?branchId=${BRANCH_ID}`,
+        { acceptStatuses: [403] },
+      );
+      expect(r.status).toBe(403);
+    },
+  );
+
+  test.fail(
+    // AP — flips when backend G.1 lands
+    'procurement-officer GETting /api/v1/debt/supplier-dunning is 403',
+    async ({ page }) => {
+      await page.goto('/dashboard');
+      const r = await apiGet(page,
+        `/api/v1/debt/supplier-dunning?branchId=${BRANCH_ID}&page=0&size=25`,
+        { acceptStatuses: [403] },
+      );
+      expect(r.status).toBe(403);
+    },
+  );
+});

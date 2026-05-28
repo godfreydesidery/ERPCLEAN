@@ -50,4 +50,20 @@ public interface SupplierPaymentRepository extends JpaRepository<SupplierPayment
         """)
     BigDecimal sumPaymentsBefore(@Param("supplierId") Long supplierId,
                                   @Param("from") LocalDate from);
+
+    /**
+     * Slice G.1 — recent POSTED supplier payments for the AP supplier-statement
+     * drill-down. {@code fromDate} is inclusive; caller passes {@code today - 30d}.
+     * Ordered payment_date desc, id desc (newest first). Backed by supplierId index.
+     */
+    @Query("""
+        select p from SupplierPayment p
+         where p.supplierId = :supplierId
+           and p.paymentDate >= :fromDate
+           and p.status = com.orbix.engine.modules.cash.domain.enums.SupplierPaymentStatus.POSTED
+         order by p.paymentDate desc, p.id desc
+        """)
+    List<SupplierPayment> findRecentPostedForSupplier(@Param("supplierId") Long supplierId,
+                                                      @Param("fromDate") LocalDate fromDate,
+                                                      Pageable pageable);
 }
