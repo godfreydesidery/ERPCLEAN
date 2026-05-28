@@ -114,7 +114,7 @@ class ItemServiceImplTest {
         when(repo.findByCompanyId(COMPANY_ID, pageable))
             .thenReturn(new PageImpl<>(List.of(item(1L, ItemStatus.ACTIVE), item(2L, ItemStatus.ACTIVE))));
 
-        PageDto<ItemResponseDto> result = service.listItems(null, pageable);
+        PageDto<ItemResponseDto> result = service.listItems(null, null, pageable);
 
         assertThat(result.content()).hasSize(2);
         assertThat(result.totalElements()).isEqualTo(2);
@@ -123,13 +123,49 @@ class ItemServiceImplTest {
     @Test
     void listItems_withStatusFilter_delegatesToStatusQuery() {
         var pageable = PageRequest.of(0, 20);
-        when(repo.findByCompanyIdAndStatus(COMPANY_ID, ItemStatus.ARCHIVED, pageable))
+        when(repo.search(COMPANY_ID, null, ItemStatus.ARCHIVED, pageable))
             .thenReturn(new PageImpl<>(List.of(item(3L, ItemStatus.ARCHIVED))));
 
-        PageDto<ItemResponseDto> result = service.listItems(ItemStatus.ARCHIVED, pageable);
+        PageDto<ItemResponseDto> result = service.listItems(ItemStatus.ARCHIVED, null, pageable);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).status()).isEqualTo(ItemStatus.ARCHIVED);
+    }
+
+    @Test
+    void listItems_withQuery_delegatesToSearchWithWrappedLikeParam() {
+        var pageable = PageRequest.of(0, 20);
+        Item match = item(4L, ItemStatus.ACTIVE);
+        when(repo.search(COMPANY_ID, "%abc%", null, pageable))
+            .thenReturn(new PageImpl<>(List.of(match)));
+
+        PageDto<ItemResponseDto> result = service.listItems(null, "abc", pageable);
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).id()).isEqualTo(4L);
+    }
+
+    @Test
+    void listItems_withQueryUpperCase_normalisesToLower() {
+        var pageable = PageRequest.of(0, 20);
+        when(repo.search(COMPANY_ID, "%abc%", null, pageable))
+            .thenReturn(new PageImpl<>(List.of()));
+
+        service.listItems(null, "ABC", pageable);
+
+        verify(repo).search(COMPANY_ID, "%abc%", null, pageable);
+    }
+
+    @Test
+    void listItems_withBlankQuery_treatsAsNull() {
+        var pageable = PageRequest.of(0, 20);
+        when(repo.findByCompanyId(COMPANY_ID, pageable))
+            .thenReturn(new PageImpl<>(List.of()));
+
+        service.listItems(null, "   ", pageable);
+
+        verify(repo).findByCompanyId(COMPANY_ID, pageable);
+        verify(repo, never()).search(any(), any(), any(), any());
     }
 
     @Test

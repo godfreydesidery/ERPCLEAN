@@ -34,10 +34,11 @@ public class ItemController {
 
     @GetMapping
     public PageDto<ItemResponseDto> listItems(
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) ItemStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return service.listItems(status, PageRequest.of(page, size, Sort.by("code")));
+        return service.listItems(status, q, PageRequest.of(page, size, Sort.by("code")));
     }
 
     @GetMapping("/uid/{uid}")
