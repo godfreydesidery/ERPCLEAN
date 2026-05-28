@@ -32,6 +32,7 @@ export type Persona =
   | 'cashier-with-override' // cashier + sales-invoice/receipt + SALES_INVOICE.OVERRIDE_CREDIT (Slice C)
   | 'store-manager'
   | 'accountant'
+  | 'accountant-approver'   // Slice G.2: second accountant account for dual-approval write-off path
   | 'procurement-officer'
   | 'supervisor'      // can cancel POSTED GRNs / LPOs (GRN.CANCEL, PROCUREMENT.CANCEL_LPO)
   | 'sales-rep'
@@ -156,6 +157,41 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       'DEBT.NOTE.CREATE',
       'DEBT.NOTE.ARCHIVE',
       'DEBT.CREDIT_LIMIT.UPDATE',
+      // Slice G.2 widening — accountant gains write-off request + approval.
+      // Forward-compat-skip: V74 seeds these; dropped gracefully until landed.
+      'DEBT.WRITE_OFF.REQUEST',
+      'DEBT.WRITE_OFF.APPROVE',
+    ],
+  },
+  'accountant-approver': {
+    // Slice G.2 — second accountant account. Holds exactly the same role
+    // grants as `accountant` so the dual-approval spec can submit a request
+    // as `qa.accountant` then approve it as `qa.accountant.approver`. The
+    // service-layer enforces requesterUserId != approverUserId, not a perm
+    // split, so both users carry DEBT.WRITE_OFF.REQUEST + DEBT.WRITE_OFF.APPROVE.
+    // Forward-compat-skip: V74 seeds these; dropped gracefully until landed.
+    username: 'qa.accountant.approver',
+    password: TEST_PASSWORD,
+    fullName: 'QA Accountant (approver)',
+    defaultBranchId: null,
+    permissions: [
+      'CASH.READ',
+      'CASH.ENTRY.READ',
+      'CASH.BOOK.READ',
+      'CASH.ADJUSTMENT.POST',
+      'CASH.ADJUSTMENT.ARCHIVE',
+      'CASH.BANK_DEPOSIT.POST',
+      'CASH.BANK_DEPOSIT.ARCHIVE',
+      'SALES.REPORT.AR_SUMMARY',
+      'SALES.MANAGE_INVOICE',
+      'STOCK.COUNT',
+      'PROCUREMENT.MANAGE_LPO.READ',
+      'DEBT.READ',
+      'DEBT.NOTE.CREATE',
+      'DEBT.NOTE.ARCHIVE',
+      'DEBT.CREDIT_LIMIT.UPDATE',
+      'DEBT.WRITE_OFF.REQUEST',
+      'DEBT.WRITE_OFF.APPROVE',
     ],
   },
   'procurement-officer': {
