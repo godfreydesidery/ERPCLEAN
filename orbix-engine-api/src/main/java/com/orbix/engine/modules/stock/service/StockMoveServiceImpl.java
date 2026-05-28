@@ -155,9 +155,14 @@ public class StockMoveServiceImpl implements StockMoveService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ItemBranchBalanceDto> listBalances(Long branchId) {
+    public List<ItemBranchBalanceDto> listBalances(Long branchId, boolean negativeOnly, boolean belowReorderOnly) {
         branchScope.requireAccess(branchId);
         return balances.findByBranchId(branchId).stream()
+            .filter(b -> !negativeOnly || (b.getQtyOnHand() != null && b.getQtyOnHand().signum() < 0))
+            .filter(b -> !belowReorderOnly
+                || (b.getReorderMin() != null
+                    && b.getQtyOnHand() != null
+                    && b.getQtyOnHand().compareTo(b.getReorderMin()) <= 0))
             .map(ItemBranchBalanceDto::from)
             .toList();
     }

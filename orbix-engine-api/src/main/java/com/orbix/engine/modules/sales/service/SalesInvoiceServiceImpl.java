@@ -276,13 +276,47 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<SalesInvoiceDto> list(Long branchId, Pageable pageable) {
+    public PageDto<SalesInvoiceDto> list(Long branchId, String status, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        Page<SalesInvoice> page = scope == null
-            ? invoices.findByCompanyIdOrderByIdDesc(companyId, pageable)
-            : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        Page<SalesInvoice> page = resolveListPage(companyId, scope, status, pageable);
         return PageDto.of(page, s -> SalesInvoiceDto.from(s, lines.findBySalesInvoiceIdOrderByLineNoAsc(s.getId())));
+    }
+
+    /**
+     * Slice F — branch on the {@code status} token.
+     * <ul>
+     *   <li>{@code null} → today's behaviour.</li>
+     *   <li>{@code "OPEN"} → POSTED+PARTIALLY_PAID with outstanding &gt; 0.</li>
+     *   <li>{@code "OVERDUE"} → OPEN + dueDate &lt; today.</li>
+     *   <li>any raw {@link SalesInvoiceStatus} value (case-insensitive) → exact match.</li>
+     *   <li>anything else → {@link IllegalArgumentException}.</li>
+     * </ul>
+     */
+    private Page<SalesInvoice> resolveListPage(Long companyId, Long scope, String status, Pageable pageable) {
+        if (status == null || status.isBlank()) {
+            return scope == null
+                ? invoices.findByCompanyIdOrderByIdDesc(companyId, pageable)
+                : invoices.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        }
+        String token = status.trim().toUpperCase();
+        if ("OPEN".equals(token)) {
+            return invoices.findOpenForBranch(companyId, scope, pageable);
+        }
+        if ("OVERDUE".equals(token)) {
+            return invoices.findOverdueForBranch(companyId, scope, java.time.LocalDate.now(), pageable);
+        }
+        SalesInvoiceStatus raw;
+        try {
+            raw = SalesInvoiceStatus.valueOf(token);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                "Unknown sales-invoice status filter: '" + status + "'. "
+                    + "Use OPEN, OVERDUE or one of " + java.util.Arrays.toString(SalesInvoiceStatus.values()));
+        }
+        return scope == null
+            ? invoices.findByCompanyIdAndStatusOrderByIdDesc(companyId, raw, pageable)
+            : invoices.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(companyId, scope, raw, pageable);
     }
 
     @Override

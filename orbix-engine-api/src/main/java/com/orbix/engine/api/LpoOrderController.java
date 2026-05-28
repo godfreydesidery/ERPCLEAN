@@ -6,6 +6,7 @@ import com.orbix.engine.modules.procurement.domain.dto.CancelReasonRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.CreateLpoOrderRequestDto;
 import com.orbix.engine.modules.procurement.domain.dto.LpoOrderDto;
 import com.orbix.engine.modules.procurement.domain.dto.UpdateLpoOrderRequestDto;
+import com.orbix.engine.modules.procurement.domain.enums.LpoOrderStatus;
 import com.orbix.engine.modules.procurement.service.LpoOrderService;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -30,9 +31,10 @@ public class LpoOrderController {
     @GetMapping
     @PreAuthorize("hasAuthority('PROCUREMENT.MANAGE_LPO')")
     public PageDto<LpoOrderDto> list(@RequestParam(required = false) Long branchId,
+                                     @RequestParam(required = false) LpoOrderStatus status,
                                      @RequestParam(defaultValue = "0") int page,
                                      @RequestParam(defaultValue = "20") int size) {
-        return service.list(branchId, PageRequest.of(page, size));
+        return service.list(branchId, status, PageRequest.of(page, size));
     }
 
     @GetMapping("/uid/{uid}")

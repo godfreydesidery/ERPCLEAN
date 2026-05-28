@@ -25,9 +25,25 @@ export class SalesService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listInvoices(branchId: string | null, page: number, size: number): Observable<Page<SalesInvoice>> {
+  /**
+   * Slice F — list sales invoices. {@code status} accepts the bucket aliases
+   * {@code OPEN} / {@code OVERDUE} (matches the AR-summary tile semantics)
+   * or any raw {@code SalesInvoiceStatus} value. {@code sort} is passed
+   * through to the backend — the dashboard's AR-outstanding drill-through
+   * sends {@code sort=outstanding,desc} (the backend honours it per Plan §6.2).
+   */
+  listInvoices(
+    branchId: string | null,
+    page: number,
+    size: number,
+    status?: string | null,
+    sort?: string | null,
+  ): Observable<Page<SalesInvoice>> {
+    let params = branchPageParams(branchId, page, size);
+    if (status) params = params.set('status', status);
+    if (sort) params = params.set('sort', sort);
     return unwrap(this.http.get<ApiResponse<Page<SalesInvoice>>>(
-      `${this.base}/sales-invoices`, { params: branchPageParams(branchId, page, size) }
+      `${this.base}/sales-invoices`, { params }
     ));
   }
 

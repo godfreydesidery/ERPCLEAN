@@ -23,8 +23,13 @@ public interface StockMoveService {
     /** Company-scoped move ledger; {@code branchId} optional filter. */
     PageDto<StockMoveDto> listMoves(Long branchId, Pageable pageable);
 
-    /** Current balances for a branch. */
-    List<ItemBranchBalanceDto> listBalances(Long branchId);
+    /**
+     * Current balances for a branch. Slice F drill-through filters:
+     * {@code negativeOnly} keeps rows with {@code qtyOnHand &lt; 0};
+     * {@code belowReorderOnly} keeps rows where {@code reorderMin != null}
+     * and {@code qtyOnHand &lt;= reorderMin}. Both flags compose (AND).
+     */
+    List<ItemBranchBalanceDto> listBalances(Long branchId, boolean negativeOnly, boolean belowReorderOnly);
 
     /** Stock card: every move for an item in a branch, oldest first. */
     PageDto<StockMoveDto> stockCard(Long itemId, Long branchId, Pageable pageable);

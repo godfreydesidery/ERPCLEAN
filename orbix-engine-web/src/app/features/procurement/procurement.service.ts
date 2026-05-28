@@ -21,9 +21,21 @@ export class ProcurementService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
 
-  listLpos(branchId: string | null, page: number, size: number): Observable<Page<LpoOrder>> {
+  /**
+   * Slice F — list LPOs. {@code status} accepts any
+   * {@link import('./procurement.models').LpoOrderStatus} value (e.g.
+   * {@code PENDING_APPROVAL} for the dashboard drill-through).
+   */
+  listLpos(
+    branchId: string | null,
+    page: number,
+    size: number,
+    status?: string | null,
+  ): Observable<Page<LpoOrder>> {
+    let params = branchPageParams(branchId, page, size);
+    if (status) params = params.set('status', status);
     return unwrap(this.http.get<ApiResponse<Page<LpoOrder>>>(
-      `${this.base}/lpos`, { params: branchPageParams(branchId, page, size) }
+      `${this.base}/lpos`, { params }
     ));
   }
 

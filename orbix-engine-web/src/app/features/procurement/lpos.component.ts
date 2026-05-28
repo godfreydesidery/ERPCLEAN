@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
@@ -121,9 +121,21 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
     <div class="row g-3 g-md-4">
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+          <div class="card-header bg-white border-bottom p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h2 class="h6 fw-bold mb-0 text-dark">LPOs</h2>
-            <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label small fw-semibold text-secondary mb-0" for="lpoStatusFilter">Status</label>
+              <select id="lpoStatusFilter"
+                      data-testid="status-filter"
+                      class="form-select form-select-sm"
+                      [(ngModel)]="statusFilter"
+                      (ngModelChange)="onStatusChange($event)">
+                @for (opt of statusOptions; track opt) {
+                  <option [value]="opt">{{ statusLabelFor(opt) }}</option>
+                }
+              </select>
+              <span class="badge text-bg-light text-secondary">{{ total() }}</span>
+            </div>
           </div>
           @if (lpos().length === 0) {
             <div class="p-5 text-center">
@@ -396,6 +408,15 @@ export class LposComponent implements OnInit {
   private readonly branchService = inject(BranchService);
   protected readonly auth = inject(AuthService);
   private readonly currencyService = inject(CurrencyService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  /** Slice F — LPO status bucket (URL-driven). {@code ALL} is the local sentinel. */
+  protected readonly statusOptions = [
+    'ALL', 'DRAFT', 'PENDING_APPROVAL', 'APPROVED',
+    'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED',
+  ] as const;
+  protected statusFilter: typeof this.statusOptions[number] = 'ALL';
 
   protected readonly lpos = signal<LpoOrder[]>([]);
   protected readonly pageNo = signal(0);
@@ -433,17 +454,44 @@ export class LposComponent implements OnInit {
   protected newUnitPrice: number | null = null;
 
   ngOnInit(): void {
-    this.refresh();
     this.currencyService.listCurrencies().subscribe({
       next: list => this.currencies.set(list),
       error: () => this.currencies.set([])
     });
+    // Slice F — query-param-driven status filter. Read on every URL change so
+    // deep-links from the dashboard alert pre-apply the matching bucket.
+    this.route.queryParamMap.subscribe(params => {
+      const status = params.get('status');
+      this.statusFilter = (status && this.isKnownStatus(status)) ? status : 'ALL';
+      this.pageNo.set(0);
+      this.refresh();
+    });
+  }
+
+  protected onStatusChange(value: string): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { status: value === 'ALL' ? null : value },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  protected statusLabelFor(opt: string): string {
+    if (opt === 'ALL') return 'All';
+    if (opt === 'PENDING_APPROVAL') return 'Pending';
+    if (opt === 'PARTIALLY_RECEIVED') return 'Part-recv';
+    return opt.charAt(0) + opt.slice(1).toLowerCase().replaceAll('_', ' ');
+  }
+
+  private isKnownStatus(s: string): s is typeof this.statusOptions[number] {
+    return (this.statusOptions as readonly string[]).includes(s);
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
   refresh(): void {
-    this.procurement.listLpos(this.branchId(), this.pageNo(), this.pageSize).subscribe({
+    const status = this.statusFilter === 'ALL' ? null : this.statusFilter;
+    this.procurement.listLpos(this.branchId(), this.pageNo(), this.pageSize, status).subscribe({
       next: page => {
         this.lpos.set(page.content);
         this.total.set(page.totalElements);

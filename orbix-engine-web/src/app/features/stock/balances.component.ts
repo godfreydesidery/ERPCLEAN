@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
@@ -53,8 +53,15 @@ import { ItemBranchBalance } from './stock.models';
           </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="lowOnly"
-                   [(ngModel)]="lowOnly" (ngModelChange)="lowOnlySignal.set(lowOnly)">
+                   data-testid="below-reorder-filter"
+                   [(ngModel)]="lowOnly" (ngModelChange)="onBelowReorderToggle($event)">
             <label class="form-check-label small" for="lowOnly">Below reorder only</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="negativeOnly"
+                   data-testid="negative-only-filter"
+                   [(ngModel)]="negativeOnly" (ngModelChange)="onNegativeOnlyToggle($event)">
+            <label class="form-check-label small" for="negativeOnly">Negative only</label>
           </div>
         </div>
       </div>
@@ -140,6 +147,8 @@ export class BalancesComponent implements OnInit {
   private readonly stock = inject(StockService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   protected readonly balances = signal<ItemBranchBalance[]>([]);
   protected readonly error = signal<string | null>(null);
@@ -148,6 +157,9 @@ export class BalancesComponent implements OnInit {
   protected searchTerm = '';
   protected readonly lowOnlySignal = signal(false);
   protected lowOnly = false;
+  /** Slice F — "negative only" filter, driven from {@code ?negativeOnly=true}. */
+  protected readonly negativeOnlySignal = signal(false);
+  protected negativeOnly = false;
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -155,9 +167,11 @@ export class BalancesComponent implements OnInit {
 
   protected readonly filtered = computed(() => {
     const q = this.searchSignal().trim().toLowerCase();
-    const only = this.lowOnlySignal();
+    const onlyLow = this.lowOnlySignal();
+    const onlyNeg = this.negativeOnlySignal();
     return this.balances().filter(b => {
-      if (only && !this.isLow(b)) return false;
+      if (onlyLow && !this.isLow(b)) return false;
+      if (onlyNeg && b.qtyOnHand >= 0) return false;
       if (!q) return true;
       return String(b.itemId).includes(q);
     });
@@ -168,9 +182,46 @@ export class BalancesComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Slice F drill-through — read filters from the URL on every navigation so
+    // a deep-link like /stock/balances?negativeOnly=true pre-applies the
+    // filter without the user re-finding the checkbox.
+    this.route.queryParamMap.subscribe(params => {
+      const below = params.get('belowReorderOnly') === 'true';
+      const negative = params.get('negativeOnly') === 'true';
+      this.lowOnly = below;
+      this.lowOnlySignal.set(below);
+      this.negativeOnly = negative;
+      this.negativeOnlySignal.set(negative);
+      this.fetch();
+    });
+  }
+
+  protected onBelowReorderToggle(checked: boolean): void {
+    this.lowOnlySignal.set(checked);
+    this.syncUrl({ belowReorderOnly: checked ? 'true' : null });
+  }
+
+  protected onNegativeOnlyToggle(checked: boolean): void {
+    this.negativeOnlySignal.set(checked);
+    this.syncUrl({ negativeOnly: checked ? 'true' : null });
+  }
+
+  /** Merge filter changes into the URL so deep-links stay shareable. */
+  private syncUrl(patch: Record<string, string | null>): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: patch,
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private fetch(): void {
     const branchId = this.branchId();
     if (branchId === null) return;
-    this.stock.listBalances(branchId).subscribe({
+    this.stock.listBalances(branchId, {
+      negativeOnly: this.negativeOnlySignal(),
+      belowReorderOnly: this.lowOnlySignal(),
+    }).subscribe({
       next: list => this.balances.set(list),
       error: err => this.showError(err)
     });

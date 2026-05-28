@@ -155,12 +155,19 @@ public class LpoOrderServiceImpl implements LpoOrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<LpoOrderDto> list(Long branchId, Pageable pageable) {
+    public PageDto<LpoOrderDto> list(Long branchId, LpoOrderStatus status, Pageable pageable) {
         Long companyId = context.companyId();
         Long scope = branchScope.requireReadable(branchId);
-        Page<LpoOrder> page = scope == null
-            ? orders.findByCompanyIdOrderByIdDesc(companyId, pageable)
-            : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        Page<LpoOrder> page;
+        if (status == null) {
+            page = scope == null
+                ? orders.findByCompanyIdOrderByIdDesc(companyId, pageable)
+                : orders.findByCompanyIdAndBranchIdOrderByIdDesc(companyId, scope, pageable);
+        } else {
+            page = scope == null
+                ? orders.findByCompanyIdAndStatusOrderByIdDesc(companyId, status, pageable)
+                : orders.findByCompanyIdAndBranchIdAndStatusOrderByIdDesc(companyId, scope, status, pageable);
+        }
         return PageDto.of(page, o -> LpoOrderDto.from(o, lines.findByLpoOrderIdOrderByLineNoAsc(o.getId())));
     }
 
