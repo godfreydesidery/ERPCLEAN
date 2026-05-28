@@ -617,6 +617,14 @@ export class ShellComponent implements OnInit {
         {
           label: 'Reports', route: '/reports', icon: 'bi-bar-chart-line',
           tooltip: 'Pre-built reports across stock, sales, production, gift cards, VAT, and customer statements. Run on demand or scheduled to email on a cadence.'
+        },
+        {
+          label: 'Daily summary', route: '/reports/sales-summary', icon: 'bi-calendar2-check',
+          tooltip: 'Sales, purchases and cash rollup for a single business day.'
+        },
+        {
+          label: 'Z-history', route: '/reports/z-history', icon: 'bi-printer',
+          tooltip: 'Closed till sessions with Z-report totals and variance.'
         }
       ]
     },

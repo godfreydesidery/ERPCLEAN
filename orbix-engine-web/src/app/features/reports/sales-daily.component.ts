@@ -4,6 +4,8 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
+import { ReportExportMenuComponent } from './report-export-menu.component';
+import { ReportExport } from './report-export.service';
 
 /**
  * Slice F — KPI 1.A drill-through destination. Reads {@code branchId} +
@@ -12,8 +14,7 @@ import { ApiResponse, unwrap } from '../../core/api/api-response';
  * {@code SalesReportController#dailySales}), and renders a flat per-document
  * list blending sales_invoice + pos_sale rows.
  *
- * <p>The endpoint is open to any authenticated caller (matches the other
- * sales / statement report endpoints) — no per-tile permission UX needed.
+ * Slice I — export menu wired in via {@link ReportExportMenuComponent}.
  */
 interface DailySalesRow {
   source: 'SALES_INVOICE' | 'POS_SALE';
@@ -32,7 +33,7 @@ interface DailySalesRow {
 @Component({
   selector: 'orbix-sales-daily',
   standalone: true,
-  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe, ReportExportMenuComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -49,35 +50,43 @@ interface DailySalesRow {
           }
         </p>
       </div>
+
+      <orbix-report-export-menu
+        [exportBuilder]="buildExport"
+        [disabled]="rows().length === 0">
+      </orbix-report-export-menu>
     </header>
 
     @if (error()) {
-      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
-        <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        <span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"
+                aria-label="Dismiss error"></button>
       </div>
     }
 
     <div class="card border-0 shadow-sm overflow-hidden">
       @if (rows().length === 0 && !loading()) {
         <div class="p-5 text-center">
-          <div class="empty-icon mx-auto mb-3"><i class="bi bi-receipt"></i></div>
+          <div class="empty-icon mx-auto mb-3"><i class="bi bi-receipt" aria-hidden="true"></i></div>
           <p class="small text-secondary mb-0">No documents for this date.</p>
         </div>
       } @else {
         <div class="table-responsive">
           <table class="table table-hover align-middle mb-0 simple-table">
+            <caption class="visually-hidden">Daily sales for {{ businessDate() }}</caption>
             <thead>
               <tr>
-                <th>Source</th>
-                <th>Number</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>Terms</th>
-                <th class="text-end">Discount</th>
-                <th class="text-end">Tax</th>
-                <th class="text-end">Total</th>
-                <th>Occurred</th>
+                <th scope="col">Source</th>
+                <th scope="col">Number</th>
+                <th scope="col">Customer</th>
+                <th scope="col">Status</th>
+                <th scope="col">Terms</th>
+                <th scope="col" class="text-end">Discount</th>
+                <th scope="col" class="text-end">Tax</th>
+                <th scope="col" class="text-end">Total</th>
+                <th scope="col">Occurred</th>
               </tr>
             </thead>
             <tbody>
@@ -161,4 +170,42 @@ export class SalesDailyComponent implements OnInit {
       },
     });
   }
+
+  readonly buildExport = (): ReportExport => ({
+    title: 'Daily Sales',
+    subtitle: `Branch: ${this.branchIdParam() ?? 'all'} · ${this.businessDate() ?? ''}`,
+    columns: [
+      { key: 'source',         label: 'Source',   align: 'left',  format: 'text' },
+      { key: 'number',         label: 'Number',   align: 'left',  format: 'text' },
+      { key: 'customerId',     label: 'Customer', align: 'left',  format: 'text' },
+      { key: 'status',         label: 'Status',   align: 'left',  format: 'text' },
+      { key: 'paymentTerms',   label: 'Terms',    align: 'left',  format: 'text' },
+      { key: 'discountAmount', label: 'Discount', align: 'right', format: 'currency' },
+      { key: 'taxAmount',      label: 'Tax',      align: 'right', format: 'currency' },
+      { key: 'totalAmount',    label: 'Total',    align: 'right', format: 'currency' },
+      { key: 'occurredAt',     label: 'Occurred', align: 'left',  format: 'date' },
+    ],
+    rows: this.rows().map(r => ({
+      source:         r.source === 'SALES_INVOICE' ? 'Invoice' : 'POS',
+      number:         r.number,
+      customerId:     r.customerId ?? '',
+      status:         r.status,
+      paymentTerms:   r.paymentTerms ?? '',
+      discountAmount: r.discountAmount,
+      taxAmount:      r.taxAmount,
+      totalAmount:    r.totalAmount,
+      occurredAt:     r.occurredAt,
+    })),
+    totals: {
+      source:         'TOTAL',
+      number:         '',
+      customerId:     '',
+      status:         '',
+      paymentTerms:   '',
+      discountAmount: this.rows().reduce((s, r) => s + r.discountAmount, 0),
+      taxAmount:      this.rows().reduce((s, r) => s + r.taxAmount, 0),
+      totalAmount:    this.rows().reduce((s, r) => s + r.totalAmount, 0),
+      occurredAt:     '',
+    },
+  });
 }
