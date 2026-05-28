@@ -139,6 +139,23 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       'SALES.MANAGE_INVOICE',
       'STOCK.COUNT',
       'PROCUREMENT.MANAGE_LPO.READ',
+      // Slice G widening — accountant is the canonical credit-controller
+      // persona on the new /debt surface. Holds the full DEBT.* band (130-133
+      // per slice-g-debt-plan §6 / audit §7):
+      //   - DEBT.READ: class-level grant on /api/v1/debt/* — dunning queue +
+      //     per-customer debt-position view + customer drill-down.
+      //   - DEBT.NOTE.CREATE: append a chase note on the customer drill-down.
+      //   - DEBT.NOTE.ARCHIVE: soft-delete a chase note (append-only — no edit).
+      //   - DEBT.CREDIT_LIMIT.UPDATE: adjust a customer's credit limit from
+      //     the debt surface (distinct from CUSTOMER.UPDATE so a future
+      //     credit-controller role-split is one grant away).
+      // Forward-compat-skip: these codes aren't seeded yet (Slice G backend
+      // lands V70__seed_debt_permissions.sql); bootstrapOne() drops them
+      // gracefully and they auto-pick-up after the next QA-image rebuild.
+      'DEBT.READ',
+      'DEBT.NOTE.CREATE',
+      'DEBT.NOTE.ARCHIVE',
+      'DEBT.CREDIT_LIMIT.UPDATE',
     ],
   },
   'procurement-officer': {

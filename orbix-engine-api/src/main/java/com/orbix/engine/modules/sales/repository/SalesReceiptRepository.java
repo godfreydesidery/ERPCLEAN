@@ -51,4 +51,17 @@ public interface SalesReceiptRepository extends JpaRepository<SalesReceipt, Long
         """)
     BigDecimal sumReceiptsBefore(@Param("customerId") Long customerId,
                                   @Param("from") LocalDate from);
+
+    /**
+     * Slice G — most recent POSTED receipts for a customer (for the
+     * customer debt-position drill-down). Sorted by receiptDate desc.
+     */
+    @Query("""
+        select r from SalesReceipt r
+         where r.customerId = :customerId
+           and r.status = com.orbix.engine.modules.sales.domain.enums.SalesReceiptStatus.POSTED
+         order by r.receiptDate desc, r.id desc
+        """)
+    List<SalesReceipt> findRecentForCustomer(@Param("customerId") Long customerId,
+                                              org.springframework.data.domain.Pageable pageable);
 }

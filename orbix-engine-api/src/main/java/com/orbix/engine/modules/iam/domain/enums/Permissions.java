@@ -109,4 +109,10 @@ public final class Permissions {
     public static final String SALES_INVOICE_OVERRIDE_CREDIT = "SALES_INVOICE.OVERRIDE_CREDIT";
     public static final String SALES_INVOICE_REPRINT         = "SALES_INVOICE.REPRINT";
     public static final String SALES_REPORT_AR_SUMMARY       = "SALES.REPORT.AR_SUMMARY";
+
+    // ---- debt (Slice G — standalone debt module, ADR-0005) ----------------
+    public static final String DEBT_READ                = "DEBT.READ";
+    public static final String DEBT_NOTE_CREATE         = "DEBT.NOTE.CREATE";
+    public static final String DEBT_NOTE_ARCHIVE        = "DEBT.NOTE.ARCHIVE";
+    public static final String DEBT_CREDIT_LIMIT_UPDATE = "DEBT.CREDIT_LIMIT.UPDATE";
 }
