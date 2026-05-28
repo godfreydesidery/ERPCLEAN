@@ -7,7 +7,7 @@ CREATE TABLE debt_write_off (
     branch_id             BIGINT        NOT NULL,
     target_kind           VARCHAR(32)   NOT NULL,           -- CUSTOMER_INVOICE | SUPPLIER_INVOICE
     target_invoice_id     BIGINT        NOT NULL,
-    target_invoice_uid    CHAR(26)      NOT NULL,
+    target_invoice_uid    VARCHAR(26)   NOT NULL,
     amount                DECIMAL(19,4) NOT NULL,
     currency_code         VARCHAR(3)    NOT NULL,
     reason                VARCHAR(2000) NOT NULL,
