@@ -8,6 +8,20 @@ import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+/**
+ * Ledger row for a single stock move.
+ *
+ * <p>{@code docNumber} is resolved from {@code refType} + {@code refId} by the
+ * service layer when populating the stock-card view. Supported refTypes:
+ * {@code SalesInvoice}, {@code Grn}, {@code CustomerReturn}, {@code VendorReturn},
+ * {@code StockCount}, {@code StockTransfer}. Unrecognised refTypes yield null.
+ *
+ * <p>{@code runningBalance} is computed by the service by accumulating {@code qty}
+ * across the current page in chronological order. <b>Limitation:</b> this only
+ * reflects the moves on the current page; it is accurate only when the caller
+ * paginates from the beginning of the item-branch history (offset 0, sorted
+ * oldest-first). Deep-page jumps will carry an incorrect opening balance.
+ */
 public record StockMoveDto(
     Long id,
     Instant at,
@@ -25,8 +39,17 @@ public record StockMoveDto(
     Long batchId,
     Long sectionId,
     ConsumptionCategory consumptionCategory,
-    Long authorisedByUserId
+    Long authorisedByUserId,
+    // --- enrichment fields (null when not hydrated) ---
+    /** Human-readable document number resolved from refType + refId. */
+    String docNumber,
+    /** Cumulative running balance after this move on the page (page-relative; see class Javadoc). */
+    BigDecimal runningBalance
 ) {
+    /**
+     * Thin factory — no enrichment. Used for posting responses and list endpoints
+     * where doc-number resolution would be prohibitively expensive.
+     */
     public static StockMoveDto from(StockMove move) {
         return new StockMoveDto(
             move.getId(),
@@ -45,7 +68,9 @@ public record StockMoveDto(
             move.getBatchId(),
             move.getSectionId(),
             move.getConsumptionCategory(),
-            move.getAuthorisedByUserId()
+            move.getAuthorisedByUserId(),
+            null,
+            null
         );
     }
 }

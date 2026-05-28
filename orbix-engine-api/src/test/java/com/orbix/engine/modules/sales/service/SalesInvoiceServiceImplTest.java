@@ -660,6 +660,6 @@ class SalesInvoiceServiceImplTest {
             ITEM_ID, BRANCH_ID,
             new BigDecimal("100"), BigDecimal.ZERO, BigDecimal.ZERO,
             avgCost, avgCost,
-            null, null, null, null);
+            null, null, null, null, null, null, null);
     }
 }

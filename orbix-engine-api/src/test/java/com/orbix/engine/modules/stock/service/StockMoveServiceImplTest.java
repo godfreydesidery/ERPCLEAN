@@ -16,8 +16,18 @@ import com.orbix.engine.modules.stock.domain.entity.ItemBranchBalanceId;
 import com.orbix.engine.modules.stock.domain.entity.StockMove;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveDirection;
 import com.orbix.engine.modules.stock.domain.enums.StockMoveType;
+import com.orbix.engine.modules.procurement.repository.GrnRepository;
+import com.orbix.engine.modules.procurement.repository.VendorReturnRepository;
+import com.orbix.engine.modules.sales.repository.CustomerReturnRepository;
+import com.orbix.engine.modules.sales.repository.SalesInvoiceRepository;
+import com.orbix.engine.modules.sales.domain.entity.SalesInvoice;
+import com.orbix.engine.modules.procurement.domain.entity.Grn;
+import com.orbix.engine.modules.stock.domain.dto.ItemBranchBalanceDto;
+import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.stock.repository.ItemBranchBalanceRepository;
+import com.orbix.engine.modules.stock.repository.StockCountRepository;
 import com.orbix.engine.modules.stock.repository.StockMoveRepository;
+import com.orbix.engine.modules.stock.repository.StockTransferRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,8 +35,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -56,6 +71,13 @@ class StockMoveServiceImplTest {
     @Mock private RequestContext context;
     @Mock private BranchScope branchScope;
     @Mock private PermissionResolverService permissions;
+    // doc-number repos
+    @Mock private SalesInvoiceRepository salesInvoices;
+    @Mock private GrnRepository grns;
+    @Mock private CustomerReturnRepository customerReturns;
+    @Mock private VendorReturnRepository vendorReturns;
+    @Mock private StockCountRepository stockCounts;
+    @Mock private StockTransferRepository stockTransfers;
 
     @InjectMocks private StockMoveServiceImpl service;
 
@@ -289,5 +311,91 @@ class StockMoveServiceImplTest {
         ArgumentCaptor<StockMove> saved = ArgumentCaptor.forClass(StockMove.class);
         verify(moves).save(saved.capture());
         assertThat(saved.getValue().getBatchId()).isEqualTo(4242L);
+    }
+
+    // ------------------------------------------------------------------
+    // stockCard — docNumber + runningBalance (Slice J)
+    // ------------------------------------------------------------------
+
+    @Test
+    void stockCard_resolvesDocNumberForSalesInvoice() {
+        Instant at = Instant.parse("2026-04-01T08:00:00Z");
+        StockMove move = makeMove(1L, at, new BigDecimal("10"), "SalesInvoice", 500L);
+        when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
+            .thenReturn(new PageImpl<>(List.of(move)));
+
+        SalesInvoice inv = org.mockito.Mockito.mock(SalesInvoice.class);
+        when(inv.getId()).thenReturn(500L);
+        when(inv.getNumber()).thenReturn("INV-2026-0001");
+        when(salesInvoices.findAllById(any())).thenReturn(List.of(inv));
+
+        PageDto<StockMoveDto> result = service.stockCard(ITEM_ID, BRANCH_ID,
+            PageRequest.of(0, 20));
+
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).docNumber()).isEqualTo("INV-2026-0001");
+    }
+
+    @Test
+    void stockCard_resolvesDocNumberForGrn() {
+        StockMove move = makeMove(2L, Instant.now(), new BigDecimal("20"), "Grn", 300L);
+        when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
+            .thenReturn(new PageImpl<>(List.of(move)));
+
+        Grn grn = org.mockito.Mockito.mock(Grn.class);
+        when(grn.getId()).thenReturn(300L);
+        when(grn.getNumber()).thenReturn("GRN-0042");
+        when(grns.findAllById(any())).thenReturn(List.of(grn));
+
+        PageDto<StockMoveDto> result = service.stockCard(ITEM_ID, BRANCH_ID,
+            PageRequest.of(0, 20));
+
+        assertThat(result.content().get(0).docNumber()).isEqualTo("GRN-0042");
+    }
+
+    @Test
+    void stockCard_nullDocNumberForUnrecognisedRefType() {
+        StockMove move = makeMove(3L, Instant.now(), new BigDecimal("-5"), "Adjustment", 8801L);
+        when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
+            .thenReturn(new PageImpl<>(List.of(move)));
+        // no repo stub needed — Adjustment has no doc entity
+
+        PageDto<StockMoveDto> result = service.stockCard(ITEM_ID, BRANCH_ID,
+            PageRequest.of(0, 20));
+
+        assertThat(result.content().get(0).docNumber()).isNull();
+    }
+
+    @Test
+    void stockCard_runningBalanceAccumulatesAcrossPage() {
+        Instant t1 = Instant.parse("2026-01-01T00:00:00Z");
+        Instant t2 = Instant.parse("2026-01-02T00:00:00Z");
+        Instant t3 = Instant.parse("2026-01-03T00:00:00Z");
+        StockMove m1 = makeMove(10L, t1, new BigDecimal("100"), "Grn", 1L);
+        StockMove m2 = makeMove(11L, t2, new BigDecimal("-30"), "SalesInvoice", 2L);
+        StockMove m3 = makeMove(12L, t3, new BigDecimal("-20"), "SalesInvoice", 3L);
+        when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
+            .thenReturn(new PageImpl<>(List.of(m1, m2, m3)));
+        // Both refTypes present on this page — both repos are queried.
+        when(salesInvoices.findAllById(any())).thenReturn(List.of());
+        when(grns.findAllById(any())).thenReturn(List.of());
+
+        PageDto<StockMoveDto> result = service.stockCard(ITEM_ID, BRANCH_ID,
+            PageRequest.of(0, 20));
+
+        List<StockMoveDto> rows = result.content();
+        assertThat(rows.get(0).runningBalance()).isEqualByComparingTo("100");  // +100
+        assertThat(rows.get(1).runningBalance()).isEqualByComparingTo("70");   // 100 - 30
+        assertThat(rows.get(2).runningBalance()).isEqualByComparingTo("50");   // 70 - 20
+    }
+
+    /** Minimal StockMove for test purposes — bypasses @PrePersist. */
+    private static StockMove makeMove(Long id, Instant at, BigDecimal qty,
+                                      String refType, Long refId) {
+        StockMove m = new StockMove(at, ITEM_ID, BRANCH_ID, COMPANY_ID, qty,
+            BigDecimal.TEN, StockMoveType.SALE, refType, refId, ACTOR_ID,
+            null, null, null, null, null);
+        ReflectionTestUtils.setField(m, "id", id);
+        return m;
     }
 }

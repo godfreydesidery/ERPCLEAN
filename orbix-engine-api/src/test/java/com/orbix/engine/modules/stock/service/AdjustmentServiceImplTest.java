@@ -68,7 +68,8 @@ class AdjustmentServiceImplTest {
                 m.qty(), m.unitCost() != null ? m.unitCost() : BigDecimal.ZERO,
                 m.qty().signum() >= 0 ? StockMoveDirection.IN : StockMoveDirection.OUT,
                 m.moveType(), m.refType(), m.refId(), ACTOR_ID, m.notes(),
-                m.batchId(), m.sectionId(), m.consumptionCategory(), m.authorisedByUserId());
+                m.batchId(), m.sectionId(), m.consumptionCategory(), m.authorisedByUserId(),
+                null, null);
         });
     }
 
