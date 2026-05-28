@@ -1,10 +1,11 @@
 import { Routes } from '@angular/router';
 
 /**
- * Slice G — debt-module routes.
+ * Slice G / G.1 — debt-module routes.
  *
- *   /debt                              → DebtComponent (dunning queue landing)
- *   /debt/customer/uid/:uid            → DebtCustomerComponent (drill-down)
+ *   /debt                              → DebtComponent (AR/AP tab dunning queue landing)
+ *   /debt/customer/uid/:uid            → DebtCustomerComponent (AR drill-down)
+ *   /debt/supplier/uid/:uid            → DebtSupplierComponent (AP drill-down)
  */
 export const routes: Routes = [
   {
@@ -14,5 +15,9 @@ export const routes: Routes = [
   {
     path: 'customer/uid/:uid',
     loadComponent: () => import('./debt-customer.component').then(m => m.DebtCustomerComponent)
+  },
+  {
+    path: 'supplier/uid/:uid',
+    loadComponent: () => import('./debt-supplier.component').then(m => m.DebtSupplierComponent)
   }
 ];
