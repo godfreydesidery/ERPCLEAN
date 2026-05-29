@@ -721,11 +721,17 @@ test.describe('Slice K — supplier-statement happy-path (US-DEBT-006)', () => {
       const supplierPicker = page.locator('[data-testid="supplier-statement-picker"]');
       await expect(supplierPicker).toBeVisible({ timeout: 20_000 });
 
-      // Type a prefix to trigger the debounced typeahead.
-      // QA container has at least one supplier from procurement seed data.
-      await supplierPicker.fill('A');
-      // Dropdown is sibling of .input-group, not of input — use the unique listbox role.
-      const suggestion = page.locator('[role="listbox"] [role="option"]').first();
+      // Pick the supplier THIS spec seeded (QA Supp Stmt SLCL) — it is the one
+      // guaranteed to have statement activity (GRN + supplier invoice + payment)
+      // inside the window. Typing a blind 'A' grabs an arbitrary first match that
+      // may have no activity, which is non-hermetic on a clean volume.
+      const seededSupplierName = `QA Supp Stmt ${REF_TAG}`;
+      await supplierPicker.fill(seededSupplierName);
+      // Dropdown is sibling of .input-group, not of input — use the unique listbox
+      // role, and select the option matching the seeded supplier by name.
+      const suggestion = page
+        .locator('[role="listbox"] [role="option"]', { hasText: seededSupplierName })
+        .first();
       await expect(suggestion).toBeVisible({ timeout: 10_000 });
       await suggestion.click();
 
