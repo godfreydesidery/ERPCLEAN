@@ -968,8 +968,8 @@ test.describe('Slice G.1 — AP debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 4.1.B — Supplier aging API contract pins the 5 bucket keys
   // ---------------------------------------------------------------------------
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; contract test passes regardless of data volume. Unwrapped in Slice M.
     'GET /api/v1/debt/supplier-aging returns 5 bucket keys + supplierCount in totals',
     async ({ page }) => {
       await page.goto('/dashboard');

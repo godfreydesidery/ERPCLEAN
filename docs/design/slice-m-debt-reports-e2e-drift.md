@@ -108,3 +108,31 @@ only non-test change; container image rebuilt + restarted to verify.
 > branch — a divergence artifact, not a regression. This branch is cut from
 > `origin/main` (pre-Slice-L); Slice L already flips that marker to `test` and is
 > 9/9 green on its own branch. Slice M does not touch `statements.spec.ts`.
+
+## Fresh-volume sweep (2026-05-29)
+
+Ran the **full** suite (all 11 specs) against a merged Slice-L+Slice-M image on a
+**wiped** volume — the true CI signal. Result: **140 passed / 5 failed**. The
+clean volume exposed non-hermetic tests that had only passed on a persistent
+volume carrying cross-spec data. The 5:
+
+| Test | Cause | Disposition |
+|---|---|---|
+| `reports.spec.ts:550` negative-stock happy-path | `export-excel` only renders under `@if rows>0`; absent on a truly-empty page | **Fixed (Slice M)** — accept `export-excel` *or* `report-empty-state` as the mount signal; guard the export probe on button presence |
+| `debt.spec.ts:971` supplier-aging contract | stale `test.fail`; backend G.1 shape landed, passes regardless of volume | **Fixed (Slice M)** — unwrapped |
+| `statements.spec.ts:712` supplier-statement | typed blind `'A'`, grabbed an arbitrary supplier with no activity | **Fixed (Slice L)** — picks the seeded `QA Supp Stmt SLCL` |
+| `customer-returns.spec.ts:1136` cashier 403 gate | stale `test.fail`; `/apply` gate landed | **Fixed** — unwrapped on `chore/customer-returns-stale-gate` |
+| `vendor-returns.spec.ts:490` VRET setup | posts `type:'PURCHASABLE'` — stale enum (valid: `BOTH/CONSUMABLE/SELLABLE/SERVICE`) → backend 500 | **Filed (follow-up)** — see below |
+
+### Follow-ups filed (not fixed here)
+
+- **`vendor-returns.spec.ts` stale `ItemType` enum.** Setup sends
+  `type:'PURCHASABLE'`; the enum is `BOTH/CONSUMABLE/SELLABLE/SERVICE`. The whole
+  vendor-returns spec (setup + dependents) is red on a clean volume until this is
+  corrected. Also check the spec's `ReturnReason` usage — the logs show a second
+  bad value (`"e2e cna return …"` sent where the enum expects
+  `OTHER/BUYER_REMORSE/EXPIRED/DAMAGED/WRONG_ITEM`).
+- **Backend: bad enum → 500 instead of 400.** A malformed request enum surfaces
+  as `HttpMessageNotReadableException` but `GlobalExceptionHandler` logs it as an
+  unhandled exception and returns `500 INTERNAL_ERROR`. It should map to `400`.
+  Minor robustness fix in the common exception handler.
