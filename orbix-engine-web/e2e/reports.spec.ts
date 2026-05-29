@@ -176,8 +176,8 @@ test.describe('Slice I — sales-daily CSV export', () => {
 test.describe('Slice I — sales-summary Excel export', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice I — flips when FE lands
+  test(
+    // Slice I — FE landed; passing as of Slice M triage
     'accountant opens /reports/sales-summary, sees KPI tiles + summary table, clicks Excel, xlsx file downloads',
     async ({ page }) => {
       await page.goto(`/reports/sales-summary?branchId=${BRANCH_ID}&businessDate=${TODAY}`);
@@ -547,20 +547,21 @@ test.describe('Slice J — stock-card report happy-path (US-RPT-004)', () => {
 test.describe('Slice J — negative-stock report happy-path (US-RPT-006)', () => {
   test.use({ persona: 'stock-controller' as Persona });
 
-  test.fail(
-    // Slice J — flips when FE lands
+  test(
+    // Slice J — FE landed; passing as of Slice M triage
     'stock-controller opens /reports/negative-stock, page renders (empty-or-rows), click-through to stock-card, exports Excel, axe-AA clean',
     async ({ page }) => {
       await page.goto(`/reports/negative-stock?branchId=${BRANCH_ID}`);
       await dismissDismissableAlerts(page);
 
-      // The Excel export button appearing signals the page has mounted and the
-      // API call resolved. On a fresh QA container the list may be empty —
-      // that is an acceptable result; we test the empty-state separately.
-      // Here we tolerate both populated and empty, but require the export
-      // surface to be present (even if disabled in empty case).
+      // The page mounting + API resolving is signalled by EITHER the export
+      // surface (populated: export-excel only renders under @if rows>0) OR the
+      // empty-state card (data-testid="report-empty-state"). On a clean volume
+      // there is no negative stock, so the empty-state is the expected branch —
+      // requiring export-excel unconditionally is non-hermetic. Accept either.
       const excelBtn = page.locator('[data-testid="export-excel"]');
-      await expect(excelBtn).toBeVisible({ timeout: 20_000 });
+      const emptyState = page.locator('[data-testid="report-empty-state"]');
+      await expect(excelBtn.or(emptyState)).toBeVisible({ timeout: 20_000 });
 
       // Axe-AA scan.
       await assertNoSeriousA11yViolations(page, '/reports/negative-stock');
@@ -580,8 +581,9 @@ test.describe('Slice J — negative-stock report happy-path (US-RPT-006)', () =>
         await expect(excelBtn).toBeVisible({ timeout: 10_000 });
       }
 
-      // Excel export — only assert if button is enabled (empty-state disables).
-      const isEnabled = await excelBtn.isEnabled();
+      // Excel export — only when rows exist; export-excel isn't rendered on the
+      // empty page, so guard on presence before probing enabled-state.
+      const isEnabled = (await excelBtn.count()) > 0 && await excelBtn.isEnabled();
       if (isEnabled) {
         const [download] = await Promise.all([
           page.waitForEvent('download'),
@@ -712,8 +714,8 @@ test.describe('Slice J — stock movers (fast + slow tabs, US-RPT-005)', () => {
 test.describe('Slice J — cashier permission gate on stock-report pages', () => {
   test.use({ persona: 'cashier' as Persona });
 
-  test.fail(
-    // Slice J — flips when FE lands (requires FE permission guard or 403-to-state mapping)
+  test(
+    // Slice J — FE permission guard landed; passing as of Slice M triage
     'cashier opens /reports/stock-card, /reports/negative-stock, /reports/stock-movers — each shows permission-required state, no export buttons',
     async ({ page }) => {
       const pages: Array<{ path: string; label: string }> = [

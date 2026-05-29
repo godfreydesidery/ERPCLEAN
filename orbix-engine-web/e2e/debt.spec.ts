@@ -238,6 +238,24 @@ function loadRefsFromDb(): void {
     refs.customerUid = dbQuery(
       `SELECT uid FROM party WHERE id=${refs.customerId} LIMIT 1`,
     ) || refs.customerUid;
+    // Recover the two posted invoices created by setup. They are identified by
+    // number suffix ('-AGE45' / '-AGE05') joined to the debt customer, most recent.
+    const inv45Row = dbQuery(
+      `SELECT id, uid FROM sales_invoice WHERE customer_id=${refs.customerId} AND number LIKE '%-AGE45' AND status='POSTED' ORDER BY id DESC LIMIT 1`,
+    );
+    if (inv45Row) {
+      const [id45, uid45] = inv45Row.split('\t');
+      refs.invoice45Id  = id45  || refs.invoice45Id;
+      refs.invoice45UId = uid45 || refs.invoice45UId;
+    }
+    const inv5Row = dbQuery(
+      `SELECT id, uid FROM sales_invoice WHERE customer_id=${refs.customerId} AND number LIKE '%-AGE05' AND status='POSTED' ORDER BY id DESC LIMIT 1`,
+    );
+    if (inv5Row) {
+      const [id5, uid5] = inv5Row.split('\t');
+      refs.invoice5Id  = id5  || refs.invoice5Id;
+      refs.invoice5UId = uid5 || refs.invoice5UId;
+    }
   }
 }
 
@@ -420,6 +438,19 @@ test.describe('Slice G — debt setup', () => {
     refs.customerUid = dbQuery(`SELECT uid FROM party WHERE id=${refs.customerId} LIMIT 1`);
     expect(refs.customerUid, 'customer uid resolves').toBeTruthy();
 
+    // 6b) Raise the credit limit to give effectively unlimited headroom. This
+    //     customer is reused across runs on a persistent volume, so its unpaid
+    //     outstanding grows every run; meanwhile the 2.G adjust test pins the
+    //     limit back to 250k. Without this, accumulated debt eventually exceeds
+    //     the limit and the post-time credit gate blocks setup's invoices.
+    //     1e9 keeps integer digits within the @Digits(integer=14) bound and is
+    //     far enough above 250k that the 2.G event assertion ('%250000%') can't
+    //     false-match. rootadmin holds DEBT.CREDIT_LIMIT.UPDATE.
+    await apiPost(page, `/api/v1/debt/customer/uid/${refs.customerUid}/credit-limit`, {
+      newLimit: '1000000000',
+      reason: `e2e debt setup headroom ${RUN_TAG}`,
+    }, { acceptStatuses: [200, 201] });
+
     // 7) Invoice in D_31_60 bucket — dated 45 days ago, dueDate 45 days ago.
     //    Posted so it shows in the dunning queue.
     const inv45Number = `INV-${RUN_TAG}-AGE45`;
@@ -569,7 +600,8 @@ test.describe('Slice G — debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 2.E — Drill-down shows open invoices + chase notes panel (deep link)
   // ---------------------------------------------------------------------------
-  test.fail(
+  test(
+    // G — drill-down panels render once setup's refs are recovered; unwrapped in Slice M
     'customer drill-down shows open invoices, chase-notes list, and credit-limit panel',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -625,7 +657,8 @@ test.describe('Slice G — debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 2.G — Accountant adjusts credit limit → new value persists + event emitted
   // ---------------------------------------------------------------------------
-  test.fail(
+  test(
+    // G — credit-limit endpoint landed; passing as of Slice M triage
     'accountant adjusts credit limit; new value persists + CustomerCreditLimitChanged.v1 emitted',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -664,10 +697,9 @@ test.describe('Slice G — debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 2.H — Bucket filter (D_31_60) narrows the queue to that bucket only
   // ---------------------------------------------------------------------------
-  // SPEC DEBT (Slice G): re-marked as test.fail — flaky setup, refs.invoice45Id
-  // intermittently null on fresh DB despite setup reporting passed. Filed for
-  // follow-up; feature itself proven by the 11 other green scenarios.
-  test.fail(
+  // refs recovery now covers invoice45Id; bucket-filter feature confirmed passing.
+  test(
+    // G — refs recovery fixed in Slice M; bucket-filter passing as of Slice M triage
     'bucket-filter chip "31-60" narrows the dunning queue (deep-link supported)',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -721,7 +753,8 @@ test.describe('Slice G — debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 2.J — A11y sweep on /debt + drill-down — wcag2aa, no serious violations
   // ---------------------------------------------------------------------------
-  test.fail(
+  test(
+    // G — axe gate passing as of Slice M triage
     '/debt + /debt/customer/uid/{uid} pass axe-core wcag2aa (no serious violations)',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -770,8 +803,8 @@ test.describe('Slice G — debt · sales-clerk partial path', () => {
   // ---------------------------------------------------------------------------
   // 3.B — Deep-link to /debt/customer/uid/{uid} also inert / 403
   // ---------------------------------------------------------------------------
-  // SPEC DEBT (Slice G): see bucket-filter chip note above.
-  test.fail(
+  test(
+    // G — inert state passing as of Slice M triage (refs recovery fixed)
     'sales-clerk deep-linking to /debt/customer/uid/{uid} is denied (no drill-down content)',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -788,8 +821,8 @@ test.describe('Slice G — debt · sales-clerk partial path', () => {
   // ---------------------------------------------------------------------------
   // 3.C — Backend rejects credit-limit-adjust POST with 403
   // ---------------------------------------------------------------------------
-  // SPEC DEBT (Slice G): see bucket-filter chip note above.
-  test.fail(
+  test(
+    // G — credit-limit gate passing as of Slice M triage (refs recovery fixed)
     'sales-clerk POSTing /api/v1/debt/customer/uid/{uid}/credit-limit is 403',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -805,8 +838,8 @@ test.describe('Slice G — debt · sales-clerk partial path', () => {
   // ---------------------------------------------------------------------------
   // 3.D — Backend rejects chase-note POST with 403 (no DEBT.NOTE.CREATE)
   // ---------------------------------------------------------------------------
-  // SPEC DEBT (Slice G): see bucket-filter chip note above.
-  test.fail(
+  test(
+    // G — notes gate passing as of Slice M triage (refs recovery fixed)
     'sales-clerk POSTing /api/v1/debt/notes is 403',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -935,8 +968,8 @@ test.describe('Slice G.1 — AP debt · accountant happy path', () => {
   // ---------------------------------------------------------------------------
   // 4.1.B — Supplier aging API contract pins the 5 bucket keys
   // ---------------------------------------------------------------------------
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; contract test passes regardless of data volume. Unwrapped in Slice M.
     'GET /api/v1/debt/supplier-aging returns 5 bucket keys + supplierCount in totals',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1157,8 +1190,8 @@ test.describe('Slice G.1 — AP debt · sales-clerk 403 gate', () => {
   // AP — flips when backend G.1 lands
   test.use({ persona: 'sales-clerk' as Persona });
 
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; gate passing as of Slice M triage
     'sales-clerk GETting /api/v1/debt/supplier-aging is 403 (DEBT.READ gate)',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1170,8 +1203,8 @@ test.describe('Slice G.1 — AP debt · sales-clerk 403 gate', () => {
     },
   );
 
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; gate passing as of Slice M triage
     'sales-clerk on /debt sees no AP tab content (DEBT.READ not held)',
     async ({ page }) => {
       await page.goto('/debt');
@@ -1201,8 +1234,8 @@ test.describe('Slice G.1 — AP debt · procurement-officer 403 gate', () => {
   // AP — flips when backend G.1 lands
   test.use({ persona: 'procurement-officer' as Persona });
 
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; gate passing as of Slice M triage
     'procurement-officer GETting /api/v1/debt/supplier-aging is 403 (DEBT.READ not a procurement perm)',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1214,8 +1247,8 @@ test.describe('Slice G.1 — AP debt · procurement-officer 403 gate', () => {
     },
   );
 
-  test.fail(
-    // AP — flips when backend G.1 lands
+  test(
+    // AP — backend G.1 landed; gate passing as of Slice M triage
     'procurement-officer GETting /api/v1/debt/supplier-dunning is 403',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1808,8 +1841,8 @@ test.describe('Slice G.2 — write-off · sales-clerk 403 gate', () => {
   // G.2 — flips when write-off endpoints land
   test.use({ persona: 'sales-clerk' as Persona });
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'sales-clerk is 403 on POST /api/v1/debt/write-offs',
     async ({ page }) => {
       const r0 = requireRefs();
@@ -1829,8 +1862,8 @@ test.describe('Slice G.2 — write-off · sales-clerk 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'sales-clerk is 403 on GET /api/v1/debt/write-offs',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1839,8 +1872,8 @@ test.describe('Slice G.2 — write-off · sales-clerk 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'sales-clerk is 403 on GET /api/v1/debt/write-offs/uid/{uid} (any uid)',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1856,8 +1889,8 @@ test.describe('Slice G.2 — write-off · sales-clerk 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'sales-clerk is 403 on POST /api/v1/debt/write-offs/uid/{uid}/approve',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1872,8 +1905,8 @@ test.describe('Slice G.2 — write-off · sales-clerk 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'sales-clerk is 403 on POST /api/v1/debt/write-offs/uid/{uid}/reject',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1932,8 +1965,8 @@ test.describe('Slice G.2 — write-off · procurement-officer 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'procurement-officer is 403 on GET /api/v1/debt/write-offs (DEBT.READ not a procurement perm)',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1942,8 +1975,8 @@ test.describe('Slice G.2 — write-off · procurement-officer 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'procurement-officer is 403 on POST /api/v1/debt/write-offs/uid/{uid}/approve',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1958,8 +1991,8 @@ test.describe('Slice G.2 — write-off · procurement-officer 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'procurement-officer is 403 on POST /api/v1/debt/write-offs/uid/{uid}/reject',
     async ({ page }) => {
       await page.goto('/dashboard');
@@ -1974,8 +2007,8 @@ test.describe('Slice G.2 — write-off · procurement-officer 403 gate', () => {
     },
   );
 
-  test.fail(
-    // G.2 — flips when write-off endpoints land
+  test(
+    // G.2 — write-off endpoints landed; gate passing as of Slice M triage
     'procurement-officer is 403 on GET /api/v1/debt/write-offs/uid/{uid}',
     async ({ page }) => {
       await page.goto('/dashboard');
