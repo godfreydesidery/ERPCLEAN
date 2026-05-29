@@ -640,6 +640,19 @@ export class ShellComponent implements OnInit {
           label: 'Stock movers', route: '/reports/stock-movers', icon: 'bi-lightning-charge',
           tooltip: 'Top fast and slow moving items over a date range.',
           permissions: ['STOCK.COUNT'],
+        },
+        {
+          label: 'Customer statement', route: '/reports/customer-statement', icon: 'bi-file-earmark-person',
+          tooltip: 'Per-customer AR statement with opening, period debits/credits, and closing balance.',
+        },
+        {
+          label: 'Supplier statement', route: '/reports/supplier-statement', icon: 'bi-truck',
+          tooltip: 'Per-supplier AP statement with the same ledger view.',
+        },
+        {
+          label: 'Layby ageing', route: '/reports/layby-ageing', icon: 'bi-bag-check',
+          tooltip: 'Outstanding layby and pre-order balances bucketed by age (ORDER.READ required).',
+          permissions: ['ORDER.READ', 'ORDER.MANAGE'],
         }
       ]
     },

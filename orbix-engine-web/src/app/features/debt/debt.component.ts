@@ -41,7 +41,14 @@ import {
         </p>
       </div>
       @if (!permissionDenied()) {
-        <a routerLink="/reports/customer-statement" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+        <!--
+          Deep-link: when a per-customer row is active, carry ?customerId= so
+          /reports/customer-statement pre-loads that customer's statement.
+          activeCustomerUid() is set by openCustomer() — null when no row is drilled.
+        -->
+        <a [routerLink]="'/reports/customer-statement'"
+           [queryParams]="activeCustomerId() ? { customerId: activeCustomerId() } : {}"
+           class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
           <i class="bi bi-file-earmark-person"></i><span class="d-none d-sm-inline">Statements</span>
         </a>
       }
@@ -178,8 +185,8 @@ import {
                   <tbody>
                     @for (row of arRows(); track row.customerUid) {
                       <tr data-testid="debt-customer-row"
-                          (click)="openCustomer(row.customerUid)"
-                          (keydown.enter)="openCustomer(row.customerUid)"
+                          (click)="openCustomer(row.customerUid, row.customerId)"
+                          (keydown.enter)="openCustomer(row.customerUid, row.customerId)"
                           tabindex="0"
                           role="link"
                           [attr.aria-label]="'Drill into ' + row.customerName">
@@ -339,6 +346,13 @@ export class DebtComponent implements OnInit {
   protected readonly currencyCode = signal('TZS');
   protected readonly bucketFilter = signal<AgingBucket | null>(null);
 
+  /**
+   * The numeric party PK (string) of the last customer row clicked.
+   * Used to deep-link the Statements button to that customer's AR statement.
+   * Null when no row is active (header-level Statements button → no pre-filter).
+   */
+  protected readonly activeCustomerId = signal<string | null>(null);
+
   protected readonly bucketChips: { key: AgingBucket; label: string }[] = [
     { key: 'CURRENT',   label: 'Current' },
     { key: 'D_1_30',    label: '1 – 30' },
@@ -375,7 +389,9 @@ export class DebtComponent implements OnInit {
     });
   }
 
-  protected openCustomer(uid: string): void {
+  protected openCustomer(uid: string, customerId: string): void {
+    // Track the numeric id so the Statements deep-link pre-filters to this customer.
+    this.activeCustomerId.set(customerId);
     this.router.navigate(['/debt/customer/uid', uid]);
   }
 
