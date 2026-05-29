@@ -57,15 +57,22 @@ import AxeBuilder from '@axe-core/playwright';
  *   export-pdf                        | PDF export trigger (shared)
  *   reports-tile-ar-ageing            | AR-ageing tile on /reports index (regression guard)
  *
- * Scenarios (all `test.fail` — Slice K — flips when FE lands):
- *   1. Customer-statement happy-path: pick via typeahead, rows visible, CSV export, axe-AA.
- *   2. Supplier-statement happy-path: pick via typeahead, rows visible, Excel export, axe-AA.
- *   3. Layby-ageing happy-path: KPI strip + bucket table + drill-down rows visible, PDF export.
- *   4. Layby-ageing type-chip filter: switch to LAYBY — PRE_ORDER rows hidden.
- *   5. Customer-statement deep-link: query-param pre-load without manual interaction.
- *   6. Cashier sees permission-required panel on /reports/layby-ageing (ORDER.READ gate).
- *   7. Customer with no activity: empty-state visible, export menu disabled.
- *   8. AR-ageing tile on reports index navigates to /debt (regression guard).
+ * Scenarios (post-Slice-K verification 2026-05-29 — local QA container):
+ *   1. Customer-statement happy-path: pick via typeahead, rows visible, CSV export, axe-AA.       [test.fail*]
+ *   2. Supplier-statement happy-path: pick via typeahead, rows visible, Excel export, axe-AA.     [test.fail*]
+ *   3. Layby-ageing happy-path: KPI strip + bucket table + drill-down rows visible, PDF export.   [test.fail*]
+ *   4. Layby-ageing type-chip filter: switch to LAYBY — PRE_ORDER rows hidden.                    [test.fail*]
+ *   5. Customer-statement deep-link: query-param pre-load without manual interaction.             [test.fail*]
+ *   6. Cashier sees permission-required panel on /reports/layby-ageing (ORDER.READ gate).         [PASS]
+ *   7. Customer with no activity: empty-state visible, export menu disabled.                      [PASS]
+ *   8. AR-ageing tile on reports index navigates to /debt (regression guard).                     [PASS]
+ *
+ * *Scenarios 1–5 remain `test.fail` because the QA container ships with zero seeded customers,
+ *  suppliers, sales invoices and layby orders. The slice-K FE components are wired correctly
+ *  (testids verified, Karma unit specs green); the gap is test-data scaffolding. Two paths to
+ *  flip these: (a) add provisioning in a `test.beforeAll` (see debt.spec.ts:393 for the pattern,
+ *  but extends to invoice + payment + layby order), or (b) extend the QA bootstrap to seed a
+ *  baseline party + invoice + layby. Cross-cutting concern — pull into its own slice (slice-L).
  */
 
 // ---------------------------------------------------------------------------
@@ -481,8 +488,8 @@ test.describe('Slice K — customer-statement deep-link (query-param pre-load)',
 test.describe('Slice K — cashier permission gate on /reports/layby-ageing', () => {
   test.use({ persona: 'cashier' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands (requires FE *orbixHasPermission guard or 403-to-state mapping)
+  test(
+    // Slice K — flipped 2026-05-29: FE renders report-permission-state when ORDER.READ absent
     'cashier opens /reports/layby-ageing, sees permission-required panel, no export buttons visible',
     async ({ page }) => {
       await page.goto(`/reports/layby-ageing?branchId=${BRANCH_ID}`);
@@ -530,8 +537,8 @@ test.describe('Slice K — cashier permission gate on /reports/layby-ageing', ()
 test.describe('Slice K — customer-statement empty-state (no activity in window)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice K — flipped 2026-05-29: empty-state placeholder + KPI strip suppression both wired
     'accountant opens /reports/customer-statement with a customerId that has no activity — empty-state visible + export buttons disabled',
     async ({ page }) => {
       // Deep-link to a customer that has no transactions. The sentinel id
@@ -600,8 +607,8 @@ test.describe('Slice K — customer-statement empty-state (no activity in window
 test.describe('Slice K — reports index AR-ageing tile redirects to /debt', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands (reports.component.ts flips the AR/AP ageing tiles to /debt links)
+  test(
+    // Slice K — flipped 2026-05-29: AR-ageing tile redirects to /debt (single source of ageing truth)
     'reports index AR-ageing tile click navigates to /debt (not a standalone ar-ageing page)',
     async ({ page }) => {
       await page.goto('/reports');
