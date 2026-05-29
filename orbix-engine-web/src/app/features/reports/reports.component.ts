@@ -10,6 +10,7 @@ interface ReportTile {
   icon: string;
   tint: 'blue' | 'green' | 'amber' | 'rose' | 'violet' | 'orange';
   status: 'live' | 'soon';
+  testid?: string;
 }
 
 @Component({
@@ -27,11 +28,13 @@ interface ReportTile {
       @for (tile of tiles; track tile.label) {
         <div class="col-12 col-sm-6 col-lg-4">
           @if (tile.status === 'live') {
-            <a [routerLink]="tile.link" class="report-tile h-100 text-decoration-none">
+            <a [routerLink]="tile.link" class="report-tile h-100 text-decoration-none"
+               [attr.data-testid]="tile.testid ?? null">
               <ng-container *ngTemplateOutlet="body; context: { $implicit: tile }"></ng-container>
             </a>
           } @else {
-            <div class="report-tile is-soon h-100">
+            <div class="report-tile is-soon h-100"
+                 [attr.data-testid]="tile.testid ?? null">
               <ng-container *ngTemplateOutlet="body; context: { $implicit: tile }"></ng-container>
             </div>
           }
@@ -99,7 +102,7 @@ export class ReportsComponent {
     { label: 'Z-history',           description: 'Closed till sessions with Z-report totals — business date, cashier, variance.',      link: '/reports/z-history',       icon: 'bi-printer',              tint: 'violet', status: 'live' },
     { label: 'Customer statement',  description: 'Per-customer AR statement with opening + period + closing balance.',                                    link: '/reports/customer-statement', icon: 'bi-file-earmark-person', tint: 'amber',  status: 'live' },
     { label: 'Supplier statement',  description: 'Per-supplier AP statement with the same ledger view.',                                                         link: '/reports/supplier-statement', icon: 'bi-truck',               tint: 'rose',   status: 'live' },
-    { label: 'AR ageing',           description: 'Customer dunning queue with 5-bucket ageing breakdown. View in Debt module.',                                   link: '/debt',                       icon: 'bi-clock-history',       tint: 'amber',  status: 'live' },
+    { label: 'AR ageing',           description: 'Customer dunning queue with 5-bucket ageing breakdown. View in Debt module.',                                   link: '/debt',                       icon: 'bi-clock-history',       tint: 'amber',  status: 'live', testid: 'reports-tile-ar-ageing' },
     { label: 'AP ageing',           description: 'Supplier obligations queue with ageing buckets. View in Debt module.',                                          link: '/debt',                       icon: 'bi-hourglass-bottom',    tint: 'rose',   status: 'live' },
     { label: 'Layby ageing',        description: 'Outstanding layby / pre-order balances by age bucket (ORDER.READ required).',                                   link: '/reports/layby-ageing',       icon: 'bi-bag-check',           tint: 'orange', status: 'live' },
     { label: 'Stock card',          description: 'Chronological stock movements for an item at a branch — GRNs, sales, adjustments.', link: '/reports/stock-card',         icon: 'bi-clipboard2-pulse',    tint: 'blue',   status: 'live' },

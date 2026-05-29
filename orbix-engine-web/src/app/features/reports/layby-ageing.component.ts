@@ -22,10 +22,10 @@ const PERM_MANAGE = 'ORDER.MANAGE';
 
 type OrderType = 'ALL' | 'LAYBY' | 'PRE_ORDER';
 
-const TYPE_CHIPS: { key: OrderType; label: string }[] = [
-  { key: 'ALL',       label: 'All' },
-  { key: 'LAYBY',     label: 'Layby' },
-  { key: 'PRE_ORDER', label: 'Pre-order' },
+const TYPE_CHIPS: { key: OrderType; label: string; testid: string }[] = [
+  { key: 'ALL',       label: 'All',       testid: 'layby-type-chip-all'      },
+  { key: 'LAYBY',     label: 'Layby',     testid: 'layby-type-chip-layby'    },
+  { key: 'PRE_ORDER', label: 'Pre-order', testid: 'layby-type-chip-preorder' },
 ];
 
 @Component({
@@ -74,6 +74,7 @@ const TYPE_CHIPS: { key: OrderType; label: string }[] = [
               <button type="button" class="btn btn-sm"
                       [class.btn-primary]="typeFilter() === chip.key"
                       [class.btn-outline-secondary]="typeFilter() !== chip.key"
+                      [attr.data-testid]="chip.testid"
                       (click)="setTypeFilter(chip.key)">
                 {{ chip.label }}
               </button>
@@ -138,7 +139,7 @@ const TYPE_CHIPS: { key: OrderType; label: string }[] = [
       <!-- Populated -->
       @if (!loading() && report() && hasData()) {
         <!-- KPI strip -->
-        <div class="row g-3 mb-4">
+        <div class="row g-3 mb-4" data-testid="layby-ageing-kpi-strip">
           <div class="col-6 col-md-3">
             <div class="card border-0 shadow-sm p-3 text-center">
               <div class="small text-secondary text-uppercase fw-semibold mb-1" style="letter-spacing:0.06em;">Layby balance</div>
@@ -181,7 +182,7 @@ const TYPE_CHIPS: { key: OrderType; label: string }[] = [
               </thead>
               <tbody>
                 @for (bucket of visibleBuckets(); track bucket.type + bucket.bucketLabel) {
-                  <tr>
+                  <tr data-testid="layby-ageing-bucket-row">
                     <td>
                       <span class="badge"
                             [class.text-bg-primary]="bucket.type === 'LAYBY'"
@@ -228,7 +229,7 @@ const TYPE_CHIPS: { key: OrderType; label: string }[] = [
               </thead>
               <tbody>
                 @for (order of visibleOrders(); track order.id) {
-                  <tr>
+                  <tr data-testid="layby-ageing-order-row">
                     <td class="small">
                       <!--
                         Deep-link to /orders/uid/{id}. The /orders feature is deferred

@@ -71,6 +71,7 @@ function defaultTo(): string {
       <div class="col-12 col-md-5">
         <orbix-customer-typeahead
           instanceId="cs"
+          inputTestid="customer-statement-picker"
           [initialCustomer]="initialCustomer()"
           (customerSelected)="onCustomerSelected($event)"
           (customerCleared)="onCustomerCleared()">
@@ -144,7 +145,7 @@ function defaultTo(): string {
     <!-- Populated -->
     @if (!loading() && statement() && statement()!.entries.length > 0) {
       <!-- KPI strip -->
-      <div class="row g-3 mb-4">
+      <div class="row g-3 mb-4" data-testid="statement-kpi-strip">
         <div class="col-6 col-md-3">
           <div class="card border-0 shadow-sm p-3 text-center">
             <div class="small text-secondary text-uppercase fw-semibold mb-1" style="letter-spacing:0.06em;">Opening</div>
@@ -196,7 +197,7 @@ function defaultTo(): string {
             </thead>
             <tbody>
               @for (entry of statement()!.entries; track entry.refId + entry.kind + entry.date) {
-                <tr [class.opacity-50]="entry.voided">
+                <tr [class.opacity-50]="entry.voided" data-testid="customer-statement-table-row">
                   <td class="text-nowrap small">{{ entry.date | date:'dd/MM/yyyy' }}</td>
                   <td>
                     <span [class]="kindBadge(entry.kind)" style="font-size:0.7rem;">

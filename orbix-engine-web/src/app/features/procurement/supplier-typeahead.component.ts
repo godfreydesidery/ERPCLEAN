@@ -68,6 +68,7 @@ type TypeaheadState = 'idle' | 'loading' | 'results' | 'no-results';
           (blur)="onBlur()"
           (focus)="onFocus()"
           [attr.required]="required || null"
+          [attr.data-testid]="inputTestid ?? null"
         >
         @if (state() === 'loading') {
           <span class="input-group-text bg-white border-start-0">
@@ -143,6 +144,9 @@ export class SupplierTypeaheadComponent implements OnInit, OnChanges, OnDestroy 
 
   /** Unique suffix so multiple instances on one page don't clash. */
   @Input() instanceId = 'default';
+
+  /** Optional data-testid forwarded to the inner <input> for Playwright targeting. */
+  @Input() inputTestid?: string;
 
   @Output() readonly supplierSelected = new EventEmitter<SupplierSelectedEvent>();
   @Output() readonly supplierCleared = new EventEmitter<void>();
