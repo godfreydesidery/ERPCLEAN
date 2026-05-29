@@ -117,7 +117,7 @@ def build():
 
     meta = doc.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = meta.add_run("Phase 1 MVP · 2026-05-28")
+    run = meta.add_run("Phase 1 MVP · 2026-05-29")
     run.font.size = Pt(11)
     run.italic = True
     run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
@@ -151,7 +151,8 @@ def build():
         "7.  Stock — on-hand, counts, oversell, adjustments",
         "8.  Day cash — open and close the business day",
         "9.  Debt — AR aging, AP dunning, chase notes, write-off",
-        "10. Reports — dashboard, sales reports, statements, export",
+        "10. Reports — dashboard, sales reports, stock reports, statements, "
+        "layby ageing, export",
         "11. Known limitations (out of scope for this UAT)",
         "12. How to report issues",
         "Annex A. Permissions cheat-sheet",
@@ -849,19 +850,78 @@ def build():
         ],
     )
 
-    add_heading(doc, "10.5 Statements (US-RPT-007)", level=2)
+    add_heading(doc, "10.5 Stock reports (US-RPT-004/005/006, Slice J)", level=2)
+    add_para(
+        doc,
+        "Three stock-side report pages live under Reports. All are gated on "
+        "STOCK.READ — a cashier (POS perms only) opening any of them sees the "
+        "Permission required panel, not the data.",
+    )
     add_steps(
         doc,
         [
-            "Reports > Customer statement. Pick a customer and date range. "
-            "Verify opening balance, period entries, running balance, "
-            "closing balance.",
-            "Reports > Supplier statement. Same shape on the AP side.",
+            "Reports > Stock card. Pick a branch and an item (typeahead). "
+            "Verify the chronological IN / OUT / ADJUST movement list with a "
+            "running balance column and the document number per row. This is "
+            "the same stock card reachable from Stock > On hand, exposed as a "
+            "standalone report so you can deep-link to it.",
+            "Reports > Negative stock. Lists items whose on-hand has gone "
+            "below zero (after an oversell override). On a clean system the "
+            "list is empty and an empty-state card shows. Where there are "
+            "rows, click one to drill through to that item's stock card.",
+            "Reports > Stock movers. Two tabs — Fast movers and Slow movers — "
+            "over a date range (default last 30 days). Switch tabs and verify "
+            "each ranks items by quantity moved.",
+            "On any populated page, use the Export [PDF] [Excel] [CSV] button "
+            "group and confirm a file downloads.",
+        ],
+    )
+    add_note(
+        doc,
+        "The export button only appears when there are rows. On an empty "
+        "report the empty-state card replaces it — that is expected, not a "
+        "defect.",
+    )
+
+    add_heading(doc, "10.6 Statements (US-RPT-007, Slice K)", level=2)
+    add_steps(
+        doc,
+        [
+            "Reports > Customer statement. Pick a customer (typeahead — never "
+            "a raw id) and a date range, then click Run. Verify the KPI strip "
+            "(opening balance, closing balance), the period entries with a "
+            "running balance, and CSV / Excel export.",
+            "You can also deep-link with query params "
+            "(?customerId=..&from=..&to=..) — the picker pre-loads and the "
+            "statement fetches without manual interaction.",
+            "Reports > Supplier statement. Same shape on the AP side; pick a "
+            "supplier via the typeahead, Run, then export to Excel.",
             "Export to PDF and confirm the layout is readable.",
         ],
     )
 
-    add_heading(doc, "10.6 Acceptance checklist", level=2)
+    add_heading(doc, "10.7 Layby & pre-order ageing (US-RPT-014, Slice K)", level=2)
+    add_para(
+        doc,
+        "Tracks customer layby and pre-order commitments by age. Gated on "
+        "ORDER.READ — a cashier opening it sees the Permission required panel. "
+        "Layby and pre-order ORDERS themselves are captured on the POS till "
+        "(Phase 1.1); this report reads and ages whatever orders exist.",
+    )
+    add_steps(
+        doc,
+        [
+            "Reports > Layby ageing (with a branch selected).",
+            "Verify the per-type KPI strip and the bucket roll-up table "
+            "(ageing buckets across LAYBY and PRE_ORDER), plus the per-order "
+            "drill-down rows below.",
+            "Use the type chips — ALL / LAYBY / PRE_ORDER — to filter. "
+            "Switching to LAYBY hides the PRE_ORDER rows and vice-versa.",
+            "Export to PDF.",
+        ],
+    )
+
+    add_heading(doc, "10.8 Acceptance checklist", level=2)
     add_checklist(
         doc,
         [
@@ -877,6 +937,19 @@ def build():
             "with a tooltip.",
             "Row-cap message appears (toast) when trying to export more "
             "than 5000 rows.",
+            "Stock card running balance is correct end-to-end (GRN, sale, "
+            "adjustment, return).",
+            "Negative-stock and stock-movers show a clean empty-state when "
+            "there is no data (no error, no broken export button).",
+            "A cashier opening Stock card / Negative stock / Stock movers "
+            "sees the Permission required panel (STOCK.READ gate).",
+            "Customer- and supplier-statement pickers are typeaheads; "
+            "selecting then clicking Run loads the statement; the "
+            "customer-statement deep-link pre-loads from query params.",
+            "Layby ageing shows the per-type KPI strip + bucket table + "
+            "drill-down; the LAYBY / PRE_ORDER chips filter the rows.",
+            "A cashier opening Layby ageing sees the Permission required "
+            "panel (ORDER.READ gate).",
         ],
     )
 
@@ -903,7 +976,8 @@ def build():
             "Scheduled report email — Phase 2.",
             "Background-job export for results above 5000 rows — Phase 2.",
             "Phase 1.1 supermarket additions: sections per branch, "
-            "foreign-currency tender per till, layby + pre-orders, "
+            "foreign-currency tender per till, layby + pre-order capture on "
+            "the till (the ageing report for them IS available — see 10.7), "
             "gift cards, weighed items / embedded-weight EAN-13, batch / "
             "expiry tracking, section P&L reports.",
             "Multi-company consolidation, inter-branch transfers, "
@@ -992,8 +1066,10 @@ def build():
             ("PROCUREMENT.APPROVE_LPO", "Procurement manager"),
             ("PROCUREMENT.MANAGE_INVOICE", "Accountant / procurement officer"),
             ("PROCUREMENT.MANAGE_RETURN", "Procurement officer / accountant"),
+            ("STOCK.READ", "Stock controller / accountant (stock reports)"),
             ("STOCK.COUNT.APPROVE", "Stock controller"),
             ("OVERSELL.OVERRIDE", "Store manager"),
+            ("ORDER.READ", "Accountant (layby / pre-order ageing report)"),
             ("DAY.OPEN", "Store manager"),
             ("DAY.CLOSE", "Store manager"),
             ("DAY.OVERRIDE", "Accountant"),
