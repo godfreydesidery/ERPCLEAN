@@ -129,23 +129,23 @@ import {
                  [attr.aria-label]="activeTab() === 'AR' ? 'AR aging-bucket totals' : 'AP aging-bucket totals'">
             <thead>
               <tr>
-                <th scope="col" class="bucket-cell">
+                <th scope="col" class="bucket-cell" data-testid="debt-bucket-current">
                   <div class="bucket-label">Current</div>
                   <div class="bucket-amount">{{ formatMoney(activeTotals()?.current) }}</div>
                 </th>
-                <th scope="col" class="bucket-cell">
+                <th scope="col" class="bucket-cell" data-testid="debt-bucket-30">
                   <div class="bucket-label">1 – 30 days</div>
                   <div class="bucket-amount">{{ formatMoney(activeTotals()?.d1_30) }}</div>
                 </th>
-                <th scope="col" class="bucket-cell">
+                <th scope="col" class="bucket-cell" data-testid="debt-bucket-60">
                   <div class="bucket-label">31 – 60 days</div>
                   <div class="bucket-amount">{{ formatMoney(activeTotals()?.d31_60) }}</div>
                 </th>
-                <th scope="col" class="bucket-cell">
+                <th scope="col" class="bucket-cell" data-testid="debt-bucket-90">
                   <div class="bucket-label">61 – 90 days</div>
                   <div class="bucket-amount">{{ formatMoney(activeTotals()?.d61_90) }}</div>
                 </th>
-                <th scope="col" class="bucket-cell">
+                <th scope="col" class="bucket-cell" data-testid="debt-bucket-over-90">
                   <div class="bucket-label">90+ days</div>
                   <div class="bucket-amount">{{ formatMoney(activeTotals()?.d90_plus) }}</div>
                 </th>

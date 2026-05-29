@@ -176,8 +176,8 @@ test.describe('Slice I — sales-daily CSV export', () => {
 test.describe('Slice I — sales-summary Excel export', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice I — flips when FE lands
+  test(
+    // Slice I — FE landed; passing as of Slice M triage
     'accountant opens /reports/sales-summary, sees KPI tiles + summary table, clicks Excel, xlsx file downloads',
     async ({ page }) => {
       await page.goto(`/reports/sales-summary?branchId=${BRANCH_ID}&businessDate=${TODAY}`);
@@ -547,8 +547,8 @@ test.describe('Slice J — stock-card report happy-path (US-RPT-004)', () => {
 test.describe('Slice J — negative-stock report happy-path (US-RPT-006)', () => {
   test.use({ persona: 'stock-controller' as Persona });
 
-  test.fail(
-    // Slice J — flips when FE lands
+  test(
+    // Slice J — FE landed; passing as of Slice M triage
     'stock-controller opens /reports/negative-stock, page renders (empty-or-rows), click-through to stock-card, exports Excel, axe-AA clean',
     async ({ page }) => {
       await page.goto(`/reports/negative-stock?branchId=${BRANCH_ID}`);
@@ -712,8 +712,8 @@ test.describe('Slice J — stock movers (fast + slow tabs, US-RPT-005)', () => {
 test.describe('Slice J — cashier permission gate on stock-report pages', () => {
   test.use({ persona: 'cashier' as Persona });
 
-  test.fail(
-    // Slice J — flips when FE lands (requires FE permission guard or 403-to-state mapping)
+  test(
+    // Slice J — FE permission guard landed; passing as of Slice M triage
     'cashier opens /reports/stock-card, /reports/negative-stock, /reports/stock-movers — each shows permission-required state, no export buttons',
     async ({ page }) => {
       const pages: Array<{ path: string; label: string }> = [

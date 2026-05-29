@@ -1,7 +1,7 @@
 # Slice M — debt/reports e2e drift triage
 
-**Status:** pre-staged (discovered 2026-05-29 during Slice-L verification)
-**Owner:** unassigned
+**Status:** RESOLVED 2026-05-29 — debt.spec.ts 42/0, reports.spec.ts 11/0 against `orbix:qa`.
+**Owner:** desideryg
 **Branch:** `chore/slice-m-debt-reports-e2e-drift`
 
 ## Why this exists
@@ -64,7 +64,47 @@ precondition), fix the setup, re-confirm the three happy-paths render.
 
 ## Acceptance
 
-- [ ] `debt.spec.ts` runs clean as a standalone file (0 failed).
-- [ ] `reports.spec.ts` runs clean as a standalone file (0 failed).
-- [ ] No `test.fail` remains on a gate that currently passes.
-- [ ] Full `npm run e2e` green against the local QA container.
+- [x] `reports.spec.ts` runs clean as a standalone file (0 failed) — 11 passed, 2026-05-29.
+- [x] No `test.fail` remains on a gate that currently passes — verified 2026-05-29.
+- [x] `debt.spec.ts` runs clean as a standalone file (0 failed) — 42 passed, 2026-05-29.
+- [ ] Full `npm run e2e` green against the local QA container — not yet run end-to-end (deferred).
+
+## Resolution
+
+Two test-only fixes (debt.spec.ts) + one minimal FE wiring fix closed the gate.
+
+**1. `test.fail` cleanup (18 markers unwrapped).** Stale markers on gates/features
+that have since landed (Slice G.1/G.2 DEBT.READ + write-off 403s, credit-limit
+adjust, reports Slice I/J export + permission states). Each was confirmed
+"Expected to fail, but passed" before unwrapping; ~20 markers on genuinely
+unimplemented backend were left as `test.fail`. One more (`2.E` drill-down
+panels) surfaced and was unwrapped only after the setup fix below made its refs
+resolvable.
+
+**2. `loadRefsFromDb()` recovery gap (failure class 2).** The setup test populates
+`invoice45Id`/`invoice5Id` in-memory, but a recycled Playwright worker starts
+with an empty `refs`, and `loadRefsFromDb()` did not recover the two invoice ids
+— so `requireRefs()` threw "Debt refs missing". Fix: recover both invoices from
+the DB by number suffix (`-AGE45` / `-AGE05`) joined to the debt customer,
+`status='POSTED'`, most recent.
+
+**3. Credit-limit accumulation trap (surfaced after #2).** The debt customer is
+reused across runs on the persistent volume and its invoices are never paid down,
+while the `2.G` adjust test pins the credit limit back to 250k each run. Once
+accumulated debt crossed 250k the post-time credit gate blocked setup's invoices
+(`Customer credit limit exceeded: current debt 247800, limit 250000`). Fix:
+setup now raises the limit to 1e9 (within `@Digits(integer=14)`, no false-match
+on the `2.G` `%250000%` event assertion) before posting.
+
+**4. Debt-bucket testids (the one FE change).** `debt.spec.ts` asserts
+`data-testid="debt-bucket-current|30|60|90|over-90"`. The five bucket-total cells
+*were* rendering (labels + amounts) in `debt.component.ts` but carried no
+`data-testid` — the contract attributes the spec header (lines 44–48) reserved
+for the frontend to wire. Added the five attributes. Backend `GET /api/v1/debt/aging`
+already returns the correct `totals` shape (`debt.spec.ts:708`). This was the
+only non-test change; container image rebuilt + restarted to verify.
+
+> Note: `statements.spec.ts` shows one "Expected to fail, but passed" on this
+> branch — a divergence artifact, not a regression. This branch is cut from
+> `origin/main` (pre-Slice-L); Slice L already flips that marker to `test` and is
+> 9/9 green on its own branch. Slice M does not touch `statements.spec.ts`.
