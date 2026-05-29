@@ -1133,8 +1133,8 @@ test.describe('Slice H — apply to FULLY_ALLOCATED → 409', () => {
 test.describe('Slice H — permission 403 gate', () => {
   test.use({ persona: 'cashier' as Persona });
 
-  test.fail(
-    // Slice H — flips when /apply lands
+  test(
+    // Slice H — /apply gate landed; cashier correctly 403'd + button hidden. Unwrapped 2026-05-29.
     'cashier (no SALES.MANAGE_RETURN) gets 403 on POST /apply; Apply button is hidden in the UI',
     async ({ page }) => {
       const r0 = requireRefs();
