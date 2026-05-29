@@ -104,9 +104,20 @@ export class ProcurementService {
       .set('q', q)
       .set('page', page)
       .set('size', size);
-    return unwrap(this.http.get<ApiResponse<Page<SupplierSummary>>>(
+    // Backend returns nested { partyId, party: { id, uid, code, name }, ... };
+    // flatten to the SupplierSummary the typeahead consumes.
+    type SupplierRow = { partyId: string; party: { uid: string; code: string; name: string } };
+    return unwrap(this.http.get<ApiResponse<Page<SupplierRow>>>(
       `${this.base}/suppliers`, { params }
-    ));
+    )).pipe(map(p => ({
+      ...p,
+      content: p.content.map(r => ({
+        id: r.partyId,
+        partyUid: r.party.uid,
+        code: r.party.code,
+        name: r.party.name,
+      })),
+    })));
   }
 
   // ---- GRN (F3.2) ----------------------------------------------------------
