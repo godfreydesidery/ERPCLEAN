@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { Page } from '../../core/api/page';
-import { ItemBranchBalance, ItemMovementRow, StockMove } from './reports.models';
+import { ItemBranchBalance, ItemMovementRow, LaybyAgeingReport, PartyStatement, StockMove } from './reports.models';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {
@@ -83,6 +83,76 @@ export class ReportsService {
       this.http.get<ApiResponse<ItemMovementRow[]>>(
         `${this.base}/reports/stock-slow-movers`,
         { params: buildMoversParams(branchId, from, to, moveTypes, limit) },
+      ),
+    );
+  }
+  /**
+   * US-DEBT-005 / US-RPT-007 — AR statement for one customer.
+   * GET /api/v1/reports/customer-statement?customerId=&from=&to=
+   * Not permission-gated — matches the existing controller convention.
+   * @param customerId Numeric party PK (string — Jackson Long-as-string).
+   * @param from ISO-8601 date (YYYY-MM-DD). Null → backend defaults to last 30 days.
+   * @param to ISO-8601 date. Null → backend defaults to today.
+   */
+  customerStatement(
+    customerId: string,
+    from: string | null,
+    to: string | null,
+  ): Observable<PartyStatement> {
+    let params = new HttpParams().set('customerId', customerId);
+    if (from) params = params.set('from', from);
+    if (to) params = params.set('to', to);
+    return unwrap(
+      this.http.get<ApiResponse<PartyStatement>>(
+        `${this.base}/reports/customer-statement`,
+        { params },
+      ),
+    );
+  }
+
+  /**
+   * US-DEBT-006 / US-RPT-007 — AP statement for one supplier.
+   * GET /api/v1/reports/supplier-statement?supplierId=&from=&to=
+   * Not permission-gated.
+   * @param supplierId Numeric party PK (string — Jackson Long-as-string).
+   */
+  supplierStatement(
+    supplierId: string,
+    from: string | null,
+    to: string | null,
+  ): Observable<PartyStatement> {
+    let params = new HttpParams().set('supplierId', supplierId);
+    if (from) params = params.set('from', from);
+    if (to) params = params.set('to', to);
+    return unwrap(
+      this.http.get<ApiResponse<PartyStatement>>(
+        `${this.base}/reports/supplier-statement`,
+        { params },
+      ),
+    );
+  }
+
+  /**
+   * US-RPT-014 — Layby / pre-order ageing report.
+   * GET /api/v1/reports/layby-ageing?branchId=&type=&asOf=
+   * Gated by ORDER.READ or ORDER.MANAGE on the backend.
+   * @param branchId Null → all accessible branches.
+   * @param type 'LAYBY' | 'PRE_ORDER' | null → all types.
+   * @param asOf ISO-8601 instant string. Null → server defaults to now.
+   */
+  laybyAgeing(
+    branchId: string | null,
+    type: 'LAYBY' | 'PRE_ORDER' | null,
+    asOf: string | null,
+  ): Observable<LaybyAgeingReport> {
+    let params = new HttpParams();
+    if (branchId) params = params.set('branchId', branchId);
+    if (type) params = params.set('type', type);
+    if (asOf) params = params.set('asOf', asOf);
+    return unwrap(
+      this.http.get<ApiResponse<LaybyAgeingReport>>(
+        `${this.base}/reports/layby-ageing`,
+        { params },
       ),
     );
   }
