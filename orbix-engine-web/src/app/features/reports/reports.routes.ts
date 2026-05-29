@@ -35,5 +35,21 @@ export const routes: Routes = [
     // Slice J — US-RPT-005. Accepts ?branchId=.
     path: 'stock-movers',
     loadComponent: () => import('./stock-movers.component').then(m => m.StockMoversComponent)
+  },
+  {
+    // Slice K — US-DEBT-005 / US-RPT-007. Accepts ?customerId=&from=&to=.
+    path: 'customer-statement',
+    loadComponent: () => import('./customer-statement.component').then(m => m.CustomerStatementComponent)
+  },
+  {
+    // Slice K — US-DEBT-006 / US-RPT-007. Accepts ?supplierId=&from=&to=.
+    path: 'supplier-statement',
+    loadComponent: () => import('./supplier-statement.component').then(m => m.SupplierStatementComponent)
+  },
+  {
+    // Slice K — US-RPT-014. Accepts ?branchId=&type=&asOf=.
+    // Gated by ORDER.READ on the backend; FE renders a permission-required panel for cashier.
+    path: 'layby-ageing',
+    loadComponent: () => import('./layby-ageing.component').then(m => m.LaybyAgeingComponent)
   }
 ];
