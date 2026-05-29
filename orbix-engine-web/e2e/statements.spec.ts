@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { type Page } from '@playwright/test';
 import { test, expect } from './personas.fixture';
 import type { Persona } from './test-users';
@@ -57,26 +58,37 @@ import AxeBuilder from '@axe-core/playwright';
  *   export-pdf                        | PDF export trigger (shared)
  *   reports-tile-ar-ageing            | AR-ageing tile on /reports index (regression guard)
  *
- * Scenarios (post-Slice-K verification 2026-05-29 — local QA container):
- *   1. Customer-statement happy-path: pick via typeahead, rows visible, CSV export, axe-AA.       [test.fail*]
- *   2. Supplier-statement happy-path: pick via typeahead, rows visible, Excel export, axe-AA.     [test.fail*]
- *   3. Layby-ageing happy-path: KPI strip + bucket table + drill-down rows visible, PDF export.   [test.fail*]
- *   4. Layby-ageing type-chip filter: switch to LAYBY — PRE_ORDER rows hidden.                    [test.fail*]
- *   5. Customer-statement deep-link: query-param pre-load without manual interaction.             [test.fail*]
+ * Scenarios (post-Slice-L provisioning 2026-05-29 — local QA container):
+ *   1. Customer-statement happy-path: pick via typeahead, rows visible, CSV export, axe-AA.       [PASS]
+ *   2. Supplier-statement happy-path: pick via typeahead, rows visible, Excel export, axe-AA.     [PASS]
+ *   3. Layby-ageing happy-path: KPI strip + bucket table + drill-down rows visible, PDF export.   [PASS]
+ *   4. Layby-ageing type-chip filter: switch to LAYBY — PRE_ORDER rows hidden.                    [PASS]
+ *   5. Customer-statement deep-link: query-param pre-load without manual interaction.             [PASS]
  *   6. Cashier sees permission-required panel on /reports/layby-ageing (ORDER.READ gate).         [PASS]
  *   7. Customer with no activity: empty-state visible, export menu disabled.                      [PASS]
  *   8. AR-ageing tile on reports index navigates to /debt (regression guard).                     [PASS]
  *
- * *Scenarios 1–5 remain `test.fail` because the QA container ships with zero seeded customers,
- *  suppliers, sales invoices and layby orders. The slice-K FE components are wired correctly
- *  (testids verified, Karma unit specs green); the gap is test-data scaffolding. Two paths to
- *  flip these: (a) add provisioning in a `test.beforeAll` (see debt.spec.ts:393 for the pattern,
- *  but extends to invoice + payment + layby order), or (b) extend the QA bootstrap to seed a
- *  baseline party + invoice + layby. Cross-cutting concern — pull into its own slice (slice-L).
+ * Slice-L provisioning block (describe.serial at top of file) idempotently seeds:
+ *   - UoM / ItemGroup / VatGroup / Item / PriceList tagged SLCL
+ *   - Business day open (branch 1)
+ *   - Stock adjustment 500 units
+ *   - Customer "QA Cust Stmt SLCL" with credit limit 500_000
+ *   - Supplier "QA Supp Stmt SLCL"
+ *   - Sales invoice (10 days ago, 5 × 2000 = 10_000) + sales receipt (5 days ago, 4_000)
+ *   - GRN (7 days ago) + supplier invoice (7 days ago, 8_000) + supplier payment (3 days ago, 3_000)
+ *   - LAYBY order with deposit paid + PRE_ORDER for the same customer
+ *
+ * Slice-L also required two collateral fixes (without which the seeded data still wouldn't
+ * unblock the happy paths):
+ *   - test-users.ts: widened `accountant` with `ORDER.READ` (canonical reports persona;
+ *     scenarios 3 and 4 hit the layby-ageing report which is ORDER.READ-gated).
+ *   - procurement.service.ts: `searchSuppliers` now flattens the backend's nested
+ *     `{ partyId, party: {...} }` to the `SupplierSummary` shape the typeahead expects.
+ *     The mock-only unit test for supplier-typeahead never exercised the real mapping.
  */
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants + run / ref tags (mirrors debt.spec.ts pattern)
 // ---------------------------------------------------------------------------
 
 const BRANCH_ID = '1';
@@ -89,6 +101,17 @@ const STMT_FROM = (() => {
   return d.toISOString().slice(0, 10);
 })();
 const STMT_TO = TODAY;
+
+/** Per-run tag — suffixes transient docs (invoice numbers, reasons). Unique per Playwright invocation. */
+const RUN_TAG = Date.now().toString(36).slice(-5).toUpperCase();
+/** Stable ref tag — used to key idempotent reference rows (uom / item / customer / supplier). */
+const REF_TAG = 'SLCL';
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 /**
  * A customer-id sentinel guaranteed to have zero activity in any date window
@@ -132,6 +155,464 @@ async function dismissDismissableAlerts(page: Page): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// DB probe helpers (mirrors debt.spec.ts)
+// ---------------------------------------------------------------------------
+
+function dbQuery(sql: string): string {
+  const out = execFileSync(
+    'docker',
+    ['exec', 'orbix', 'mariadb', '-u', 'root', '-prootlocal', '-D', 'orbix_erp', '-Nse', sql],
+    { encoding: 'utf8' },
+  );
+  return out.trim();
+}
+
+function escapeSql(s: string): string {
+  return s.replaceAll("'", "''");
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers (mirrors debt.spec.ts)
+// ---------------------------------------------------------------------------
+
+interface ApiResult {
+  status: number;
+  body: string;
+}
+
+async function apiCall(
+  page: Page,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  path: string,
+  body: unknown,
+  opts: { acceptStatuses?: number[]; expectedStatus?: number; tokenKey?: string } = {},
+): Promise<ApiResult> {
+  const tokenKey = opts.tokenKey ?? 'orbix.access';
+  if (page.url() === 'about:blank') {
+    await page.goto('/dashboard');
+  }
+  const result = await page.evaluate(
+    async ({ url, method, payload, key }) => {
+      const token = sessionStorage.getItem(key);
+      const init: RequestInit = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token ?? ''}`,
+        },
+      };
+      if (payload !== undefined && method !== 'GET') {
+        init.body = JSON.stringify(payload);
+      }
+      const r = await fetch(url, init);
+      return { status: r.status, body: await r.text() };
+    },
+    { url: path, method, payload: body, key: tokenKey },
+  );
+  const accept = opts.acceptStatuses
+    ?? (opts.expectedStatus !== undefined ? [opts.expectedStatus] : [200, 201, 204]);
+  if (!accept.includes(result.status)) {
+    throw new Error(`api ${method} ${path} expected ${accept.join(',')} got ${result.status}: ${result.body.slice(0, 400)}`);
+  }
+  return result;
+}
+
+async function apiPost(
+  page: Page,
+  path: string,
+  body: unknown,
+  opts?: { acceptStatuses?: number[]; expectedStatus?: number },
+): Promise<ApiResult> {
+  return apiCall(page, 'POST', path, body, opts);
+}
+
+function unwrap<T>(r: ApiResult): T {
+  const env = JSON.parse(r.body);
+  return env.data as T;
+}
+
+// ---------------------------------------------------------------------------
+// Shared reference state — provisioned in Slice L setup, reused by scenarios
+// ---------------------------------------------------------------------------
+
+interface SlclRefs {
+  uomId: string;
+  itemGroupId: string;
+  vatGroupId: string;
+  itemId: string;
+  priceListId: string;
+  customerId: string;
+  customerUid: string;
+  customerName: string;
+  supplierId: string;
+  salesInvoiceId: string;   // numeric id, for receipt allocation
+  grnId: string;            // numeric id, for supplier-invoice allocation
+  supplierInvoiceId: string; // numeric id, for supplier-payment allocation
+}
+
+const slclRefs: Partial<SlclRefs> = {};
+
+function loadSlclRefsFromDb(): void {
+  const custName = `QA Cust Stmt ${REF_TAG}`;
+  slclRefs.uomId       = dbQuery(`SELECT id FROM uom WHERE code='UN-${REF_TAG}' LIMIT 1`) || slclRefs.uomId;
+  slclRefs.itemGroupId = dbQuery(`SELECT id FROM item_group WHERE code='IG-${REF_TAG}' LIMIT 1`) || slclRefs.itemGroupId;
+  slclRefs.vatGroupId  = dbQuery(`SELECT id FROM vat_group WHERE code='V-${REF_TAG}' LIMIT 1`) || slclRefs.vatGroupId;
+  slclRefs.itemId      = dbQuery(`SELECT id FROM item WHERE code='IT-${REF_TAG}' LIMIT 1`) || slclRefs.itemId;
+  slclRefs.priceListId = dbQuery(`SELECT id FROM price_list WHERE code='PL-${REF_TAG}' LIMIT 1`) || slclRefs.priceListId;
+  slclRefs.customerName = custName;
+  slclRefs.customerId  = dbQuery(
+    `SELECT c.party_id FROM customer c JOIN party p ON p.id=c.party_id WHERE p.name='${escapeSql(custName)}' LIMIT 1`,
+  ) || slclRefs.customerId;
+  if (slclRefs.customerId) {
+    slclRefs.customerUid = dbQuery(`SELECT uid FROM party WHERE id=${slclRefs.customerId} LIMIT 1`) || slclRefs.customerUid;
+  }
+  const suppName = `QA Supp Stmt ${REF_TAG}`;
+  slclRefs.supplierId = dbQuery(
+    `SELECT s.party_id FROM supplier s JOIN party p ON p.id=s.party_id WHERE p.name='${escapeSql(suppName)}' LIMIT 1`,
+  ) || slclRefs.supplierId;
+  if (slclRefs.customerId) {
+    slclRefs.salesInvoiceId = dbQuery(
+      `SELECT id FROM sales_invoice WHERE customer_id=${slclRefs.customerId} AND status='POSTED' ORDER BY id DESC LIMIT 1`,
+    ) || slclRefs.salesInvoiceId;
+  }
+  if (slclRefs.supplierId) {
+    slclRefs.grnId = dbQuery(
+      `SELECT id FROM grn WHERE supplier_id=${slclRefs.supplierId} AND status='POSTED' ORDER BY id DESC LIMIT 1`,
+    ) || slclRefs.grnId;
+    slclRefs.supplierInvoiceId = dbQuery(
+      `SELECT id FROM supplier_invoice WHERE supplier_id=${slclRefs.supplierId} AND status='POSTED' ORDER BY id DESC LIMIT 1`,
+    ) || slclRefs.supplierInvoiceId;
+  }
+}
+
+// =============================================================================
+// SLICE L — statements setup (idempotent, rootadmin persona)
+// Provisions all seed data the happy-path scenarios (1–5) depend on.
+// Must run first; Playwright honours file order with fullyParallel:false + workers:1.
+// =============================================================================
+
+test.describe.serial('Slice L — statements setup', () => {
+  test.use({ persona: 'rootadmin' });
+
+  test('provisions customer + supplier + activity rows inside the 30-day statement window', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    // Open today's business day — 409 on second run is expected.
+    await apiPost(page, `/api/v1/business-days?branchId=${BRANCH_ID}`,
+      { businessDate: TODAY },
+      { acceptStatuses: [200, 201, 400, 409] },
+    );
+
+    // --- UoM ---
+    const existingUom = dbQuery(`SELECT id FROM uom WHERE code='UN-${REF_TAG}' LIMIT 1`);
+    if (existingUom === '') {
+      const r = await apiPost(page, '/api/v1/uoms', {
+        code: `UN-${REF_TAG}`, name: `Unit ${REF_TAG}`, dimension: 'COUNT', base: true,
+      });
+      slclRefs.uomId = String(unwrap<{ id: string }>(r).id);
+    } else {
+      slclRefs.uomId = existingUom;
+    }
+
+    // --- Item group ---
+    const existingIg = dbQuery(`SELECT id FROM item_group WHERE code='IG-${REF_TAG}' LIMIT 1`);
+    if (existingIg === '') {
+      const r = await apiPost(page, '/api/v1/item-groups', {
+        parentId: null, code: `IG-${REF_TAG}`, name: `Item group ${REF_TAG}`,
+      });
+      slclRefs.itemGroupId = String(unwrap<{ id: string }>(r).id);
+    } else {
+      slclRefs.itemGroupId = existingIg;
+    }
+
+    // --- VAT group ---
+    const existingVat = dbQuery(`SELECT id FROM vat_group WHERE code='V-${REF_TAG}' LIMIT 1`);
+    if (existingVat === '') {
+      const r = await apiPost(page, '/api/v1/vat-groups', {
+        code: `V-${REF_TAG}`, name: `VAT ${REF_TAG}`, rate: '0.18', validFrom: TODAY, isDefault: false,
+      });
+      slclRefs.vatGroupId = String(unwrap<{ id: string }>(r).id);
+    } else {
+      slclRefs.vatGroupId = existingVat;
+    }
+
+    // --- Item ---
+    const existingItem = dbQuery(`SELECT id FROM item WHERE code='IT-${REF_TAG}' LIMIT 1`);
+    if (existingItem === '') {
+      const r = await apiPost(page, '/api/v1/items', {
+        code: `IT-${REF_TAG}`,
+        name: `Stmt test item ${REF_TAG}`,
+        shortName: `Item ${REF_TAG}`,
+        type: 'SELLABLE',
+        itemGroupId: slclRefs.itemGroupId,
+        uomId: slclRefs.uomId,
+        vatGroupId: slclRefs.vatGroupId,
+      });
+      slclRefs.itemId = String(unwrap<{ id: string }>(r).id);
+    } else {
+      slclRefs.itemId = existingItem;
+    }
+
+    // --- Stock seed so sells don't trip oversell ---
+    await apiPost(page, '/api/v1/adjustments', {
+      itemId: slclRefs.itemId,
+      branchId: BRANCH_ID,
+      qty: '500',
+      unitCost: '10',
+      reason: `e2e stmt seed ${RUN_TAG}`,
+      sectionId: null,
+      batchId: null,
+      authorisedByUserId: null,
+      allowOversell: false,
+    }, { acceptStatuses: [200, 201] });
+
+    // --- Price list ---
+    const existingPl = dbQuery(`SELECT id FROM price_list WHERE code='PL-${REF_TAG}' LIMIT 1`);
+    if (existingPl === '') {
+      const r = await apiPost(page, '/api/v1/price-lists', {
+        code: `PL-${REF_TAG}`,
+        name: `Stmt PL ${REF_TAG}`,
+        currencyCode: 'TZS',
+        validFrom: TODAY,
+        validTo: null,
+        isDefault: false,
+        taxInclusive: false,
+      });
+      slclRefs.priceListId = String(unwrap<{ id: string }>(r).id);
+    } else {
+      slclRefs.priceListId = existingPl;
+    }
+
+    // --- Customer ---
+    slclRefs.customerName = `QA Cust Stmt ${REF_TAG}`;
+    const existingCust = dbQuery(
+      `SELECT c.party_id FROM customer c JOIN party p ON p.id=c.party_id WHERE p.name='${escapeSql(slclRefs.customerName)}' LIMIT 1`,
+    );
+    if (existingCust === '') {
+      const r = await apiPost(page, '/api/v1/customers', {
+        partyId: null,
+        party: {
+          name: slclRefs.customerName,
+          legalName: `${slclRefs.customerName} Ltd`,
+          category: 'BUSINESS',
+          tin: `700-700-SLCL`,
+          vrn: null,
+          phone: `+255722800400`,
+          email: null,
+          physicalAddress: null,
+          postalAddress: null,
+          countryCode: 'TZ',
+          notes: null,
+        },
+        creditLimitAmount: '500000',
+        creditTermsDays: 30,
+        priceListId: slclRefs.priceListId,
+        defaultSalesAgentId: null,
+        defaultBranchId: BRANCH_ID,
+        taxExempt: false,
+      });
+      slclRefs.customerId = String(unwrap<{ partyId: string }>(r).partyId);
+    } else {
+      slclRefs.customerId = existingCust;
+    }
+    slclRefs.customerUid = dbQuery(`SELECT uid FROM party WHERE id=${slclRefs.customerId} LIMIT 1`);
+    expect(slclRefs.customerUid, 'customer uid').toBeTruthy();
+
+    // --- Supplier ---
+    const suppName = `QA Supp Stmt ${REF_TAG}`;
+    const existingSupp = dbQuery(
+      `SELECT s.party_id FROM supplier s JOIN party p ON p.id=s.party_id WHERE p.name='${escapeSql(suppName)}' LIMIT 1`,
+    );
+    if (existingSupp === '') {
+      const r = await apiPost(page, '/api/v1/suppliers', {
+        partyId: null,
+        party: {
+          name: suppName,
+          legalName: `${suppName} Ltd`,
+          category: 'BUSINESS',
+          tin: `800-800-SLCL`,
+          vrn: null,
+          phone: `+255722800500`,
+          email: null,
+          physicalAddress: null,
+          postalAddress: null,
+          countryCode: 'TZ',
+          notes: null,
+        },
+        paymentTermsDays: 30,
+        creditLimitAmount: '0',
+        defaultCurrencyCode: 'TZS',
+        bankName: null,
+        bankAccountNo: null,
+        leadTimeDays: 5,
+      });
+      slclRefs.supplierId = String(unwrap<{ partyId: string }>(r).partyId);
+    } else {
+      slclRefs.supplierId = existingSupp;
+    }
+    expect(slclRefs.supplierId, 'supplierId').toBeTruthy();
+
+    // --- Sales invoice (10 days ago, 5 × 2000 = 10_000) ---
+    // One per run — RUN_TAG suffix keeps the number unique across reruns.
+    const invDate = isoDaysAgo(10);
+    const invR = await apiPost(page, '/api/v1/sales-invoices', {
+      number: `INV-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      customerId: slclRefs.customerId,
+      salesAgentId: null,
+      invoiceDate: invDate,
+      dueDate: invDate,
+      paymentTerms: 'CREDIT',
+      currencyCode: 'TZS',
+      priceListId: slclRefs.priceListId,
+      discountApproverId: null,
+      reference: `e2e stmt cust ${RUN_TAG}`,
+      notes: null,
+      lines: [{
+        itemId: slclRefs.itemId,
+        uomId: slclRefs.uomId,
+        qty: '5',
+        unitPrice: '2000',
+        discountPct: '0',
+        vatGroupId: slclRefs.vatGroupId,
+      }],
+    });
+    const invDto = unwrap<{ uid: string; id: string }>(invR);
+    slclRefs.salesInvoiceId = String(invDto.id);
+    await apiPost(page, `/api/v1/sales-invoices/uid/${invDto.uid}/post`, {}, { expectedStatus: 200 });
+    expect(dbQuery(`SELECT status FROM sales_invoice WHERE id=${slclRefs.salesInvoiceId}`), 'invoice POSTED').toBe('POSTED');
+
+    // --- Sales receipt (5 days ago, 4_000 against that invoice) ---
+    const receiptR = await apiPost(page, '/api/v1/sales-receipts', {
+      number: `RCP-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      customerId: slclRefs.customerId,
+      receiptDate: isoDaysAgo(5),
+      method: 'CASH',
+      reference: `e2e stmt receipt ${RUN_TAG}`,
+      currencyCode: 'TZS',
+      totalAmount: '4000',
+      notes: null,
+      allocations: [{ salesInvoiceId: slclRefs.salesInvoiceId, amount: '4000' }],
+    });
+    const rcpDto = unwrap<{ uid: string }>(receiptR);
+    await apiPost(page, `/api/v1/sales-receipts/uid/${rcpDto.uid}/post`, {}, { expectedStatus: 200 });
+
+    // --- Direct GRN (7 days ago) — rootadmin carries GRN.DIRECT implicitly ---
+    const grnDate = isoDaysAgo(7);
+    const grnR = await apiPost(page, '/api/v1/grns', {
+      number: `GRN-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      supplierId: slclRefs.supplierId,
+      lpoOrderId: null,
+      receivedDate: grnDate,
+      supplierDeliveryNote: null,
+      notes: `e2e stmt supp ${RUN_TAG}`,
+      lines: [{
+        lpoOrderLineId: null,
+        itemId: slclRefs.itemId,
+        uomId: slclRefs.uomId,
+        receivedQty: '10',
+        unitCost: '800',
+        vatGroupId: slclRefs.vatGroupId,
+        batchNo: null,
+        expiryDate: null,
+      }],
+    });
+    const grnDto = unwrap<{ uid: string; id: string }>(grnR);
+    slclRefs.grnId = String(grnDto.id);
+    await apiPost(page, `/api/v1/grns/uid/${grnDto.uid}/post`, {}, { expectedStatus: 200 });
+    expect(dbQuery(`SELECT status FROM grn WHERE id=${slclRefs.grnId}`), 'GRN POSTED').toBe('POSTED');
+
+    // --- Supplier invoice (7 days ago, 8_000 against that GRN) ---
+    const suppInvR = await apiPost(page, '/api/v1/supplier-invoices', {
+      number: `SINV-SLCL-${RUN_TAG}`,
+      supplierInvoiceNo: `EXT-SINV-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      supplierId: slclRefs.supplierId,
+      invoiceDate: grnDate,
+      dueDate: null,
+      currencyCode: 'TZS',
+      subtotalAmount: '8000',
+      taxAmount: '0',
+      notes: null,
+      allocations: [{ grnId: slclRefs.grnId, amount: '8000' }],
+    });
+    const suppInvDto = unwrap<{ uid: string; id: string }>(suppInvR);
+    slclRefs.supplierInvoiceId = String(suppInvDto.id);
+    await apiPost(page, `/api/v1/supplier-invoices/uid/${suppInvDto.uid}/post`, {}, { expectedStatus: 200 });
+    expect(dbQuery(`SELECT status FROM supplier_invoice WHERE id=${slclRefs.supplierInvoiceId}`), 'supplier invoice POSTED').toBe('POSTED');
+
+    // --- Supplier payment (3 days ago, 3_000 against that invoice) ---
+    const suppPayR = await apiPost(page, '/api/v1/supplier-payments', {
+      number: `SPAY-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      supplierId: slclRefs.supplierId,
+      paymentDate: isoDaysAgo(3),
+      method: 'CASH',
+      reference: `e2e stmt supp pay ${RUN_TAG}`,
+      currencyCode: 'TZS',
+      totalAmount: '3000',
+      notes: null,
+      allocations: [{ supplierInvoiceId: slclRefs.supplierInvoiceId, amount: '3000' }],
+    });
+    const suppPayDto = unwrap<{ uid: string }>(suppPayR);
+    await apiPost(page, `/api/v1/supplier-payments/uid/${suppPayDto.uid}/post`, {}, { expectedStatus: 200 });
+
+    // --- LAYBY order with deposit ---
+    const laybyR = await apiPost(page, '/api/v1/orders', {
+      number: `LBY-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      sectionId: null,
+      customerId: slclRefs.customerId,
+      type: 'LAYBY',
+      lines: [{
+        itemId: slclRefs.itemId,
+        uomId: slclRefs.uomId,
+        qty: '2',
+        unitPrice: '2000',
+        discountAmount: '0',
+        notes: null,
+      }],
+      depositRequiredAmount: '2000',
+      reservedUntil: null,
+      notes: `e2e stmt layby ${RUN_TAG}`,
+    });
+    const laybyDto = unwrap<{ uid: string }>(laybyR);
+    // Reserve then pay the deposit.
+    await apiPost(page, `/api/v1/orders/uid/${laybyDto.uid}/reserve`, {}, { acceptStatuses: [200, 201] });
+    await apiPost(page, `/api/v1/orders/uid/${laybyDto.uid}/payments`, {
+      amount: '2000', method: 'CASH', reference: `deposit ${RUN_TAG}`,
+    }, { acceptStatuses: [200, 201] });
+
+    // --- PRE_ORDER for the same customer ---
+    await apiPost(page, '/api/v1/orders', {
+      number: `PRE-SLCL-${RUN_TAG}`,
+      branchId: BRANCH_ID,
+      sectionId: null,
+      customerId: slclRefs.customerId,
+      type: 'PRE_ORDER',
+      lines: [{
+        itemId: slclRefs.itemId,
+        uomId: slclRefs.uomId,
+        qty: '1',
+        unitPrice: '2000',
+        discountAmount: '0',
+        notes: null,
+      }],
+      depositRequiredAmount: '0',
+      reservedUntil: null,
+      notes: `e2e stmt pre-order ${RUN_TAG}`,
+    });
+
+    // Sanity: both customer and supplier now have at least one statement-range row.
+    expect(slclRefs.customerId, 'customerId set').toBeTruthy();
+    expect(slclRefs.customerUid, 'customerUid set').toBeTruthy();
+    expect(slclRefs.supplierId, 'supplierId set').toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Branch context injection (mirrors reports.spec.ts / debt.spec.ts)
 // ---------------------------------------------------------------------------
 
@@ -150,8 +631,8 @@ test.beforeEach(async ({ page }) => {
 test.describe('Slice K — customer-statement happy-path (US-DEBT-005)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice L — flipped 2026-05-29 once test-data seeding + perm widening + supplier-summary mapping landed
     'accountant opens /reports/customer-statement, picks a customer via typeahead, sees statement rows, exports CSV, axe-AA clean',
     async ({ page }) => {
       await page.goto('/reports/customer-statement');
@@ -167,15 +648,20 @@ test.describe('Slice K — customer-statement happy-path (US-DEBT-005)', () => {
       // "A" is the broadest safe prefix. Honor [[feedback-no-raw-id-uid-entries]] —
       // we MUST use the picker, never type a raw id.
       await customerPicker.fill('A');
-      const suggestion = page.locator(
-        '[data-testid="customer-statement-picker"] ~ * [role="option"],' +
-        '[data-testid="customer-statement-picker"] + * [role="option"]',
-      ).first();
+      // The dropdown is rendered as a sibling of the .input-group div (NOT a sibling
+      // of the input), so direct-sibling selectors miss it. The customer-typeahead
+      // listbox is unique on the page while open, so [role="listbox"] is unambiguous.
+      const suggestion = page.locator('[role="listbox"] [role="option"]').first();
       await expect(suggestion).toBeVisible({ timeout: 10_000 });
       await suggestion.click();
 
-      // After selection the statement loads — wait for the KPI strip (signals
-      // a successful fetch) and at least one table row.
+      // The form does NOT auto-fetch on customer selection — accountant clicks
+      // Run to trigger the statement load. (Auto-fetch IS wired for deep-link
+      // entry via initialCustomer, but not for picker-driven selection.)
+      await page.getByRole('button', { name: 'Run' }).click();
+
+      // After Run, the statement loads — wait for the KPI strip (signals a
+      // successful fetch) and at least one table row.
       const kpiStrip = page.locator('[data-testid="statement-kpi-strip"]');
       await expect(kpiStrip).toBeVisible({ timeout: 20_000 });
 
@@ -223,8 +709,8 @@ test.describe('Slice K — customer-statement happy-path (US-DEBT-005)', () => {
 test.describe('Slice K — supplier-statement happy-path (US-DEBT-006)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice L — flipped 2026-05-29 once test-data seeding + perm widening + supplier-summary mapping landed
     'accountant opens /reports/supplier-statement, picks a supplier via typeahead, sees statement rows, exports Excel, axe-AA clean',
     async ({ page }) => {
       await page.goto('/reports/supplier-statement');
@@ -238,12 +724,13 @@ test.describe('Slice K — supplier-statement happy-path (US-DEBT-006)', () => {
       // Type a prefix to trigger the debounced typeahead.
       // QA container has at least one supplier from procurement seed data.
       await supplierPicker.fill('A');
-      const suggestion = page.locator(
-        '[data-testid="supplier-statement-picker"] ~ * [role="option"],' +
-        '[data-testid="supplier-statement-picker"] + * [role="option"]',
-      ).first();
+      // Dropdown is sibling of .input-group, not of input — use the unique listbox role.
+      const suggestion = page.locator('[role="listbox"] [role="option"]').first();
       await expect(suggestion).toBeVisible({ timeout: 10_000 });
       await suggestion.click();
+
+      // Click Run to trigger the fetch — picker-driven selection doesn't auto-fetch.
+      await page.getByRole('button', { name: 'Run' }).click();
 
       // KPI strip + at least one statement row must appear.
       const kpiStrip = page.locator('[data-testid="statement-kpi-strip"]');
@@ -290,8 +777,8 @@ test.describe('Slice K — supplier-statement happy-path (US-DEBT-006)', () => {
 test.describe('Slice K — layby-ageing happy-path (US-RPT-014)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice L — flipped 2026-05-29 once test-data seeding + perm widening + supplier-summary mapping landed
     'accountant opens /reports/layby-ageing, sees per-type KPI strip + bucket rollup table + per-order drill-down, exports PDF',
     async ({ page }) => {
       await page.goto(`/reports/layby-ageing?branchId=${BRANCH_ID}`);
@@ -357,8 +844,8 @@ test.describe('Slice K — layby-ageing happy-path (US-RPT-014)', () => {
 test.describe('Slice K — layby-ageing type chip filter (LAYBY only)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice L — flipped 2026-05-29 once test-data seeding + perm widening + supplier-summary mapping landed
     'accountant switches type chip to LAYBY on /reports/layby-ageing — PRE_ORDER rows are hidden, LAYBY rows remain',
     async ({ page }) => {
       await page.goto(`/reports/layby-ageing?branchId=${BRANCH_ID}`);
@@ -429,8 +916,8 @@ test.describe('Slice K — layby-ageing type chip filter (LAYBY only)', () => {
 test.describe('Slice K — customer-statement deep-link (query-param pre-load)', () => {
   test.use({ persona: 'accountant' as Persona });
 
-  test.fail(
-    // Slice K — flips when FE lands
+  test(
+    // Slice L — flipped 2026-05-29 once test-data seeding + perm widening + supplier-summary mapping landed
     'deep-link /reports/customer-statement?customerId=1&from=...&to=... pre-loads picker and fetches statement without manual interaction',
     async ({ page }) => {
       // customerId=1 is the first seeded customer on any QA container.

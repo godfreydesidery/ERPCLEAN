@@ -161,6 +161,10 @@ export const TEST_USERS: Record<Persona, TestUser> = {
       // Forward-compat-skip: V74 seeds these; dropped gracefully until landed.
       'DEBT.WRITE_OFF.REQUEST',
       'DEBT.WRITE_OFF.APPROVE',
+      // Slice L widening — accountant is the canonical reports persona and must
+      // be able to read the layby/pre-order ageing report (US-RPT-014). Seeded
+      // since at least the order-management slice, no forward-compat risk.
+      'ORDER.READ',
     ],
   },
   'accountant-approver': {
