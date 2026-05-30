@@ -31,3 +31,5 @@ ADRs are **never deleted**. If a decision is reversed, the old ADR keeps its pla
 | 0002 | [`uid` on composite-PK aggregates (Path A)](0002-uid-on-composite-key-aggregates.md) | Accepted |
 | 0003 | [GRN → Stock is a synchronous in-transaction dependency](0003-grn-to-stock-synchronous-tx.md) | Accepted |
 | 0004 | [Cross-module synchronous-TX exemptions: the named inventory](0004-sync-tx-exemption-inventory.md) | Accepted |
+| 0005 | [Debt namespace and no debt-entry ledger](0005-debt-namespace-and-no-debt-entry-ledger.md) | Accepted |
+| 0006 | [Tanzania TRA fiscalization via a server-side VFD adapter](0006-tanzania-tra-fiscalization-vfd.md) | Proposed |
