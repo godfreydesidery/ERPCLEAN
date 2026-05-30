@@ -2,6 +2,7 @@ package com.orbix.engine.modules.pos.service;
 
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.TillSessionBalanceDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
 
 import java.util.List;
@@ -28,4 +29,12 @@ public interface TillSessionService {
     List<TillSessionDto> listByTill(Long tillId);
 
     TillSessionDto get(String uid);
+
+    /**
+     * Live cash-balance breakdown for a till session (ISSUE-CASH-001).
+     * Uses the same {@code expectedCash} formula as {@code close()} so the
+     * cashier sees a consistent figure before pulling the final declared count.
+     * Safe to call on OPEN, CLOSED, or RECONCILED sessions.
+     */
+    TillSessionBalanceDto getBalance(String uid);
 }
