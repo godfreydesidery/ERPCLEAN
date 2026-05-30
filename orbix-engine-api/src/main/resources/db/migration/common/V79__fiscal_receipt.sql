@@ -59,6 +59,7 @@ CREATE TABLE fiscal_receipt (
 
     -- Timestamps.
     submitted_at         TIMESTAMP,     -- when the EFDMS POST succeeded
+    version              INT            NOT NULL DEFAULT 0,  -- optimistic-lock column inherited from base entity
     created_at           TIMESTAMP      NOT NULL,
     updated_at           TIMESTAMP      NOT NULL,
     created_by           BIGINT         NOT NULL,
@@ -89,11 +90,11 @@ CREATE INDEX ix_pos_sale_fiscal_status ON pos_sale (fiscal_status);
 -- 3. Permissions
 -- -----------------------------------------------------------------------
 -- Permission to view fiscal receipt status (ops console, accountants).
--- Permission ids 80-91 are owned by V8 (party permissions).
--- Use ids 137-138 (next free after V77's id 136).
+-- NOTE: ids 80/81 are already taken by V8 (CUSTOMER.CREATE/UPDATE). The next
+-- free permission id after the seeded set (max 136) is 137; fiscal perms use 137/138.
 INSERT INTO permission (id, code, description, module) VALUES
-    (137, 'FISCAL.VIEW',  'View fiscal receipt status and verification artefacts', 'fiscal'),
-    (138, 'FISCAL.ADMIN', 'Manage fiscal device configuration and trigger manual re-fiscalization', 'fiscal');
+    (137, 'FISCAL.VIEW',       'View fiscal receipt status and verification artefacts', 'fiscal'),
+    (138, 'FISCAL.ADMIN',      'Manage fiscal device configuration and trigger manual re-fiscalization', 'fiscal');
 
 INSERT INTO role_permission (role_id, permission_id)
 SELECT 1, p.id FROM permission p WHERE p.id IN (137, 138);
