@@ -108,8 +108,30 @@ public class PosSale extends UidEntity {
     @Column(name = "void_reason", length = 200)
     private String voidReason;
 
-    @Column(name = "fiscal_signature", length = 200)
+    @Column(name = "fiscal_signature", length = 2000)
     private String fiscalSignature;
+
+    /**
+     * Denormalized mirror of fiscal_receipt.status — written by FiscalizationServiceImpl
+     * so the sync-pull and reprint paths never cross the module boundary into fiscal.
+     * NULL = no fiscalization attempted (regime=NONE or event not yet consumed).
+     */
+    @Column(name = "fiscal_status", length = 20)
+    private String fiscalStatus;
+
+    /**
+     * STUB: pending TRA EFDMS spec confirmation — TRA verification code printed on receipt.
+     * Populated by FiscalizationServiceImpl when the EFDMS submission succeeds.
+     */
+    @Column(name = "fiscal_verification_code", length = 200)
+    private String fiscalVerificationCode;
+
+    /**
+     * STUB: pending TRA EFDMS spec confirmation — QR code payload for receipt reprint.
+     * Populated by FiscalizationServiceImpl when the EFDMS submission succeeds.
+     */
+    @Column(name = "fiscal_qr_payload", length = 2000)
+    private String fiscalQrPayload;
 
     @Column(length = 2000)
     private String notes;

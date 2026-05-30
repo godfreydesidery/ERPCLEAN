@@ -599,7 +599,9 @@ class SyncServiceImplTest {
             new BigDecimal("100"), BigDecimal.ZERO, new BigDecimal("18"), new BigDecimal("118"),
             new BigDecimal("118"), BigDecimal.ZERO,
             PosSaleStatus.POSTED,
-            null, null, null, null, List.of(), List.of()
+            null, null, null, null,
+            null, null, null,   // fiscalStatus, fiscalVerificationCode, fiscalQrPayload
+            List.of(), List.of()
         );
     }
 

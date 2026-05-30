@@ -40,6 +40,26 @@ public record PosSaleDto(
     Long voidedBy,
     String voidReason,
     String notes,
+
+    /**
+     * Mirror of fiscal_receipt.status — null when no fiscalization attempted.
+     * PROVISIONAL = awaiting EFDMS; FISCALIZED = QR/verification code available.
+     * STUB values: pending TRA EFDMS spec confirmation for exact semantics.
+     */
+    String fiscalStatus,
+
+    /**
+     * STUB: pending TRA EFDMS spec confirmation — TRA verification code for receipt reprint.
+     * Non-null only when fiscalStatus=FISCALIZED.
+     */
+    String fiscalVerificationCode,
+
+    /**
+     * STUB: pending TRA EFDMS spec confirmation — QR code payload for the POS to render.
+     * Non-null only when fiscalStatus=FISCALIZED.
+     */
+    String fiscalQrPayload,
+
     List<PosSaleLineDto> lines,
     List<PosPaymentDto> payments
 ) {
@@ -54,6 +74,7 @@ public record PosSaleDto(
             s.getTotalAmount(), s.getTenderedAmount(), s.getChangeAmount(),
             s.getStatus(), s.getVoidedAt(), s.getVoidedBy(), s.getVoidReason(),
             s.getNotes(),
+            s.getFiscalStatus(), s.getFiscalVerificationCode(), s.getFiscalQrPayload(),
             lines.stream().map(PosSaleLineDto::from).toList(),
             payments.stream().map(PosPaymentDto::from).toList()
         );
