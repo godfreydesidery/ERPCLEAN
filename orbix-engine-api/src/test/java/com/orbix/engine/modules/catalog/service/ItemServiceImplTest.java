@@ -14,6 +14,7 @@ import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.repository.StockBatchRepository;
@@ -52,13 +53,19 @@ class ItemServiceImplTest {
     @Mock private StockBatchRepository stockBatches;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
+    @Mock private SyncChangeSeqService syncSeq;
 
     @InjectMocks private ItemServiceImpl service;
+
+    /** Monotonic counter shared across all syncSeq.next() calls in one test. */
+    private long seqCounter;
 
     @BeforeEach
     void bindContext() {
         lenient().when(context.companyId()).thenReturn(COMPANY_ID);
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
+        seqCounter = 1_000_000L;
+        lenient().when(syncSeq.next()).thenAnswer(inv -> ++seqCounter);
     }
 
     /** Build an Item with a real ULID — @PrePersist would normally do this. */
@@ -95,6 +102,99 @@ class ItemServiceImplTest {
         assertThat(UidGenerator.isValid(result.uid())).isTrue();
         assertThat(result.code()).isEqualTo("SKU1");
         verify(events).publish(eq("ItemCreated.v1"), any(), any(), any());
+    }
+
+    // -----------------------------------------------------------------------
+    // Sync change_seq stamping — US-POS-018
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_stampsPositiveChangeSeq() {
+        when(repo.findByCompanyAndCode(COMPANY_ID, "SKU-SEQ")).thenReturn(Optional.empty());
+        when(repo.save(any(Item.class))).thenAnswer(inv -> {
+            Item i = inv.getArgument(0);
+            i.setId(10L);
+            ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
+            return i;
+        });
+
+        service.create(new CreateItemRequestDto("SKU-SEQ", "Seq Item", null, ItemType.SELLABLE, 10L, 20L, 30L));
+
+        // save() is called after setChangeSeq — capture via argument captor
+        org.mockito.ArgumentCaptor<Item> captor = org.mockito.ArgumentCaptor.forClass(Item.class);
+        verify(repo).save(captor.capture());
+        assertThat(captor.getValue().getChangeSeq()).isPositive();
+    }
+
+    @Test
+    void createThenUpdate_changeSeqStrictlyIncreases() {
+        // create: seq stamped before repo.save(), captured via captor
+        when(repo.findByCompanyAndCode(COMPANY_ID, "SKU-MONO")).thenReturn(Optional.empty());
+        when(repo.save(any(Item.class))).thenAnswer(inv -> {
+            Item i = inv.getArgument(0);
+            i.setId(2L);
+            ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
+            return i;
+        });
+        service.create(new CreateItemRequestDto("SKU-MONO", "Mono", null, ItemType.SELLABLE, 10L, 20L, 30L));
+
+        org.mockito.ArgumentCaptor<Item> createCaptor = org.mockito.ArgumentCaptor.forClass(Item.class);
+        verify(repo).save(createCaptor.capture());
+        long createSeq = createCaptor.getValue().getChangeSeq();
+        assertThat(createSeq).isPositive();
+
+        // update: mutates the managed entity in-place; no explicit save() call.
+        // The seq must be strictly greater than the create seq.
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+        service.updateItemByUid(existing.getUid(), plainUpdate("Mono Updated"));
+
+        assertThat(existing.getChangeSeq()).isGreaterThan(createSeq);
+    }
+
+    @Test
+    void archive_stampsNewChangeSeq() {
+        Item existing = item(1L, ItemStatus.ACTIVE);
+        when(repo.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        service.archiveItemByUid(existing.getUid());
+
+        assertThat(existing.getChangeSeq()).isPositive();
+        assertThat(existing.getStatus()).isEqualTo(ItemStatus.ARCHIVED);
+    }
+
+    @Test
+    void archive_changeSeqGreaterThanCreate() {
+        // Simulate a create seq, then an archive seq must be strictly greater.
+        when(repo.findByCompanyAndCode(COMPANY_ID, "SKU-ARC")).thenReturn(Optional.empty());
+        long[] createSeq = new long[1];
+        when(repo.save(any(Item.class))).thenAnswer(inv -> {
+            Item i = inv.getArgument(0);
+            if (i.getChangeSeq() != null) createSeq[0] = i.getChangeSeq();
+            i.setId(3L);
+            ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
+            return i;
+        });
+
+        service.create(new CreateItemRequestDto("SKU-ARC", "Arc Item", null, ItemType.SELLABLE, 10L, 20L, 30L));
+
+        // Now archive the saved item — use a fresh entity that mirrors the saved state
+        Item toArchive = item(3L, ItemStatus.ACTIVE);
+        when(repo.findByUid(toArchive.getUid())).thenReturn(Optional.of(toArchive));
+        service.archiveItemByUid(toArchive.getUid());
+
+        assertThat(toArchive.getChangeSeq()).isGreaterThan(createSeq[0]);
+    }
+
+    @Test
+    void activate_stampsNewChangeSeq() {
+        Item existing = item(1L, ItemStatus.ARCHIVED);
+        when(repo.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        service.activateItemByUid(existing.getUid());
+
+        assertThat(existing.getChangeSeq()).isPositive();
+        assertThat(existing.getStatus()).isEqualTo(ItemStatus.ACTIVE);
     }
 
     @Test

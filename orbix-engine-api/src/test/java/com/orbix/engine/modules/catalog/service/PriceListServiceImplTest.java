@@ -25,6 +25,7 @@ import com.orbix.engine.modules.common.domain.enums.SettingKey;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,8 +70,11 @@ class PriceListServiceImplTest {
     @Mock private RequestContext context;
     @Mock private SettingsService settings;
     @Mock private PermissionResolverService permissions;
+    @Mock private SyncChangeSeqService syncSeq;
 
     @InjectMocks private PriceListServiceImpl service;
+
+    private long seqCounter;
 
     @BeforeEach
     void bindContext() {
@@ -78,6 +82,8 @@ class PriceListServiceImplTest {
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
         // approval gate disabled by default
         lenient().when(settings.getDecimal(SettingKey.PRICING_CHANGE_APPROVAL_PCT)).thenReturn(BigDecimal.ZERO);
+        seqCounter = 1_000_000L;
+        lenient().when(syncSeq.next()).thenAnswer(inv -> ++seqCounter);
     }
 
     private static PriceList priceList(Long id, String code, boolean isDefault) {
@@ -601,5 +607,94 @@ class PriceListServiceImplTest {
 
         assertThatThrownBy(() -> service.getPriceListByUid(foreign.getUid()))
             .isInstanceOf(NoSuchElementException.class);
+    }
+
+    // ---- Sync change_seq stamping — US-POS-018 ------------------------------
+
+    @Test
+    void setPrice_newRow_stampsPositiveChangeSeq() {
+        PriceList list = priceList(1L, "RETAIL", false);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
+        when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
+        when(uoms.findById(2L)).thenReturn(Optional.of(uom(2L, "PCS")));
+        when(priceListItems.findFirstByPriceListIdAndItemIdAndUomIdAndMinQtyOrderByValidFromDesc(
+            eq(1L), eq(8801L), eq(2L), eq(BigDecimal.ZERO))).thenReturn(Optional.empty());
+
+        ArgumentCaptor<PriceListItem> captor = ArgumentCaptor.forClass(PriceListItem.class);
+        when(priceListItems.save(captor.capture())).thenAnswer(inv -> {
+            PriceListItem r = inv.getArgument(0);
+            r.setId(200L);
+            return r;
+        });
+
+        service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
+            8801L, 2L, null, new BigDecimal("500"), LocalDate.of(2026, 1, 1), "first", null));
+
+        assertThat(captor.getValue().getChangeSeq()).isPositive();
+    }
+
+    @Test
+    void setPrice_replacingPrior_closingRowAlsoGetsNewChangeSeq() {
+        PriceList list = priceList(1L, "RETAIL", false);
+        PriceListItem prior = row(50L, 1L, 8801L, 2L, BigDecimal.ZERO, "1000", LocalDate.of(2026, 1, 1), null);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
+        when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
+        when(uoms.findById(2L)).thenReturn(Optional.of(uom(2L, "PCS")));
+        when(priceListItems.findFirstByPriceListIdAndItemIdAndUomIdAndMinQtyOrderByValidFromDesc(
+            eq(1L), eq(8801L), eq(2L), eq(BigDecimal.ZERO))).thenReturn(Optional.of(prior));
+        when(priceListItems.save(any(PriceListItem.class))).thenAnswer(inv -> {
+            PriceListItem r = inv.getArgument(0);
+            r.setId(201L);
+            return r;
+        });
+
+        service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
+            8801L, 2L, null, new BigDecimal("1200"), LocalDate.of(2026, 6, 1), "replace", null));
+
+        // The closing (prior) row must have a new change_seq so the pull
+        // endpoint surfaces it in the deletes array (validTo != null).
+        assertThat(prior.getChangeSeq()).isPositive();
+    }
+
+    @Test
+    void setPrice_newRowChangeSeqGreaterThanClosingRowChangeSeq() {
+        // The new open row's change_seq must be > the closed row's change_seq
+        // so a pull with cursor=closedSeq still picks up the new row.
+        PriceList list = priceList(1L, "RETAIL", false);
+        PriceListItem prior = row(50L, 1L, 8801L, 2L, BigDecimal.ZERO, "1000", LocalDate.of(2026, 1, 1), null);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
+        when(items.findById(8801L)).thenReturn(Optional.of(item(8801L, COMPANY_ID)));
+        when(uoms.findById(2L)).thenReturn(Optional.of(uom(2L, "PCS")));
+        when(priceListItems.findFirstByPriceListIdAndItemIdAndUomIdAndMinQtyOrderByValidFromDesc(
+            eq(1L), eq(8801L), eq(2L), eq(BigDecimal.ZERO))).thenReturn(Optional.of(prior));
+
+        long[] newRowSeq = {0};
+        when(priceListItems.save(any(PriceListItem.class))).thenAnswer(inv -> {
+            PriceListItem r = inv.getArgument(0);
+            r.setId(202L);
+            if (r.getValidTo() == null) newRowSeq[0] = r.getChangeSeq(); // open row
+            return r;
+        });
+
+        service.setPriceByPriceListUid(list.getUid(), new SetPriceRequestDto(
+            8801L, 2L, null, new BigDecimal("1200"), LocalDate.of(2026, 6, 1), "seq-order", null));
+
+        assertThat(newRowSeq[0]).isGreaterThan(prior.getChangeSeq());
+    }
+
+    @Test
+    void discontinue_stampsChangeSeqOnClosedRow() {
+        PriceList list = priceList(1L, "RETAIL", false);
+        PriceListItem open = row(60L, 1L, 8801L, 2L, BigDecimal.ZERO, "1000", LocalDate.of(2026, 1, 1), null);
+        when(priceLists.findByUid(list.getUid())).thenReturn(Optional.of(list));
+        when(priceListItems.findFirstByPriceListIdAndItemIdAndUomIdAndMinQtyOrderByValidFromDesc(
+            eq(1L), eq(8801L), eq(2L), eq(BigDecimal.ZERO))).thenReturn(Optional.of(open));
+
+        service.discontinuePriceByPriceListUid(list.getUid(), new DiscontinuePriceRequestDto(
+            8801L, 2L, null, LocalDate.of(2026, 6, 1), "delisted"));
+
+        // The closed row must carry a change_seq so the pull endpoint surfaces
+        // it in the price-dataset deletes array.
+        assertThat(open.getChangeSeq()).isPositive();
     }
 }

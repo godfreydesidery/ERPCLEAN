@@ -52,6 +52,31 @@ ALTER TABLE petty_cash   ADD CONSTRAINT uk_petty_cash_client_op   UNIQUE (compan
 ALTER TABLE till_session ADD CONSTRAINT uk_till_session_client_op UNIQUE (company_id, client_op_id);
 
 -- -----------------------------------------------------------------------
+-- 3b. Backfill change_seq for any rows that pre-date this migration.
+--     On a fresh (recreated) DB these UPDATEs affect zero rows — they are
+--     defensive for the ephemeral-migration policy and any future stable
+--     schema promotion.
+--
+--     Strategy: set change_seq = id (the PK is already monotonic and positive)
+--     so pre-existing rows get a determinate, stable, ordered value and are
+--     visible to a pull with cursor=0.  New writes use NEXT VALUE FOR
+--     sync_change_seq which starts at 1, so after backfill we must restart
+--     the sequence above the largest backfilled value.  We use a conservative
+--     restart at 1,000,000 — well above any realistic seed-data id — so
+--     live writes always get values strictly greater than all backfilled ids.
+--     A future bulk-import that exceeds 1,000,000 rows would need this raised,
+--     but that is not a concern for Phase 1 POS reference data.
+-- -----------------------------------------------------------------------
+UPDATE item            SET change_seq = id            WHERE change_seq IS NULL;
+UPDATE vat_group       SET change_seq = id            WHERE change_seq IS NULL;
+UPDATE price_list_item SET change_seq = id            WHERE change_seq IS NULL;
+UPDATE price_list      SET change_seq = id            WHERE change_seq IS NULL;
+
+-- Restart sync_change_seq above all backfilled values.
+-- Both MariaDB 11 and PostgreSQL 15 support ALTER SEQUENCE ... RESTART WITH.
+ALTER SEQUENCE sync_change_seq RESTART WITH 1000000;
+
+-- -----------------------------------------------------------------------
 -- 4.  Tombstone retention config is application-level (orbix.sync.*);
 --     no schema artefact needed.  The pull query surfaces archived/inactive
 --     rows as deletes by checking status = 'ARCHIVED'/'INACTIVE'.
