@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class SettingsScreen extends StatelessWidget {
+import '../../data/core_providers.dart';
+
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final configStore = ref.watch(posConfigStoreProvider);
+
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
       appBar: AppBar(
@@ -30,17 +35,22 @@ class SettingsScreen extends StatelessWidget {
                     title: 'Receipt printer',
                     subtitle: 'Star TSP143 (USB) — connected',
                     trailing: Container(
-                      width: 10, height: 10,
-                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                          color: Colors.green, shape: BoxShape.circle),
                     ),
                   ),
                   _SettingsTile(
                     icon: Icons.qr_code_scanner,
                     title: 'Barcode scanner',
-                    subtitle: 'Honeywell Voyager 1450g (keyboard wedge) — connected',
+                    subtitle:
+                        'Honeywell Voyager 1450g (keyboard wedge) — connected',
                     trailing: Container(
-                      width: 10, height: 10,
-                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                          color: Colors.green, shape: BoxShape.circle),
                     ),
                   ),
                   _SettingsTile(
@@ -49,18 +59,22 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: 'Opens via printer kick — tested',
                     trailing: Builder(
                       builder: (context) => TextButton(
-                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Drawer kick sent — listen for the clunk')),
+                        onPressed: () =>
+                            ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Drawer kick sent — listen for the clunk')),
                         ),
                         child: const Text('Test'),
                       ),
                     ),
                   ),
-                  _SettingsTile(
+                  const _SettingsTile(
                     icon: Icons.receipt_long,
                     title: 'Fiscal device',
                     subtitle: 'Not configured for this branch',
-                    trailing: const Chip(label: Text('Off'), visualDensity: VisualDensity.compact),
+                    trailing:
+                        Chip(label: Text('Off'), visualDensity: VisualDensity.compact),
                   ),
                 ],
               ),
@@ -68,26 +82,59 @@ class SettingsScreen extends StatelessWidget {
               _SectionCard(
                 title: 'Connection',
                 children: [
-                  _SettingsTile(
+                  _EditableTile(
                     icon: Icons.cloud_outlined,
-                    title: 'Backend API',
-                    subtitle: 'https://qa.orbix.example.com/api/v1',
+                    title: 'Backend API base URL',
+                    value: configStore.apiBaseUrl,
+                    hint: 'http://localhost:8081',
+                    onSave: (v) async {
+                      await ref
+                          .read(posConfigStoreProvider)
+                          .saveApiBaseUrl(v);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'API URL saved — restart the app to apply.')),
+                        );
+                      }
+                    },
+                  ),
+                  _EditableTile(
+                    icon: Icons.point_of_sale,
+                    title: 'Device / Till ID',
+                    value: configStore.deviceId,
+                    hint: 'TILL-1',
+                    onSave: (v) async {
+                      await ref
+                          .read(posConfigStoreProvider)
+                          .saveDeviceId(v);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Device ID saved — restart the app to apply.')),
+                        );
+                      }
+                    },
                   ),
                   _SettingsTile(
                     icon: Icons.sync,
                     title: 'Sync status',
-                    subtitle: '12 ops in outbox · last push 2 min ago',
+                    subtitle: 'Outbox managed by sync dispatcher',
                     trailing: Builder(
                       builder: (context) => TextButton.icon(
                         onPressed: () async {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Pushing outbox…')),
                           );
-                          await Future<void>.delayed(const Duration(milliseconds: 700));
+                          await Future<void>.delayed(
+                              const Duration(milliseconds: 700));
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).hideCurrentSnackBar();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Outbox flushed — 12 ops sent, 0 failed')),
+                            const SnackBar(
+                                content: Text('Manual push triggered')),
                           );
                         },
                         icon: const Icon(Icons.refresh, size: 16),
@@ -95,24 +142,29 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _SettingsTile(
+                  const _SettingsTile(
                     icon: Icons.wifi,
                     title: 'Network',
-                    subtitle: 'Online · 47 ms to backend',
-                    trailing: Container(
-                      width: 10, height: 10,
-                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                    ),
+                    subtitle: 'Status unknown — sync loop monitors connectivity',
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _SectionCard(
+              const _SectionCard(
                 title: 'About',
-                children: const [
-                  _SettingsTile(icon: Icons.info_outline,    title: 'App version',     subtitle: 'Orbix Engine POS · 0.1.0'),
-                  _SettingsTile(icon: Icons.storage,         title: 'Local database',  subtitle: 'SQLite · 4.2 MB'),
-                  _SettingsTile(icon: Icons.business,        title: 'Branch',          subtitle: 'Branch HQ · TILL-1 · Front counter'),
+                children: [
+                  _SettingsTile(
+                      icon: Icons.info_outline,
+                      title: 'App version',
+                      subtitle: 'Orbix Engine POS · 0.1.0'),
+                  _SettingsTile(
+                      icon: Icons.storage,
+                      title: 'Local database',
+                      subtitle: 'SQLite · Drift'),
+                  _SettingsTile(
+                      icon: Icons.business,
+                      title: 'Branch',
+                      subtitle: 'Sourced from JWT after login'),
                 ],
               ),
             ],
@@ -122,6 +174,10 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Settings widgets
+// ---------------------------------------------------------------------------
 
 class _SectionCard extends StatelessWidget {
   final String title;
@@ -162,7 +218,11 @@ class _SettingsTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final Widget? trailing;
-  const _SettingsTile({required this.icon, required this.title, required this.subtitle, this.trailing});
+  const _SettingsTile(
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +232,71 @@ class _SettingsTile extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(subtitle),
       trailing: trailing,
+    );
+  }
+}
+
+/// Tile with an inline edit button — shows current value, opens a dialog to change it.
+class _EditableTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final String hint;
+  final Future<void> Function(String) onSave;
+
+  const _EditableTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.hint,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(value),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit_outlined),
+        tooltip: 'Edit',
+        onPressed: () => _showEditDialog(context),
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final controller = TextEditingController(text: value);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: hint,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final v = controller.text.trim();
+              if (v.isNotEmpty) {
+                await onSave(v);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 }
