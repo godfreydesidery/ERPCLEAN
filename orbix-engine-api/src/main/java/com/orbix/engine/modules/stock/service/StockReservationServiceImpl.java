@@ -103,6 +103,15 @@ public class StockReservationServiceImpl implements StockReservationService {
             .orElse(BigDecimal.ZERO);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal qtyReserved(Long itemId, Long branchId) {
+        branchScope.requireAccess(branchId);
+        return balances.findById(new ItemBranchBalanceId(itemId, branchId))
+            .map(ItemBranchBalance::getQtyReserved)
+            .orElse(BigDecimal.ZERO);
+    }
+
     private void recordMove(Long itemId, Long branchId, BigDecimal qty,
                             String refType, Long refId, String notes) {
         Instant now = Instant.now();

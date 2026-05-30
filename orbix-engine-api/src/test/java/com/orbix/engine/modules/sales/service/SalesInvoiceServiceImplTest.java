@@ -627,6 +627,91 @@ class SalesInvoiceServiceImplTest {
             COMPANY_ID, BRANCH_ID, SalesInvoiceStatus.VOIDED, pageable);
     }
 
+    // ---------------------------------------------------------------------
+    // ISSUE-DAY-003 — createDraft must enforce open-day gate
+    // ---------------------------------------------------------------------
+
+    @Test
+    void createDraft_closedDay_isRejected() {
+        // DayGuard throws when branch has no open business day.
+        when(dayGuard.requireOpenDay(BRANCH_ID))
+            .thenThrow(new IllegalStateException("No open business day for branch " + BRANCH_ID));
+
+        CreateSalesInvoiceRequestDto request = draft("SI-CLOSED-DAY", PaymentTerms.CASH,
+            new BigDecimal("1"), new BigDecimal("100"), BigDecimal.ZERO, null);
+        assertThatThrownBy(() -> service.createDraft(request))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No open business day");
+
+        verify(invoices, never()).save(any());
+    }
+
+    @Test
+    void createDraft_openDay_succeeds() {
+        // DayGuard passes (no exception) — draft is created normally.
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 30), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        SalesInvoiceDto dto = service.createDraft(draft("SI-OPEN-DAY", PaymentTerms.CASH,
+            new BigDecimal("2"), new BigDecimal("100"), BigDecimal.ZERO, null));
+
+        assertThat(dto.status()).isEqualTo(SalesInvoiceStatus.DRAFT);
+        verify(invoices).save(any(SalesInvoice.class));
+    }
+
+    // ---------------------------------------------------------------------
+    // ISSUE-SALES-OVERSELL-01 — post must pass allowOversell=true for STOCK.OVERSELL holders
+    // ---------------------------------------------------------------------
+
+    @Test
+    void post_withStockOversellPermission_passesAllowOversellTrue() {
+        // Actor holds STOCK.OVERSELL — the PostStockMoveRequestDto sent to
+        // stockMoveService.post() must have allowOversell=true.
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of(com.orbix.engine.modules.iam.domain.enums.Permissions.STOCK_OVERSELL));
+
+        SalesInvoice invoice = postableInvoice("SI-OVERSELL-OK", PaymentTerms.CASH,
+            new BigDecimal("1000"));
+        SalesInvoiceLine line = lineRow(invoice, new BigDecimal("5"), new BigDecimal("200"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
+        when(stockMoveService.findBalance(ITEM_ID, BRANCH_ID))
+            .thenReturn(Optional.of(balanceDto(new BigDecimal("50"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 30), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        service.post(invoice.getUid(), PostSalesInvoiceRequestDto.empty());
+
+        ArgumentCaptor<PostStockMoveRequestDto> captor =
+            ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
+        verify(stockMoveService).post(captor.capture());
+        assertThat(captor.getValue().allowOversell()).isTrue();
+    }
+
+    @Test
+    void post_withoutStockOversellPermission_passesAllowOversellFalse() {
+        // Actor does NOT hold STOCK.OVERSELL — allowOversell must be false.
+        when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
+            .thenReturn(Set.of()); // no permissions
+
+        SalesInvoice invoice = postableInvoice("SI-OVERSELL-NO", PaymentTerms.CASH,
+            new BigDecimal("1000"));
+        SalesInvoiceLine line = lineRow(invoice, new BigDecimal("5"), new BigDecimal("200"));
+        when(invoices.findByUid(invoice.getUid())).thenReturn(Optional.of(invoice));
+        when(lines.findBySalesInvoiceIdOrderByLineNoAsc(invoice.getId())).thenReturn(List.of(line));
+        when(stockMoveService.findBalance(ITEM_ID, BRANCH_ID))
+            .thenReturn(Optional.of(balanceDto(new BigDecimal("50"))));
+        BusinessDay day = new BusinessDay(BRANCH_ID, LocalDate.of(2026, 5, 30), ACTOR_ID);
+        when(dayGuard.requireOpenDay(BRANCH_ID)).thenReturn(day);
+
+        service.post(invoice.getUid(), PostSalesInvoiceRequestDto.empty());
+
+        ArgumentCaptor<PostStockMoveRequestDto> captor =
+            ArgumentCaptor.forClass(PostStockMoveRequestDto.class);
+        verify(stockMoveService).post(captor.capture());
+        assertThat(captor.getValue().allowOversell()).isFalse();
+    }
+
     @Test
     void list_unknownStatusToken_throws() {
         Pageable pageable = PageRequest.of(0, 20);
