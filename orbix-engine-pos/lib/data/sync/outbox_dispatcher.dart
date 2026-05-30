@@ -108,7 +108,25 @@ class OutboxDispatcher {
 
     _log.d('OutboxDispatcher._flushOnce ops=${batch.length}');
 
-    final ops = batch.map(_rowToSyncOp).toList();
+    // Resolve which ops have a confirmed dependency in a PRIOR push cycle.
+    // Ops whose dependsOn op has not yet been confirmed locally are held back
+    // from this batch so the session ACCEPTED verdict + back-fill can happen
+    // before the dependent op is sent. This prevents the server receiving
+    // tillSessionId=0 in the same batch where the session is first created.
+    final confirmedOpIds = await _outbox.confirmedClientOpIds();
+    final eligibleBatch = batch.where((row) {
+      if (row.dependsOn == null) return true;
+      // Include the op only if its dependency is already confirmed locally.
+      return confirmedOpIds.contains(row.dependsOn);
+    }).toList();
+
+    if (eligibleBatch.isEmpty) {
+      _log.d('OutboxDispatcher._flushOnce: all pending ops have unconfirmed '
+          'dependencies — skipping batch, will retry next cycle');
+      return;
+    }
+
+    final ops = eligibleBatch.map((r) => _rowToSyncOp(r, confirmedIds: confirmedOpIds)).toList();
     final request = SyncPushRequest(
       deviceId: _deviceId,
       clientContractVersion: kSyncContractVersion,
@@ -148,7 +166,7 @@ class OutboxDispatcher {
     // limit (e.g. batch_size < total pending ops). Do NOT recurse for DEFERRED
     // ops — those are retried on the next timer tick once their dependsOn op
     // is ACCEPTED, not by hammering the server in the same cycle.
-    if (batch.length >= kPushBatchSize) {
+    if (eligibleBatch.length >= kPushBatchSize) {
       _log.d('OutboxDispatcher: batch full — flushing again for remaining PENDING ops');
       await _flushOnce();
     }
@@ -165,6 +183,18 @@ class OutboxDispatcher {
           serverEntityId: opResult.serverEntityId,
           serverNumber: opResult.serverNumber,
         );
+        // For TILL_SESSION_OPEN: back-fill the server session id into all
+        // pending dependent ops (CASH_PICKUP, PETTY_CASH, POS_SALE) so the
+        // server's applyCashPickup / applyPettyCash can find the session by id.
+        if (opResult.serverEntityId != null) {
+          await _backfillTillSessionId(
+            sessionClientOpId: opResult.clientOpId,
+            serverSessionId: opResult.serverEntityId!,
+          );
+          // Also stamp it on the TillSessions Drift row so the next flush
+          // can read it without querying the outbox.
+          await _stampTillSession(opResult);
+        }
         // Flip PosSales.synced for POS_SALE ops.
         await _stampPosSale(opResult);
         _log.d('OutboxDispatcher verdict=CONFIRMED clientOpId=${opResult.clientOpId}');
@@ -180,6 +210,44 @@ class OutboxDispatcher {
         await _outbox.markDeferred(opResult.clientOpId);
         _log.d('OutboxDispatcher verdict=DEFERRED clientOpId=${opResult.clientOpId}');
     }
+  }
+
+  /// Back-fill the server-assigned session id into all PENDING / DEFERRED outbox
+  /// ops that depend on [sessionClientOpId]. This ensures that CASH_PICKUP and
+  /// PETTY_CASH ops have a valid tillSessionId in their payload before the next
+  /// push, satisfying SyncServiceImpl.applyCashPickup / applyPettyCash which call
+  /// payloadLong(op, "tillSessionId") as a required field.
+  ///
+  /// POS_SALE ops get tillSessionId back-filled too (PostPosSaleRequestDto.tillSessionId).
+  Future<void> _backfillTillSessionId({
+    required String sessionClientOpId,
+    required String serverSessionId,
+  }) async {
+    final serverIdLong = int.tryParse(serverSessionId);
+    if (serverIdLong == null) {
+      _log.w('OutboxDispatcher._backfillTillSessionId: serverSessionId is not '
+          'a number: $serverSessionId');
+      return;
+    }
+
+    await _outbox.backfillTillSessionId(
+      sessionClientOpId: sessionClientOpId,
+      serverSessionId: serverIdLong,
+      log: _log,
+    );
+  }
+
+  /// Stamp the server entity id on the local TillSessions row.
+  Future<void> _stampTillSession(SyncOpResult opResult) async {
+    final db = _outbox.db;
+    // Only applicable to TILL_SESSION_OPEN ops.
+    // The outbox row doesn't carry opType, but the TillSessions table is keyed
+    // by clientOpId — writing to a non-matching row is a no-op.
+    await (db.update(db.tillSessions)
+          ..where((t) => t.clientOpId.equals(opResult.clientOpId)))
+        .write(TillSessionsCompanion(
+      serverUid: Value(opResult.serverEntityId),
+    ));
   }
 
   Future<void> _stampPosSale(SyncOpResult opResult) async {
@@ -216,14 +284,22 @@ class OutboxDispatcher {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  SyncOp _rowToSyncOp(OutboxData row) {
+  SyncOp _rowToSyncOp(OutboxData row, {Set<String>? confirmedIds}) {
     final payload = jsonDecode(row.payloadJson) as Map<String, dynamic>;
+    // If the op's dependsOn has already been confirmed in a PRIOR batch, strip
+    // the dependsOn field from the wire message. The server's dependsOn guard
+    // only scans ops within the current batch — sending a stale dependsOn would
+    // cause the server to DEFER the op unnecessarily.
+    final dependsOnWire = (row.dependsOn != null &&
+            (confirmedIds == null || !confirmedIds.contains(row.dependsOn)))
+        ? row.dependsOn
+        : null;
     return SyncOp(
       clientOpId: row.clientOpId,
       opType: row.opType,
       seq: row.seq,
       occurredAt: row.occurredAt,
-      dependsOn: row.dependsOn,
+      dependsOn: dependsOnWire,
       payload: payload,
     );
   }

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../_demo/mocks.dart';
+import '../till_session/till_session_providers.dart' show activeTillSessionProvider;
 import 'cash_movement_providers.dart';
 import 'cash_movement_repository.dart';
 
@@ -52,19 +53,26 @@ class _PettyCashScreenState extends ConsumerState<PettyCashScreen> {
       return;
     }
 
-    // Same SESSION_NOT_WIRED sentinel as cash-pickup.
-    // TODO: wire to real TillSession.clientOpId from the DB.
-    const sessionClientOpId = 'SESSION_NOT_WIRED';
-
     setState(() {
       _submitting = true;
       _error = null;
     });
 
+    // Read the active session clientOpId from the Drift-backed provider.
+    final activeSession = await ref.read(activeTillSessionProvider.future);
+    final sessionClientOpId = activeSession?.clientOpId ?? '';
+    if (sessionClientOpId.isEmpty) {
+      if (mounted) setState(() => _error = 'No active till session. Open the till first.');
+      if (mounted) setState(() => _submitting = false);
+      return;
+    }
+    final sessionServerId = activeSession?.serverEntityId;
+
     try {
       final repo = ref.read(cashMovementRepositoryProvider);
       await repo.recordPettyCash(
         tillSessionClientOpId: sessionClientOpId,
+        tillSessionServerId: sessionServerId,
         amount: amount,
         category: _category,
         paidTo: _paidToCtrl.text.trim().isEmpty ? null : _paidToCtrl.text.trim(),
