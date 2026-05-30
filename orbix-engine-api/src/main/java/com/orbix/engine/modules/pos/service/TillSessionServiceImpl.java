@@ -15,6 +15,7 @@ import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.TillSessionBalanceDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
 import com.orbix.engine.modules.pos.domain.entity.PosPayment;
 import com.orbix.engine.modules.pos.domain.entity.PosSale;
@@ -219,6 +220,22 @@ public class TillSessionServiceImpl implements TillSessionService {
         return TillSessionDto.from(requireSessionByUid(uid));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public TillSessionBalanceDto getBalance(String uid) {
+        TillSession session = requireSessionByUid(uid);
+        BalanceBreakdown bd = computeBreakdown(session);
+        return new TillSessionBalanceDto(
+            session.getId(),
+            session.getUid(),
+            session.getOpeningFloatAmount(),
+            bd.cashSales(),
+            bd.cashPickups(),
+            bd.pettyCash(),
+            bd.expectedCash()
+        );
+    }
+
     /**
      * Expected drawer cash = opening_float + cash sales − cash refunds
      *                       − cash pickups (moved to safe) − petty-cash payouts.
@@ -227,14 +244,34 @@ public class TillSessionServiceImpl implements TillSessionService {
      * contribute a negative because the cashier paid out cash.
      */
     private BigDecimal computeExpectedCash(TillSession session) {
-        BigDecimal expected = session.getOpeningFloatAmount();
-        for (PosSale sale : sales.findByTillSessionIdOrderByIdAsc(session.getId())) {
-            expected = expected.add(cashContributionFor(sale));
-        }
-        expected = expected.subtract(pickups.sumForSession(session.getId()));
-        expected = expected.subtract(pettyCash.sumForSession(session.getId()));
-        return expected;
+        return computeBreakdown(session).expectedCash();
     }
+
+    /**
+     * Breakdown of the cash balance for a session.
+     * {@code cashSales} is the net signed contribution from sales and refunds
+     * (positive = net receipts, negative = net payouts).
+     */
+    private BalanceBreakdown computeBreakdown(TillSession session) {
+        BigDecimal cashSalesNet = BigDecimal.ZERO;
+        for (PosSale sale : sales.findByTillSessionIdOrderByIdAsc(session.getId())) {
+            cashSalesNet = cashSalesNet.add(cashContributionFor(sale));
+        }
+        BigDecimal cashPickupsTotal = pickups.sumForSession(session.getId());
+        BigDecimal pettyCashTotal = pettyCash.sumForSession(session.getId());
+        BigDecimal expectedCash = session.getOpeningFloatAmount()
+            .add(cashSalesNet)
+            .subtract(cashPickupsTotal)
+            .subtract(pettyCashTotal);
+        return new BalanceBreakdown(cashSalesNet, cashPickupsTotal, pettyCashTotal, expectedCash);
+    }
+
+    private record BalanceBreakdown(
+        BigDecimal cashSales,
+        BigDecimal cashPickups,
+        BigDecimal pettyCash,
+        BigDecimal expectedCash
+    ) {}
 
     /**
      * Signed cash contribution of a single sale to the drawer:
