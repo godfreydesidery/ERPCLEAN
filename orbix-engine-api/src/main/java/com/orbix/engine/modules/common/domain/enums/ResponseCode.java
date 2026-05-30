@@ -36,4 +36,15 @@ public final class ResponseCode {
 
     // ----- day (F7.5 EOD) --------------------------------------------------
     public static final String DAY_EOD_BLOCKED          = "DAY_EOD_BLOCKED";
+    public static final String BUSINESS_DAY_CLOSED      = "BUSINESS_DAY_CLOSED";
+
+    // ----- state-machine violations ----------------------------------------
+    public static final String WRONG_STATE              = "WRONG_STATE";
+    public static final String PRECONDITION_FAILED      = "PRECONDITION_FAILED";
+
+    // ----- sync (offline POS) -----------------------------------------------
+    /** Client's contract version is below the server minimum — client must upgrade. */
+    public static final String SYNC_CONTRACT_TOO_OLD    = "SYNC_CONTRACT_TOO_OLD";
+    /** Client's contract version is newer than the server — server must upgrade. */
+    public static final String SYNC_CONTRACT_TOO_NEW    = "SYNC_CONTRACT_TOO_NEW";
 }

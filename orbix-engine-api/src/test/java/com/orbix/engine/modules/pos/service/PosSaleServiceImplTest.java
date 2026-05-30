@@ -8,10 +8,14 @@ import com.orbix.engine.modules.catalog.domain.entity.VatGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemType;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.catalog.domain.entity.PriceList;
+import com.orbix.engine.modules.catalog.repository.PriceListRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
+import com.orbix.engine.modules.pos.domain.entity.Till;
+import com.orbix.engine.modules.pos.repository.TillRepository;
 import com.orbix.engine.modules.party.domain.entity.Customer;
 import com.orbix.engine.modules.party.repository.CustomerRepository;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -72,12 +76,15 @@ class PosSaleServiceImplTest {
     private static final Long UOM_ID = 1L;
     private static final Long VAT_GROUP_ID = 2L;
     private static final Long ACTOR_ID = 4L;
+    private static final Long PRICE_LIST_ID = 55L;
 
     @Mock private PosSaleRepository sales;
     @Mock private PosSaleLineRepository lines;
     @Mock private PosPaymentRepository payments;
     @Mock private TillSessionRepository tillSessions;
     @Mock private com.orbix.engine.modules.pos.repository.TillCurrencyRepository tillCurrencies;
+    @Mock private TillRepository tills;
+    @Mock private PriceListRepository priceLists;
     @Mock private SectionRepository sections;
     @Mock private ItemRepository items;
     @Mock private VatGroupRepository vatGroups;
@@ -111,6 +118,14 @@ class PosSaleServiceImplTest {
 
         TillSession session = openSession();
         lenient().when(tillSessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
+
+        // Default: till resolves to a tax-EXCLUSIVE price list so all pre-existing tests
+        // continue to work without change.  Tax-inclusive tests override these stubs locally.
+        Till till = new Till(COMPANY_ID, BRANCH_ID, "T1", "Till 1", PRICE_LIST_ID, ACTOR_ID);
+        till.setId(TILL_ID);
+        lenient().when(tills.findById(TILL_ID)).thenReturn(Optional.of(till));
+        PriceList exclusivePl = taxExclusivePriceList();
+        lenient().when(priceLists.findById(PRICE_LIST_ID)).thenReturn(Optional.of(exclusivePl));
 
         Section section = new Section(BRANCH_ID, "MAIN", "Main floor", SectionType.RETAIL_FLOOR, ACTOR_ID);
         section.setId(SECTION_ID);
@@ -1017,5 +1032,116 @@ class PosSaleServiceImplTest {
         // No cash refund — the original tender wasn't cash.
         verify(cashLedger, never()).post(any(), any(), any(), any(), any(), any(),
             any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-POS-001 / ISSUE-CASH-002: tax-inclusive price-list VAT formula
+    // -----------------------------------------------------------------------
+
+    /**
+     * When the till's price list is tax-inclusive, unitPrice=1200 is the
+     * shelf price (VAT already contained). Tax must be back-extracted:
+     * tax = 1200 * 0.18 / 1.18 = 183.0508. Total stays 1200.
+     * Regression: old code computed 1200 * 0.18 = 216 added on top → total 1416,
+     * then rejected a 1200 tender as "below total".
+     */
+    @Test
+    void post_taxInclusivePriceList_backExtractsTax() {
+        stubTaxInclusivePriceList();
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        // Shelf price 1200, VAT 18% inclusive → tax = 1200*18/118 = 183.0508
+        PosSaleDto dto = service.post(request("TILL-1-INC", "op-inc",
+            new BigDecimal("1"), new BigDecimal("1200"), new BigDecimal("1200")));
+
+        assertThat(dto.status()).isEqualTo(PosSaleStatus.POSTED);
+        // Customer pays exactly the shelf price.
+        assertThat(dto.totalAmount()).isEqualByComparingTo("1200");
+        // Back-extracted: 1200 * 0.18 / 1.18 rounded to 4dp
+        assertThat(dto.taxAmount()).isEqualByComparingTo("183.0508");
+        // Subtotal = total - tax = 1200 - 183.0508 = 1016.9492
+        assertThat(dto.subtotalAmount()).isEqualByComparingTo("1016.9492");
+        assertThat(dto.changeAmount()).isEqualByComparingTo("0");
+    }
+
+    /**
+     * Tax-exclusive baseline — old forward-addition formula must be unchanged.
+     * unitPrice=1200 exclusive → tax=216, total=1416.
+     */
+    @Test
+    void post_taxExclusivePriceList_forwardAddsTax() {
+        // Default stubs in @BeforeEach use a tax-exclusive price list.
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("75"))));
+
+        PosSaleDto dto = service.post(request("TILL-1-EXC", "op-exc",
+            new BigDecimal("1"), new BigDecimal("1200"), new BigDecimal("1416")));
+
+        assertThat(dto.totalAmount()).isEqualByComparingTo("1416");
+        assertThat(dto.taxAmount()).isEqualByComparingTo("216");
+        assertThat(dto.subtotalAmount()).isEqualByComparingTo("1200");
+    }
+
+    /**
+     * Inclusive cart: standard-rated item (18%) + exempt item (0%).
+     * std 1200 inc → tax 183.0508; exempt 1000 → tax 0; total 2200 (not 2416).
+     */
+    @Test
+    void post_taxInclusivePriceList_mixedRateCart_totalsCorrect() {
+        stubTaxInclusivePriceList();
+        when(balances.findById(any(ItemBranchBalanceId.class)))
+            .thenReturn(Optional.of(balance(new BigDecimal("200"))));
+
+        Long exemptItemId = 8802L;
+        Long exemptVatId  = 3L;
+        Item bread = new Item(COMPANY_ID, "BREAD", "Bread",
+            com.orbix.engine.modules.catalog.domain.enums.ItemType.SELLABLE,
+            10L, UOM_ID, exemptVatId, ACTOR_ID);
+        bread.setId(exemptItemId);
+        lenient().when(items.findById(exemptItemId)).thenReturn(Optional.of(bread));
+        VatGroup exempt = new VatGroup(COMPANY_ID, "EXM", "Exempt", BigDecimal.ZERO,
+            LocalDate.of(2020, 1, 1), true, ACTOR_ID);
+        exempt.setId(exemptVatId);
+        lenient().when(vatGroups.findById(exemptVatId)).thenReturn(Optional.of(exempt));
+
+        PostPosSaleRequestDto req = new PostPosSaleRequestDto(
+            "TILL-1-MIX", "op-mix-inc", SESSION_ID, SECTION_ID, CUSTOMER_ID, null, null,
+            Instant.parse("2026-05-13T11:00:00Z"), null,
+            List.of(
+                new PostPosSaleRequestDto.Line(ITEM_ID,      UOM_ID,
+                    new BigDecimal("1"), new BigDecimal("1200"), null, VAT_GROUP_ID),
+                new PostPosSaleRequestDto.Line(exemptItemId, UOM_ID,
+                    new BigDecimal("1"), new BigDecimal("1000"), null, exemptVatId)
+            ),
+            List.of(new PostPosSaleRequestDto.Payment(PosPaymentMethod.CASH,
+                new BigDecimal("2200"), null, null, null, null)),
+            null
+        );
+
+        PosSaleDto dto = service.post(req);
+
+        assertThat(dto.totalAmount()).isEqualByComparingTo("2200");
+        // Only the standard-rated item contributes tax (exempt = 0)
+        assertThat(dto.taxAmount()).isEqualByComparingTo("183.0508");
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers for tax-inclusive tests
+    // -----------------------------------------------------------------------
+
+    /** Override the default till/priceList stubs to return a tax-inclusive list. */
+    private void stubTaxInclusivePriceList() {
+        PriceList inclusive = new PriceList(COMPANY_ID, "RETAIL", "Retail", "TZS",
+            LocalDate.of(2024, 1, 1), null, true, true, ACTOR_ID);
+        ReflectionTestUtils.setField(inclusive, "id", PRICE_LIST_ID);
+        when(priceLists.findById(PRICE_LIST_ID)).thenReturn(Optional.of(inclusive));
+    }
+
+    private PriceList taxExclusivePriceList() {
+        PriceList pl = new PriceList(COMPANY_ID, "WHOLESALE", "Wholesale", "TZS",
+            LocalDate.of(2024, 1, 1), null, false, false, ACTOR_ID);
+        ReflectionTestUtils.setField(pl, "id", PRICE_LIST_ID);
+        return pl;
     }
 }

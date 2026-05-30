@@ -14,6 +14,7 @@ import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.TokenGuardService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -119,7 +120,7 @@ public class AuthServiceImpl implements AuthService {
             // wrong password by response timing (username enumeration defence).
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
-                0L, null, null, "LOGIN_FAILED", ENTITY, request.username(), null,
+                0L, null, null, "LOGIN_FAILED", ENTITY, request.username(), null, null,
                 authMeta("reason", "NO_SUCH_USER")));
             throw new InvalidCredentialsException();
         }
@@ -131,7 +132,7 @@ public class AuthServiceImpl implements AuthService {
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "LOGIN_WHILE_LOCKED")));
             throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
         }
@@ -141,7 +142,7 @@ public class AuthServiceImpl implements AuthService {
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "INACTIVE")));
             throw new InvalidCredentialsException();
         }
@@ -157,24 +158,27 @@ public class AuthServiceImpl implements AuthService {
                     // This attempt tripped the lockout — say so immediately.
                     audit.write(new AuditLogWriter.Record(
                         user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                        "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                        "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null, null,
                         authMeta("reason", "THRESHOLD_REACHED")));
                     throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
                 }
             }
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "BAD_CREDENTIALS")));
             throw new InvalidCredentialsException();
         }
 
-        user.recordSuccessfulLogin(now);
-        users.save(user);
+        // recordSuccessfulLogin mutates the @Version-guarded row (lastLoginAt, failedLoginCount).
+        // Two concurrent logins for the same user both read the same version and one loses the
+        // optimistic-lock race. We retry once with a fresh read: the write is idempotent
+        // (last-login bookkeeping) so the second committer simply overwrites with a later timestamp.
+        saveSuccessfulLogin(user, now);
 
         audit.write(new AuditLogWriter.Record(
             user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-            "LOGIN", ENTITY, user.getId().toString(), null, authMeta("method", "PASSWORD")));
+            "LOGIN", ENTITY, user.getId().toString(), null, null, authMeta("method", "PASSWORD")));
         return issueTokens(user);
     }
 
@@ -198,7 +202,7 @@ public class AuthServiceImpl implements AuthService {
             log.warn("Refresh token reuse detected for user {} — revoked all tokens", stored.getUserId());
             audit.write(new AuditLogWriter.Record(
                 stored.getUserId(), null, null, "REFRESH_REUSE", ENTITY,
-                stored.getUserId().toString(), null, authMeta("reason", "TOKEN_REUSE_REVOKED_ALL")));
+                stored.getUserId().toString(), null, null, authMeta("reason", "TOKEN_REUSE_REVOKED_ALL")));
             throw new InvalidRefreshTokenException();
         }
         if (!stored.isUsable(now)) {
@@ -228,7 +232,7 @@ public class AuthServiceImpl implements AuthService {
             refreshTokens.save(t);
             audit.write(new AuditLogWriter.Record(
                 t.getUserId(), null, null, "LOGOUT", ENTITY,
-                t.getUserId().toString(), null, authMeta("scope", "SESSION")));
+                t.getUserId().toString(), null, null, authMeta("scope", "SESSION")));
         });
         // Kill the caller's current access token immediately, not just at expiry.
         tokenGuard.blacklistJti(context.jti());
@@ -241,7 +245,7 @@ public class AuthServiceImpl implements AuthService {
         tokenGuard.invalidateUserTokens(userId);
         audit.write(new AuditLogWriter.Record(
             userId, null, null, "LOGOUT_EVERYWHERE", ENTITY,
-            userId.toString(), null, authMeta("scope", "ALL_SESSIONS")));
+            userId.toString(), null, null, authMeta("scope", "ALL_SESSIONS")));
     }
 
     @Override
@@ -262,6 +266,30 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException();
         }
         return issueTokens(user);
+    }
+
+    /**
+     * Persist a successful login's bookkeeping (lastLoginAt, failedLoginCount reset).
+     *
+     * <p>The {@link AppUser} entity carries {@code @Version} for admin-mutation safety.
+     * Concurrent logins for the same user cause one transaction to win and the other
+     * to throw {@link ObjectOptimisticLockingFailureException}. Since
+     * {@code recordSuccessfulLogin} is idempotent (last-writer-wins on a timestamp),
+     * we reload the entity and retry once — the second writer simply commits a
+     * marginally later {@code lastLoginAt}. A second failure propagates as-is (extremely
+     * unlikely: would require a third concurrent login within the same millisecond).
+     */
+    private void saveSuccessfulLogin(AppUser user, Instant now) {
+        try {
+            user.recordSuccessfulLogin(now);
+            users.save(user);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("Optimistic-lock on AppUser {} during login — reloading and retrying", user.getId());
+            AppUser fresh = users.findById(user.getId())
+                .orElseThrow(InvalidCredentialsException::new);
+            fresh.recordSuccessfulLogin(Instant.now());
+            users.save(fresh);
+        }
     }
 
     private LoginResponseDto issueTokens(AppUser user) {

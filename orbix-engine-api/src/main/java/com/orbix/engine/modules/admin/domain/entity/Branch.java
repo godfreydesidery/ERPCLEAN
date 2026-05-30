@@ -92,6 +92,18 @@ public class Branch extends UidEntity {
         touch(actorId);
     }
 
+    /** Promotes this branch to default for the company. */
+    public void makeDefault(Long actorId) {
+        this.isDefault = true;
+        touch(actorId);
+    }
+
+    /** Clears the default flag (used when another branch is made default). */
+    public void clearDefault(Long actorId) {
+        this.isDefault = false;
+        touch(actorId);
+    }
+
     public void deactivate(Long actorId) {
         this.status = AdminStatus.INACTIVE;
         touch(actorId);

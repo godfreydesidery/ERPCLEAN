@@ -5,7 +5,9 @@ import com.orbix.engine.modules.catalog.domain.dto.ItemGroupDto;
 import com.orbix.engine.modules.catalog.domain.dto.MoveItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.dto.UpdateItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.ItemGroup;
+import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.repository.ItemGroupRepository;
+import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,7 @@ class ItemGroupServiceImplTest {
     private static final Long ACTOR_ID = 5L;
 
     @Mock private ItemGroupRepository groups;
+    @Mock private ItemRepository items;
     @Mock private RequestContext context;
 
     @InjectMocks private ItemGroupServiceImpl service;
@@ -151,10 +154,84 @@ class ItemGroupServiceImplTest {
     void archiveGroup_setsArchivedStatus() {
         ItemGroup existing = group(1L, null, 1, "FOOD");
         when(groups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+        when(items.countByItemGroupIdAndStatus(1L, ItemStatus.ACTIVE)).thenReturn(0L);
 
         service.archiveGroupByUid(existing.getUid());
 
         assertThat(existing.getStatus().name()).isEqualTo("ARCHIVED");
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-CAT-002: archive must be blocked when active items reference the group
+    // -----------------------------------------------------------------------
+
+    @Test
+    void archiveGroup_blockedWhenActiveItemsExist() {
+        ItemGroup existing = group(1L, null, 1, "FOOD");
+        when(groups.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+        when(items.countByItemGroupIdAndStatus(1L, ItemStatus.ACTIVE)).thenReturn(3L);
+
+        assertThatThrownBy(() -> service.archiveGroupByUid(existing.getUid()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("active item");
+
+        // Status must not have changed
+        assertThat(existing.getStatus()).isEqualTo(ItemStatus.ACTIVE);
+        verify(items).countByItemGroupIdAndStatus(1L, ItemStatus.ACTIVE);
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-CAT-003: depth limit of 4 levels enforced on create and move
+    // -----------------------------------------------------------------------
+
+    @Test
+    void createGroup_rejectsDepthBeyondMaxLevel() {
+        // Level-4 parent → child would be level 5 → rejected
+        ItemGroup level4Parent = group(10L, 9L, ItemGroupServiceImpl.MAX_LEVEL, "L4");
+        when(groups.existsByCompanyIdAndCode(COMPANY_ID, "L5")).thenReturn(false);
+        when(groups.findById(10L)).thenReturn(Optional.of(level4Parent));
+
+        assertThatThrownBy(() -> service.createGroup(new CreateItemGroupRequestDto(10L, "L5", "Level 5")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("exceed");
+        verify(groups, never()).save(any());
+    }
+
+    @Test
+    void createGroup_allowsExactlyMaxLevel() {
+        // Level-3 parent → child is level 4 → allowed
+        ItemGroup level3Parent = group(9L, 8L, ItemGroupServiceImpl.MAX_LEVEL - 1, "L3");
+        when(groups.existsByCompanyIdAndCode(COMPANY_ID, "L4")).thenReturn(false);
+        when(groups.findById(9L)).thenReturn(Optional.of(level3Parent));
+        when(groups.save(any(ItemGroup.class))).thenAnswer(inv -> {
+            ItemGroup g = inv.getArgument(0);
+            g.setId(100L);
+            ReflectionTestUtils.setField(g, "uid", UidGenerator.next());
+            return g;
+        });
+
+        ItemGroupDto result = service.createGroup(new CreateItemGroupRequestDto(9L, "L4", "Level 4"));
+
+        assertThat(result.level()).isEqualTo(ItemGroupServiceImpl.MAX_LEVEL);
+    }
+
+    @Test
+    void moveGroup_rejectsWhenSubtreeWouldExceedMaxLevel() {
+        // tree: root(L1) -> mid(L2) -> leaf(L3); target parent is at L3
+        // moving mid under the L3 target → mid becomes L4, leaf becomes L5 → rejected
+        ItemGroup root = group(1L, null, 1, "ROOT");
+        ItemGroup mid = group(2L, 1L, 2, "MID");
+        ItemGroup leaf = group(3L, 2L, 3, "LEAF");
+        ItemGroup targetParent = group(4L, 1L, 3, "TARGET"); // L3 — moving mid under it: mid→L4, leaf→L5
+
+        when(groups.findByUid(mid.getUid())).thenReturn(Optional.of(mid));
+        when(groups.findById(4L)).thenReturn(Optional.of(targetParent));
+        // first call for depth check, second call for subtree collection
+        when(groups.findByCompanyId(COMPANY_ID)).thenReturn(List.of(root, mid, leaf, targetParent));
+
+        assertThatThrownBy(() -> service.moveGroupByUid(mid.getUid(), new MoveItemGroupRequestDto(4L)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("exceed");
     }
 
     @Test

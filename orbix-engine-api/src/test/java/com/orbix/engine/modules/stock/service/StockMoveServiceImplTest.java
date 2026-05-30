@@ -143,7 +143,8 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_outbound_consumesAtAvgCostAndReducesQty() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        // Outbound path uses the pessimistic-lock finder (ISSUE-NFR-002 fix).
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
 
         StockMoveDto result = service.post(req(new BigDecimal("-4"), null, false));
@@ -157,7 +158,7 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_outboundBelowZero_isBlockedWithoutOverride() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
 
         assertThatThrownBy(() -> service.post(req(new BigDecimal("-5"), null, false)))
@@ -169,7 +170,7 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_outboundBelowZero_isAllowedWithOverrideAndPermission() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
         when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID))
             .thenReturn(Set.of(Permissions.STOCK_OVERSELL));
@@ -184,7 +185,7 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_outboundBelowZero_withOverrideButNoPermission_isBlocked() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("3"), new BigDecimal("150"))));
         when(permissions.resolve(ACTOR_ID, COMPANY_ID, BRANCH_ID)).thenReturn(Set.of());
 
@@ -197,7 +198,7 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_outboundNotNegative_doesNotConsultPermissionResolver() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
 
         // -4 leaves 6 on-hand; OVERSELL gate must not fire.
@@ -301,7 +302,7 @@ class StockMoveServiceImplTest {
 
     @Test
     void post_passesBatchIdThroughToStockMoveRow() {
-        when(balances.findById(new ItemBranchBalanceId(ITEM_ID, BRANCH_ID)))
+        when(balances.findByItemIdAndBranchIdForUpdate(ITEM_ID, BRANCH_ID))
             .thenReturn(Optional.of(balance(new BigDecimal("10"), new BigDecimal("150"))));
 
         StockMoveDto result = service.post(reqWithBatch(new BigDecimal("-3"), 4242L));
@@ -376,6 +377,8 @@ class StockMoveServiceImplTest {
         StockMove m3 = makeMove(12L, t3, new BigDecimal("-20"), "SalesInvoice", 3L);
         when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
             .thenReturn(new PageImpl<>(List.of(m1, m2, m3)));
+        // No prior moves before id=10 — opening balance is zero.
+        when(moves.sumQtyBeforeId(ITEM_ID, BRANCH_ID, 10L)).thenReturn(BigDecimal.ZERO);
         // Both refTypes present on this page — both repos are queried.
         when(salesInvoices.findAllById(any())).thenReturn(List.of());
         when(grns.findAllById(any())).thenReturn(List.of());
@@ -387,6 +390,26 @@ class StockMoveServiceImplTest {
         assertThat(rows.get(0).runningBalance()).isEqualByComparingTo("100");  // +100
         assertThat(rows.get(1).runningBalance()).isEqualByComparingTo("70");   // 100 - 30
         assertThat(rows.get(2).runningBalance()).isEqualByComparingTo("50");   // 70 - 20
+    }
+
+    @Test
+    void stockCard_runningBalanceCarriesOpeningBalanceFromPriorPage() {
+        // Simulates page 1 (offset 10): prior 10 moves summed to 200.
+        // Page 1 has one OUT move of -5; running balance must start at 200, not 0.
+        Instant at = Instant.parse("2026-06-01T10:00:00Z");
+        StockMove move = makeMove(20L, at, new BigDecimal("-5"), "SalesInvoice", 9L);
+        when(moves.findByItemIdAndBranchIdOrderByAtAsc(eq(ITEM_ID), eq(BRANCH_ID), any()))
+            .thenReturn(new PageImpl<>(List.of(move)));
+        // Prior moves (id < 20) summed to 200.
+        when(moves.sumQtyBeforeId(ITEM_ID, BRANCH_ID, 20L)).thenReturn(new BigDecimal("200"));
+        when(salesInvoices.findAllById(any())).thenReturn(List.of());
+
+        PageDto<StockMoveDto> result = service.stockCard(ITEM_ID, BRANCH_ID,
+            PageRequest.of(1, 10));
+
+        List<StockMoveDto> rows = result.content();
+        // 200 opening + (-5) = 195
+        assertThat(rows.get(0).runningBalance()).isEqualByComparingTo("195");
     }
 
     /** Minimal StockMove for test purposes — bypasses @PrePersist. */

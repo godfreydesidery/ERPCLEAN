@@ -36,6 +36,10 @@ export interface LpoOrderLine {
   id: string;
   lineNo: number;
   itemId: string;
+  /** Hydrated client-side from item search — not present in backend DTO. */
+  itemCode: string | null;
+  /** Hydrated client-side from item search — not present in backend DTO. */
+  itemName: string | null;
   uomId: string;
   orderedQty: number;
   receivedQty: number;
@@ -52,6 +56,10 @@ export interface LpoOrder {
   companyId: string;
   branchId: string;
   supplierId: string;
+  /** Hydrated client-side from supplier search — not present in backend DTO. */
+  supplierName: string | null;
+  /** Hydrated client-side from supplier search — not present in backend DTO. */
+  supplierCode: string | null;
   orderDate: string;
   expectedDeliveryDate: string | null;
   currencyCode: string;

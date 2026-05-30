@@ -44,22 +44,22 @@
 
 ---
 
-### TC-PROC-003 — Receive against LPO (GRN); stock and debt updated
+### TC-PROC-003 — Receive against LPO (GRN); stock updated; supplier debt requires explicit SupplierInvoice
 
 | Field | Value |
 |-------|-------|
 | **ID** | TC-PROC-003 |
-| **Title** | Post GRN against approved LPO; stock_move GRN type created; avg_cost updated; supplier debt opened |
+| **Title** | Post GRN against approved LPO: stock_move GRN type created, avg_cost updated; supplier debt requires a subsequent SupplierInvoice |
 | **Area** | procurement |
 | **Dimension** | FUNC |
 | **Priority** | P0 |
 | **Linked US-*** | US-PROC-004 |
 | **Preconditions** | LPO in APPROVED status with 100 units COKE500 at 800/unit. |
-| **Steps** | 1. `POST /api/v1/grns` body: `{"lpoId":<id>,"lines":[{"lpoLineId":<id>,"receivedQty":100,"unitCost":800}]}`. 2. `POST /api/v1/grns/uid/<uid>/post`. 3. Check `stock_move`. 4. Check `item_branch_balance.avg_cost`. 5. Check `debt_entry` for supplier. |
-| **Expected Result** | Step 2: HTTP 200, `data.status = "POSTED"`. Step 3: GRN stock_move, qty=+100. Step 4: avg_cost updated using moving average formula. Step 5: debt_entry opened for supplier with amount=80000. LPO status = RECEIVED. |
+| **Steps** | 1. `POST /api/v1/grns` body: `{"lpoId":<id>,"lines":[{"lpoLineId":<id>,"receivedQty":100,"unitCost":800}]}`. 2. `POST /api/v1/grns/uid/<uid>/post`. 3. Check `stock_move`. 4. Check `item_branch_balance.avg_cost`. 5. `GET /api/v1/debt/statement/uid/<supplier_uid>` — confirm no debt created yet. 6. `POST /api/v1/supplier-invoices` with GRN reference. 7. `POST /api/v1/supplier-invoices/uid/<uid>/post`. 8. Re-check supplier debt. |
+| **Expected Result** | Step 2: HTTP 200, `data.status = "POSTED"`. Step 3: GRN `stock_move` qty=+100, moveType=GRN. Step 4: `avg_cost` updated using moving average formula (e.g. 100 units at 800 = 800 avg). Step 5: `totalOutstanding = 0` — no debt entry created by GRN post alone. Step 7: HTTP 200, SupplierInvoice status = POSTED. Step 8: `totalOutstanding = 94400` (80000 subtotal + 18% VAT). LPO status = RECEIVED. |
 | **Automatable?** | yes — integration test |
 | **Result/Status** | |
-| **Notes/IssueRef** | US-PROC-004 AC |
+| **Notes/IssueRef** | ISSUE-PROC-004: corrected step 5 expected result. GRN post does NOT auto-create a supplier debt entry. The implemented 3-way-match flow is: GRN (stock receipt) → SupplierInvoice (creates AP debt) → SupplierPayment (settles debt). `GrnPosted.v1` outbox event exists but no `DomainEventHandler` is registered for it — auto-invoice-from-GRN is not implemented. Step 5 now verifies debt is zero after GRN; steps 6-8 document the required SupplierInvoice path. US-PROC-004 AC. |
 
 ---
 

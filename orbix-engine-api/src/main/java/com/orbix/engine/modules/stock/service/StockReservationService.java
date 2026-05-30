@@ -42,4 +42,10 @@ public interface StockReservationService {
      * Available qty for new reservations / sales: {@code qty_on_hand - qty_reserved}.
      */
     BigDecimal available(Long itemId, Long branchId);
+
+    /**
+     * Current qty_reserved counter for {@code (itemId, branchId)}.
+     * Returns zero when no balance row exists.
+     */
+    BigDecimal qtyReserved(Long itemId, Long branchId);
 }
