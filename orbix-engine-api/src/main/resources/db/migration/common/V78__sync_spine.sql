@@ -29,6 +29,10 @@ ALTER TABLE item              ADD COLUMN change_seq BIGINT;
 ALTER TABLE vat_group         ADD COLUMN change_seq BIGINT;
 ALTER TABLE price_list_item   ADD COLUMN change_seq BIGINT;
 ALTER TABLE price_list        ADD COLUMN change_seq BIGINT;
+-- party: change_seq on the Party row (status, code, name) drives the customer dataset.
+-- The customer role table (party_id = FK) has no independent change_seq; service stamps
+-- party.change_seq on every customer create/update/archive.
+ALTER TABLE party             ADD COLUMN change_seq BIGINT;
 
 -- -----------------------------------------------------------------------
 -- 3.  client_op_id + unique-constraint on device-reachable transactional
@@ -71,6 +75,7 @@ UPDATE item            SET change_seq = id            WHERE change_seq IS NULL;
 UPDATE vat_group       SET change_seq = id            WHERE change_seq IS NULL;
 UPDATE price_list_item SET change_seq = id            WHERE change_seq IS NULL;
 UPDATE price_list      SET change_seq = id            WHERE change_seq IS NULL;
+UPDATE party           SET change_seq = id            WHERE change_seq IS NULL;
 
 -- Restart sync_change_seq above all backfilled values.
 -- Both MariaDB 11 and PostgreSQL 15 support ALTER SEQUENCE ... RESTART WITH.

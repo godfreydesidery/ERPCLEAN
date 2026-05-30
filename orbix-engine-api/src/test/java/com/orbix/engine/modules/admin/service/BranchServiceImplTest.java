@@ -14,6 +14,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.party.service.CustomerService;
+import com.orbix.engine.modules.pos.service.TillService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,7 @@ class BranchServiceImplTest {
     @Mock private BranchRepository branches;
     @Mock private SectionRepository sections;
     @Mock private CustomerService customerService;
+    @Mock private TillService tillService;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -163,11 +165,24 @@ class BranchServiceImplTest {
     void deactivateBranch_setsInactive() {
         Branch existing = branch(50L, COMPANY_ID, "DT");
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+        when(tillService.hasOpenTillSessionsForBranch(50L)).thenReturn(false);
 
         service.deactivateBranchByUid(existing.getUid(), "closing down");
 
         assertThat(existing.getStatus()).isEqualTo(AdminStatus.INACTIVE);
         verify(events).publish(eq("BranchDeactivated.v1"), any(), any(), any());
+    }
+
+    @Test
+    void deactivateBranch_blockedWhenOpenTillSessionExists() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+        when(tillService.hasOpenTillSessionsForBranch(50L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deactivateBranchByUid(existing.getUid(), "closing down"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("OPEN till sessions");
+        assertThat(existing.getStatus()).isEqualTo(AdminStatus.ACTIVE);
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.service.CustomerService;
+import com.orbix.engine.modules.pos.service.TillService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class BranchServiceImpl implements BranchService {
     private final BranchRepository branches;
     private final SectionRepository sections;
     private final CustomerService customerService;
+    private final TillService tillService;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -107,7 +109,11 @@ public class BranchServiceImpl implements BranchService {
         if (branch.isDefault()) {
             throw new IllegalArgumentException("Cannot deactivate the default branch");
         }
-        // TODO (F5.1): block deactivation while the branch has an open till.
+        if (tillService.hasOpenTillSessionsForBranch(branch.getId())) {
+            throw new IllegalStateException(
+                "Cannot deactivate branch " + uid + ": it has one or more OPEN till sessions. "
+                    + "Close all till sessions before deactivating the branch.");
+        }
         branch.deactivate(context.userId());
         events.publish("BranchDeactivated.v1", "Branch", branch.getUid(),
             Map.of(BRANCH_UID_KEY, branch.getUid(), "reason", reason));

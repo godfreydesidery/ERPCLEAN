@@ -15,6 +15,12 @@ import com.orbix.engine.modules.catalog.repository.PriceListRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.util.UidGenerator;
+import com.orbix.engine.modules.party.domain.entity.Customer;
+import com.orbix.engine.modules.party.domain.entity.Party;
+import com.orbix.engine.modules.party.domain.enums.PartyCategory;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
+import com.orbix.engine.modules.party.repository.CustomerRepository;
+import com.orbix.engine.modules.party.repository.PartyRepository;
 import com.orbix.engine.modules.pos.domain.dto.BalanceSnapshotDto;
 import com.orbix.engine.modules.pos.domain.dto.CatalogSnapshotDto;
 import com.orbix.engine.modules.pos.domain.dto.PosSaleDto;
@@ -99,6 +105,8 @@ class SyncServiceImplTest {
     @Mock private PriceListItemRepository priceListItems;
     @Mock private ItemBranchBalanceRepository balances;
     @Mock private PriceListRepository   priceListRepo;
+    @Mock private PartyRepository       partyRepository;
+    @Mock private CustomerRepository    customerRepository;
     @Mock private RequestContext        context;
 
     @InjectMocks private SyncServiceImpl service;
@@ -553,6 +561,72 @@ class SyncServiceImplTest {
     }
 
     // -----------------------------------------------------------------------
+    // Customer dataset (GAP 1)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void pull_customerDataset_cursorZero_returnsActiveCustomers() {
+        Party p = customerParty(501L, "CUST0001", "Mama Sara", PartyStatus.ACTIVE, 5L);
+        Customer c = new Customer(501L);
+        when(partyRepository.findCustomerPartiesByCompanyIdAndChangeSeqGreaterThan(
+            eq(COMPANY_ID), eq(0L), any())).thenReturn(List.of(p));
+        when(customerRepository.findById(501L)).thenReturn(java.util.Optional.of(c));
+
+        SyncPullResultDto result = service.pull(null, "customer");
+
+        assertThat(result.datasets()).containsKey("customer");
+        var ds = result.datasets().get("customer");
+        assertThat(ds.upserts()).hasSize(1);
+        assertThat(ds.deletes()).isEmpty();
+
+        @SuppressWarnings("unchecked")
+        var row = (java.util.Map<String, Object>) ds.upserts().get(0);
+        assertThat(row.get("uid")).isEqualTo(p.getUid());
+        assertThat(row.get("code")).isEqualTo("CUST0001");
+        assertThat(row.get("name")).isEqualTo("Mama Sara");
+        assertThat(row.get("isWalkIn")).isEqualTo(false);
+        assertThat(row.get("isActive")).isEqualTo(true);
+
+        SyncCursorDto decoded = SyncCursorDto.decode(result.nextCursor());
+        assertThat(decoded.seq()).isGreaterThanOrEqualTo(5L);
+    }
+
+    @Test
+    void pull_customerDataset_archivedParty_surfacedAsDelete() {
+        Party archived = customerParty(502L, "CUST0002", "Old Co", PartyStatus.ARCHIVED, 7L);
+        when(partyRepository.findCustomerPartiesByCompanyIdAndChangeSeqGreaterThan(
+            eq(COMPANY_ID), eq(0L), any())).thenReturn(List.of(archived));
+
+        SyncPullResultDto result = service.pull(null, "customer");
+
+        var ds = result.datasets().get("customer");
+        assertThat(ds.upserts()).isEmpty();
+        assertThat(ds.deletes()).containsExactly("502");
+    }
+
+    @Test
+    void pull_customerDataset_changeSeqStamped_appearsOnDeltaPull() {
+        // First pull: cursor = 0, change_seq = 10 → customer appears
+        Party p = customerParty(503L, "CUST0003", "New Co", PartyStatus.ACTIVE, 10L);
+        Customer c = new Customer(503L);
+        when(partyRepository.findCustomerPartiesByCompanyIdAndChangeSeqGreaterThan(
+            eq(COMPANY_ID), eq(0L), any())).thenReturn(List.of(p));
+        when(customerRepository.findById(503L)).thenReturn(java.util.Optional.of(c));
+
+        SyncPullResultDto first = service.pull(null, "customer");
+        SyncCursorDto firstNext = SyncCursorDto.decode(first.nextCursor());
+        assertThat(firstNext.seq()).isGreaterThanOrEqualTo(10L);
+
+        // Second pull: cursor = seq(10), no new changes → empty
+        when(partyRepository.findCustomerPartiesByCompanyIdAndChangeSeqGreaterThan(
+            eq(COMPANY_ID), eq(firstNext.seq()), any())).thenReturn(List.of());
+
+        SyncPullResultDto second = service.pull(first.nextCursor(), "customer");
+        assertThat(second.datasets().get("customer").upserts()).isEmpty();
+        assertThat(second.datasets().get("customer").deletes()).isEmpty();
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -642,5 +716,14 @@ class SyncServiceImplTest {
         Item item = activeItem(id, "SKU-" + id, 10L);
         ReflectionTestUtils.setField(item, "changeSeq", changeSeq);
         return item;
+    }
+
+    private Party customerParty(long id, String code, String name, PartyStatus status, long changeSeq) {
+        Party p = new Party(COMPANY_ID, code, name, PartyCategory.BUSINESS, ACTOR_ID);
+        p.setId(id);
+        ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
+        ReflectionTestUtils.setField(p, "status", status);
+        p.setChangeSeq(changeSeq);
+        return p;
     }
 }

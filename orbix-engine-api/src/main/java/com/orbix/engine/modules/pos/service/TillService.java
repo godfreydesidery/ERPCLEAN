@@ -20,4 +20,11 @@ public interface TillService {
     List<TillDto> list(Long branchId);
 
     TillDto get(String uid);
+
+    /**
+     * Returns {@code true} when the branch has at least one OPEN till session.
+     * Used by the admin module to guard branch and section deactivation (F5.1 / F7.3)
+     * without violating the module-boundary rule (admin → pos via service interface only).
+     */
+    boolean hasOpenTillSessionsForBranch(Long branchId);
 }

@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.party.service;
 
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.dto.CustomerResponseDto;
@@ -39,6 +40,7 @@ class CustomerServiceImplTest {
     @Mock private CustomerRepository customers;
     @Mock private PartyRepository parties;
     @Mock private PartyService partyService;
+    @Mock private SyncChangeSeqService syncSeq;
     @Mock private RequestContext context;
 
     @InjectMocks private CustomerServiceImpl service;
@@ -49,6 +51,8 @@ class CustomerServiceImplTest {
         lenient().when(context.userId()).thenReturn(ACTOR_ID);
         // Backend auto-allocates the party code for the create-new path now.
         lenient().when(partyService.reservePartyCode("CUST")).thenReturn("CUST0001");
+        // Provide a stable change_seq value for all write-path tests.
+        lenient().when(syncSeq.next()).thenReturn(1_000_001L);
     }
 
     private static Party party(Long id, String code) {
@@ -153,5 +157,36 @@ class CustomerServiceImplTest {
 
         verify(parties, never()).save(any());
         verify(customers, never()).save(any());
+    }
+
+    @Test
+    void createCustomer_stampsChangeSeqOnParty() {
+        Party resolved = party(100L, "CUST0001");
+        when(partyService.resolveOrCreate(eq("CUST0001"), any(), eq(ACTOR_ID))).thenReturn(resolved);
+        when(customers.existsById(100L)).thenReturn(false);
+        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(syncSeq.next()).thenReturn(1_000_042L);
+
+        service.createCustomer(createRequest());
+
+        assertThat(resolved.getChangeSeq()).isEqualTo(1_000_042L);
+        verify(syncSeq).next();
+    }
+
+    @Test
+    void createWalkInCustomer_stampsChangeSeqOnParty() {
+        when(parties.existsByCompanyIdAndCode(COMPANY_ID, "WALKIN-12")).thenReturn(false);
+        when(parties.save(any(Party.class))).thenAnswer(inv -> {
+            Party p = inv.getArgument(0);
+            p.setId(200L);
+            ReflectionTestUtils.setField(p, "uid", UidGenerator.next());
+            return p;
+        });
+        when(syncSeq.next()).thenReturn(1_000_099L);
+
+        service.createWalkInCustomer(12L);
+
+        // syncSeq.next() must have been called (stamp happened)
+        verify(syncSeq).next();
     }
 }

@@ -10,6 +10,11 @@ import com.orbix.engine.modules.catalog.repository.ItemBarcodeRepository;
 import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.catalog.repository.PriceListItemRepository;
 import com.orbix.engine.modules.catalog.repository.VatGroupRepository;
+import com.orbix.engine.modules.party.domain.entity.Customer;
+import com.orbix.engine.modules.party.domain.entity.Party;
+import com.orbix.engine.modules.party.domain.enums.PartyStatus;
+import com.orbix.engine.modules.party.repository.CustomerRepository;
+import com.orbix.engine.modules.party.repository.PartyRepository;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.pos.domain.dto.BalanceSnapshotDto;
 import com.orbix.engine.modules.pos.domain.dto.CatalogSnapshotDto;
@@ -79,6 +84,7 @@ public class SyncServiceImpl implements SyncService {
     static final String DS_CATALOG  = "catalog";
     static final String DS_PRICE    = "price";
     static final String DS_BALANCE  = "balance";
+    static final String DS_CUSTOMER = "customer";
 
     private final PosSaleService posSaleService;
     private final TillSessionService tillSessionService;
@@ -91,6 +97,8 @@ public class SyncServiceImpl implements SyncService {
     private final VatGroupRepository vatGroups;
     private final PriceListItemRepository priceListItems;
     private final ItemBranchBalanceRepository balances;
+    private final PartyRepository partyRepository;
+    private final CustomerRepository customerRepository;
     private final RequestContext context;
     private final ObjectMapper objectMapper;
 
@@ -388,6 +396,12 @@ public class SyncServiceImpl implements SyncService {
             datasets.put(DS_BALANCE, new SyncPullResultDto.DatasetDto(bal.upserts(), bal.deletes()));
             if (bal.maxSeq() > maxSeq) maxSeq = bal.maxSeq();
         }
+        if (requested.isEmpty() || requested.contains(DS_CUSTOMER)) {
+            DatasetResult<Object> cust = buildCustomerDataset(companyId, fromSeq, page);
+            datasets.put(DS_CUSTOMER, new SyncPullResultDto.DatasetDto(cust.upserts(), cust.deletes()));
+            if (cust.maxSeq() > maxSeq) maxSeq = cust.maxSeq();
+            if (cust.hasMore()) hasMore = true;
+        }
 
         SyncCursorDto nextCursor = new SyncCursorDto(1, maxSeq);
         return new SyncPullResultDto(Instant.now(), nextCursor.encode(), hasMore, false, datasets);
@@ -504,6 +518,56 @@ public class SyncServiceImpl implements SyncService {
             upserts.add(m);
         }
         return new DatasetResult<>(upserts, List.of(), fromSeq, false);
+    }
+
+    /**
+     * Customer dataset.
+     *
+     * <p>Fields served per row:
+     * <ul>
+     *   <li>id, uid, code, name — party identity</li>
+     *   <li>isWalkIn — POS uses this to auto-select the walk-in customer</li>
+     *   <li>isActive — false when party.status = ARCHIVED; POS hides inactive customers</li>
+     *   <li>creditLimitAmount — customer credit ceiling (from customer role row)</li>
+     * </ul>
+     *
+     * <p>Current balance is omitted — it requires a cross-module AR query (sales module)
+     * and is not cheap to compute per-row in a bulk pull. The POS performs credit checks
+     * online at sale-post time; offline credit enforcement is a future slice.
+     *
+     * <p>Archived parties surface in the deletes array (party.status = ARCHIVED) so the
+     * POS can remove stale rows. The cursor advances from the party.change_seq column.
+     */
+    private DatasetResult<Object> buildCustomerDataset(Long companyId, long fromSeq, PageRequest page) {
+        List<Party> changed = partyRepository.findCustomerPartiesByCompanyIdAndChangeSeqGreaterThan(
+            companyId, fromSeq, page);
+        boolean hasMore = changed.size() == page.getPageSize() && page.getPageSize() != Integer.MAX_VALUE;
+        long maxSeq = fromSeq;
+
+        List<Object> upserts = new ArrayList<>();
+        List<String> deletes = new ArrayList<>();
+
+        for (Party party : changed) {
+            if (party.getChangeSeq() != null && party.getChangeSeq() > maxSeq) {
+                maxSeq = party.getChangeSeq();
+            }
+            if (party.getStatus() == PartyStatus.ARCHIVED) {
+                deletes.add(String.valueOf(party.getId()));
+            } else {
+                Customer customer = customerRepository.findById(party.getId()).orElse(null);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id",                String.valueOf(party.getId()));
+                m.put("uid",               party.getUid());
+                m.put("code",              party.getCode());
+                m.put("name",              party.getName());
+                m.put("isWalkIn",          customer != null && customer.isWalkIn());
+                m.put("isActive",          party.getStatus() == PartyStatus.ACTIVE);
+                m.put("creditLimitAmount", customer != null ? customer.getCreditLimitAmount() : null);
+                m.put("changeSeq",         party.getChangeSeq());
+                upserts.add(m);
+            }
+        }
+        return new DatasetResult<>(upserts, deletes, maxSeq, hasMore);
     }
 
     // -----------------------------------------------------------------------

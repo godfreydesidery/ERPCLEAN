@@ -114,6 +114,12 @@ public class TillServiceImpl implements TillService {
         return TillDto.from(requireTillByUid(uid));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasOpenTillSessionsForBranch(Long branchId) {
+        return tillSessions.countByBranchIdAndStatus(branchId, TillSessionStatus.OPEN) > 0;
+    }
+
     private Till requireTillByUid(String uid) {
         Till till = tills.findByUid(uid)
             .orElseThrow(() -> new NoSuchElementException("Till not found: " + uid));

@@ -88,6 +88,15 @@ public class Party extends UidEntity {
     @Column(nullable = false, length = 32)
     private PartyStatus status = PartyStatus.ACTIVE;
 
+    /**
+     * Monotonic sync cursor stamp — set by SyncChangeSeqService on every
+     * customer create/update/archive. Drives the 'customer' dataset in
+     * /sync/pull and /sync/bootstrap. NULL = row pre-dates sync feature
+     * (treated as seq=0 by the pull query).
+     */
+    @Column(name = "change_seq")
+    private Long changeSeq;
+
     @Version
     private Integer version;
 
