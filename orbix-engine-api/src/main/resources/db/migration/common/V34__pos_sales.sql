@@ -32,7 +32,7 @@ CREATE TABLE pos_sale (
     voided_at                TIMESTAMP,
     voided_by                BIGINT,
     void_reason              VARCHAR(200),
-    fiscal_signature         VARCHAR(200),
+    fiscal_signature         VARCHAR(2000),
     notes                    VARCHAR(2000),
     version                  INT            NOT NULL DEFAULT 0,
     CONSTRAINT uk_pos_sale_uid             UNIQUE (uid),

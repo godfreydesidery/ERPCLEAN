@@ -16,8 +16,6 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/core_providers.dart';
-import '../../data/local/database.dart';
 import '../../data/sync/sync_providers.dart' show posDatabaseProvider;
 
 // ---------------------------------------------------------------------------
