@@ -180,6 +180,17 @@ public class PosSaleServiceImpl implements PosSaleService {
                 "totalAmount", sale.getTotalAmount(),
                 "tenderedAmount", sale.getTenderedAmount(),
                 "changeAmount", sale.getChangeAmount()));
+
+        // ADR-0006: emit FiscalizationRequested.v1 in the same TX as the sale insert.
+        // The fiscal module consumes this event asynchronously via the outbox poller.
+        // pos does NOT import any fiscal class — the coupling is via event type string only.
+        events.publish("FiscalizationRequested.v1", AGG, String.valueOf(sale.getId()),
+            Map.of(F_ID, sale.getId(),
+                F_NUMBER, sale.getNumber(),
+                "companyId", companyId,
+                F_BRANCH_ID, session.getBranchId(),
+                "actorId", actorId));
+
         return PosSaleDto.from(sale, savedLines, savedPayments);
     }
 

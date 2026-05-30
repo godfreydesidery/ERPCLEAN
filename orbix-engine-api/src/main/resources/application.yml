@@ -148,6 +148,31 @@ orbix:
     # window gets CURSOR_EXPIRED (HTTP 409) and must bootstrap.
     # PM-approved default: 90 days (adequate for rural TZ tills).
     tombstone-days: 90
+  fiscal:
+    # Fiscal regime: NONE (default, non-TZ/dev) | TZ_VFD (Tanzania TRA Virtual Fiscal Device).
+    # Changing to TZ_VFD activates TraVfdFiscalProvider and requires the tra.* values below.
+    regime: NONE
+    # Whether to use the stub EFDMS client (true = StubEfdmsClient; false = real client).
+    # Set to false only once a real EfdmsClient implementation is available.
+    efdms:
+      use-stub: true   # STUB: set false when real EfdmsClient is implemented
+      # STUB: pending TRA EFDMS spec confirmation — replace with real endpoint once confirmed.
+      base-url: ${EFDMS_BASE_URL:https://vfd.tra.go.tz}  # STUB: pending TRA EFDMS spec confirmation
+    tra:
+      # Taxpayer Identification Number registered with TRA for this deployment.
+      # Required when regime=TZ_VFD. STUB: exact TIN format pending TRA spec confirmation.
+      tin: ${TRA_TIN:}  # STUB: pending TRA EFDMS spec confirmation
+      # VAT Registration Number. STUB: mandatory vs optional TBD with TRA.
+      vrn: ${TRA_VRN:}  # STUB: pending TRA EFDMS spec confirmation
+      # Path to the device .pfx key file issued by TRA at VFD registration.
+      # STUB: key format, password, and loading mechanism pending TRA spec confirmation.
+      device-key-path: ${TRA_DEVICE_KEY_PATH:}     # STUB: pending TRA EFDMS spec confirmation
+      device-key-password: ${TRA_DEVICE_KEY_PASS:} # STUB: pending TRA EFDMS spec confirmation
+      # Serial/routing config issued by TRA. STUB: exact fields unknown.
+      device-serial: ${TRA_DEVICE_SERIAL:}         # STUB: pending TRA EFDMS spec confirmation
+    # Z-report cron: daily close submitted to EFDMS at end of business day.
+    # Default 23:55 UTC (aligns with PosEodGuard). STUB: exact required window pending TRA spec.
+    z-report-cron: "0 55 23 * * *"  # STUB: adjust after TRA Z-report timing confirmed
   flags:
     cache-ttl-seconds: 30
 

@@ -55,6 +55,7 @@ class PosSaleDtoJsonTest {
             new BigDecimal("0.0000"),
             PosSaleStatus.POSTED,
             null, null, null, null,
+            null, null, null,   // fiscalStatus, fiscalVerificationCode, fiscalQrPayload
             List.of(),
             List.of()
         );
