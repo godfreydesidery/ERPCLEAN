@@ -1,5 +1,7 @@
 package com.orbix.engine.modules.day.service;
 
+import com.orbix.engine.modules.common.domain.enums.ResponseCode;
+import com.orbix.engine.modules.common.service.BusinessPreconditionException;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.domain.enums.BusinessDayStatus;
 import com.orbix.engine.modules.day.repository.BusinessDayRepository;
@@ -20,13 +22,15 @@ public class DayGuard {
     private final BusinessDayRepository businessDays;
 
     /**
-     * Returns the branch's OPEN business day, or throws if the day is not open
-     * (none opened, or already CLOSING / CLOSED).
+     * Returns the branch's OPEN business day, or throws
+     * {@link BusinessPreconditionException} (HTTP 422 BUSINESS_DAY_CLOSED)
+     * if the day is not open (none opened, or already CLOSING / CLOSED).
      */
     @Transactional(readOnly = true)
     public BusinessDay requireOpenDay(Long branchId) {
         return businessDays.findFirstByBranchIdAndStatus(branchId, BusinessDayStatus.OPEN)
-            .orElseThrow(() -> new IllegalStateException(
+            .orElseThrow(() -> new BusinessPreconditionException(
+                ResponseCode.BUSINESS_DAY_CLOSED,
                 "No open business day for branch " + branchId + " — open the day before posting"));
     }
 }

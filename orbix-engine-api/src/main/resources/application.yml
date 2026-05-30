@@ -32,6 +32,17 @@ spring:
     serialization:
       write-dates-as-timestamps: false
       indent-output: false
+  mvc:
+    # ISSUE-PROC-003: raise NoHandlerFoundException for unknown routes so
+    # GlobalExceptionHandler can return 404 (ApiResponse envelope) instead
+    # of falling through to the whitelabel /error page (which returned 500).
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      # Disable the default static-resource handler so unmapped paths are not
+      # silently swallowed by ResourceHttpRequestHandler before reaching the
+      # dispatcher. The Angular bundle is served via SpaForwardConfig in QA.
+      add-mappings: false
 
 server:
   port: 8081

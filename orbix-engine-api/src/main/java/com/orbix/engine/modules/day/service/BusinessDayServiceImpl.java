@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.ResourceConflictException;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayDto;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayOverrideDto;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
@@ -306,7 +307,7 @@ public class BusinessDayServiceImpl implements BusinessDayService {
 
     private BusinessDay openInternal(Long branchId, LocalDate businessDate, Long actorId) {
         businessDays.findFirstByBranchIdAndStatusIn(branchId, NOT_CLOSED).ifPresent(open -> {
-            throw new IllegalArgumentException(
+            throw new ResourceConflictException(
                 "Branch already has a non-closed business day: " + open.getBusinessDate());
         });
         businessDays.findByBranchIdOrderByBusinessDateDesc(branchId).stream().findFirst()

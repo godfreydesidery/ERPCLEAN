@@ -5,6 +5,7 @@ import com.orbix.engine.modules.admin.domain.enums.BranchType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.ResourceConflictException;
 import com.orbix.engine.modules.common.util.UidGenerator;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayDto;
 import com.orbix.engine.modules.day.domain.dto.BusinessDayOverrideDto;
@@ -113,7 +114,7 @@ class BusinessDayServiceImplTest {
             .thenReturn(Optional.of(day(TODAY.minusDays(1), BusinessDayStatus.OPEN)));
 
         assertThatThrownBy(() -> service.openDay(BRANCH_ID, TODAY))
-            .isInstanceOf(IllegalArgumentException.class)
+            .isInstanceOf(ResourceConflictException.class)
             .hasMessageContaining("non-closed business day");
         verify(businessDays, never()).save(any());
     }
