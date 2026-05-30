@@ -3,6 +3,7 @@ package com.orbix.engine.api;
 import com.orbix.engine.modules.common.validation.ValidUlid;
 import com.orbix.engine.modules.pos.domain.dto.CloseTillSessionRequestDto;
 import com.orbix.engine.modules.pos.domain.dto.OpenTillSessionRequestDto;
+import com.orbix.engine.modules.pos.domain.dto.TillSessionBalanceDto;
 import com.orbix.engine.modules.pos.domain.dto.TillSessionDto;
 import com.orbix.engine.modules.pos.service.TillSessionService;
 import jakarta.validation.Valid;
@@ -58,5 +59,16 @@ public class TillSessionController {
     @PreAuthorize("hasAuthority('POS.SESSION_RECONCILE')")
     public TillSessionDto reconcile(@PathVariable @ValidUlid String uid) {
         return service.reconcile(uid);
+    }
+
+    /**
+     * Live cash-balance breakdown for a till session (ISSUE-CASH-001).
+     * Returns the same expected-cash figure the close screen will use,
+     * so the cashier can pre-reconcile without committing the close.
+     */
+    @GetMapping("/uid/{uid}/balance")
+    @PreAuthorize("hasAnyAuthority('POS.SESSION_BALANCE_READ','POS.MANAGE_TILL','POS.SESSION_OPEN','POS.SESSION_CLOSE')")
+    public TillSessionBalanceDto getBalance(@PathVariable @ValidUlid String uid) {
+        return service.getBalance(uid);
     }
 }
