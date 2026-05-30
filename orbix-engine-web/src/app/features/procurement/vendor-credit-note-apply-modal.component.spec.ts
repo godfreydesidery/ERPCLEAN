@@ -282,7 +282,38 @@ describe('VendorCreditNoteApplyModalComponent', () => {
       expect(fixture.nativeElement.textContent).toContain('fully allocated');
     });
 
-    it('maps 422 to an amount field error', async () => {
+    it('maps 422 with FULLY_ALLOCATED message to a banner error', async () => {
+      const spy = jasmine.createSpyObj<ProcurementService>('ProcurementService', [
+        'getSupplierOpenInvoices', 'applyVendorCreditNote',
+      ]);
+      spy.getSupplierOpenInvoices.and.returnValue(of([OPEN_INVOICE]));
+      spy.applyVendorCreditNote.and.returnValue(
+        throwError(() => new HttpErrorResponse({
+          status: 422,
+          error: {
+            message: 'Credit note 01KTEST0000000000000000000 is FULLY_ALLOCATED; only POSTED or PARTIALLY_ALLOCATED notes can be applied',
+          },
+        }))
+      );
+
+      const { fixture, comp } = await setup({ procSpy: spy });
+      const c = comp as unknown as { selectedInvoiceUid: string; amountDraft: number | null };
+      c.selectedInvoiceUid = OPEN_INVOICE.invoiceUid;
+      c.amountDraft = 10000;
+      await stabilise(fixture);
+
+      fixture.nativeElement.querySelector('button[type="submit"]').click();
+      await stabilise(fixture);
+
+      // Must render as banner (alert-danger), not inline field error
+      const banner: HTMLElement = fixture.nativeElement.querySelector('.alert-danger');
+      expect(banner).withContext('banner error must be present').toBeTruthy();
+      expect(banner.textContent).toContain('fully allocated');
+      // No inline amountError
+      expect(fixture.nativeElement.querySelector('.invalid-feedback')).toBeNull();
+    });
+
+    it('maps 422 without FULLY_ALLOCATED message to an amount field error', async () => {
       const spy = jasmine.createSpyObj<ProcurementService>('ProcurementService', [
         'getSupplierOpenInvoices', 'applyVendorCreditNote',
       ]);
