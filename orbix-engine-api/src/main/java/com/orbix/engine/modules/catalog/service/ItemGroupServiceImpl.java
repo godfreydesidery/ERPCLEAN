@@ -7,6 +7,7 @@ import com.orbix.engine.modules.catalog.domain.dto.UpdateItemGroupRequestDto;
 import com.orbix.engine.modules.catalog.domain.entity.ItemGroup;
 import com.orbix.engine.modules.catalog.domain.enums.ItemStatus;
 import com.orbix.engine.modules.catalog.repository.ItemGroupRepository;
+import com.orbix.engine.modules.catalog.repository.ItemRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +30,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ItemGroupServiceImpl implements ItemGroupService {
 
+    /** PRD §3.1: item-group hierarchy must not exceed 4 levels. */
+    static final int MAX_LEVEL = 4;
+
     private final ItemGroupRepository groups;
+    private final ItemRepository items;
     private final RequestContext context;
 
     @Override
@@ -53,6 +58,10 @@ public class ItemGroupServiceImpl implements ItemGroupService {
         int level = 1;
         if (request.parentId() != null) {
             level = requireGroupById(request.parentId()).getLevel() + 1;
+        }
+        if (level > MAX_LEVEL) {
+            throw new IllegalArgumentException(
+                "Item group hierarchy cannot exceed " + MAX_LEVEL + " levels");
         }
         ItemGroup group = groups.save(new ItemGroup(
             companyId, request.parentId(), level, code, request.name(), context.userId()));
@@ -81,6 +90,14 @@ public class ItemGroupServiceImpl implements ItemGroupService {
             ItemGroup newParent = requireGroupById(newParentId);
             newLevel = newParent.getLevel() + 1;
         }
+        // The subtree shifts by delta; the deepest leaf must still fit within MAX_LEVEL.
+        int currentDepth = collectMaxDepth(groupId, groups.findByCompanyId(context.companyId()));
+        int projectedMax = newLevel + (currentDepth - group.getLevel());
+        if (projectedMax > MAX_LEVEL) {
+            throw new IllegalArgumentException(
+                "Move would push the subtree to level " + projectedMax
+                    + " which exceeds the maximum of " + MAX_LEVEL);
+        }
 
         List<ItemGroup> companyGroups = groups.findByCompanyId(context.companyId());
         Set<Long> subtree = collectSubtree(groupId, companyGroups);
@@ -103,7 +120,14 @@ public class ItemGroupServiceImpl implements ItemGroupService {
     @Transactional
     @Auditable(action = "ARCHIVE", entityType = "ItemGroup")
     public void archiveGroupByUid(String uid) {
-        requireGroupByUid(uid).archive(context.userId());
+        ItemGroup group = requireGroupByUid(uid);
+        long activeItemCount = items.countByItemGroupIdAndStatus(group.getId(), ItemStatus.ACTIVE);
+        if (activeItemCount > 0) {
+            throw new IllegalArgumentException(
+                "Cannot archive group '" + group.getCode() + "': it still has "
+                    + activeItemCount + " active item(s). Archive or move items first.");
+        }
+        group.archive(context.userId());
     }
 
     @Override
@@ -115,6 +139,31 @@ public class ItemGroupServiceImpl implements ItemGroupService {
             throw new IllegalArgumentException("Item group is already active: " + uid);
         }
         group.activate(context.userId());
+    }
+
+    /**
+     * The maximum level (depth) of any node in the subtree rooted at {@code rootId},
+     * computed from an already-loaded company group list to avoid extra queries.
+     */
+    private int collectMaxDepth(Long rootId, List<ItemGroup> companyGroups) {
+        Map<Long, List<ItemGroup>> childrenByParent = companyGroups.stream()
+            .filter(g -> g.getParentId() != null)
+            .collect(Collectors.groupingBy(ItemGroup::getParentId));
+        Map<Long, Integer> levelById = companyGroups.stream()
+            .collect(Collectors.toMap(ItemGroup::getId, ItemGroup::getLevel));
+
+        int max = levelById.getOrDefault(rootId, 1);
+        Deque<Long> queue = new ArrayDeque<>(List.of(rootId));
+        Set<Long> visited = new HashSet<>();
+        while (!queue.isEmpty()) {
+            Long current = queue.poll();
+            if (!visited.add(current)) continue;
+            for (ItemGroup child : childrenByParent.getOrDefault(current, new ArrayList<>())) {
+                max = Math.max(max, levelById.getOrDefault(child.getId(), child.getLevel()));
+                queue.add(child.getId());
+            }
+        }
+        return max;
     }
 
     /** The group plus all of its descendants, by id. */

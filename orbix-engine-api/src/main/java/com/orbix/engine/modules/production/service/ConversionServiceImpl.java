@@ -108,15 +108,17 @@ public class ConversionServiceImpl implements ConversionService {
 
         // Outbound first so a negative-stock guard fires before the inbound
         // recomputes avg cost — the transaction rolls both back on failure.
+        // ISSUE-PROD-001: use CONV_CONSUME/CONV_OUTPUT so conversions are
+        // distinguishable from production-batch moves in the stock ledger.
         stockMoveService.post(new PostStockMoveRequestDto(
             conv.getFromItemId(), conv.getBranchId(),
             conv.getFromQty().negate(), null,
-            StockMoveType.PROD_CONSUME, AGG, conv.getId(),
+            StockMoveType.CONV_CONSUME, AGG, conv.getId(),
             "Conversion " + conv.getNumber(), false, null));
         stockMoveService.post(new PostStockMoveRequestDto(
             conv.getToItemId(), conv.getBranchId(),
             conv.getToQty(), toUnitCost,
-            StockMoveType.PROD_OUTPUT, AGG, conv.getId(),
+            StockMoveType.CONV_OUTPUT, AGG, conv.getId(),
             "Conversion " + conv.getNumber(), false, null));
 
         conv.markPosted(toUnitCost, context.userId());

@@ -1,6 +1,6 @@
 -- Orbix Engine — item conversion (F7.4). DATA-MODEL §9.6.
 -- One-shot non-BOM transformation: bulk-flour -> packed-flour, raw-fruit ->
--- chopped-fruit, etc. Posts paired PROD_CONSUME (from_item) + PROD_OUTPUT
+-- chopped-fruit, etc. Posts paired CONV_CONSUME (from_item) + CONV_OUTPUT
 -- (to_item) stock_moves in one transaction. Distinct from a production_batch
 -- — no plan / start phase, no consumption / output line tables, no lifecycle.
 --
