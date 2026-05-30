@@ -9,7 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
-import { StockTransfer } from './stock.models';
+import { StockTransfer, StockTransferLine } from './stock.models';
 
 @Component({
   selector: 'orbix-stock-transfers',
@@ -24,33 +24,38 @@ import { StockTransfer } from './stock.models';
         <h1 class="h3 fw-bold mb-1 text-dark">Stock transfers</h1>
         <p class="text-secondary mb-0 small">{{ transfers().length }} transfer{{ transfers().length === 1 ? '' : 's' }} on file.</p>
       </div>
-      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()">
-        <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()"></i>
+      <button class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" (click)="toggleForm()"
+              [attr.aria-expanded]="showForm()">
+        <i class="bi" [class.bi-plus-lg]="!showForm()" [class.bi-x-lg]="showForm()" aria-hidden="true"></i>
         {{ showForm() ? 'Close form' : 'New transfer' }}
       </button>
     </header>
 
     @if (error()) {
-      <div class="alert alert-danger d-flex align-items-center gap-2 py-2">
-        <i class="bi bi-exclamation-triangle-fill"></i><span class="flex-grow-1">{{ error() }}</span>
-        <button type="button" class="btn-close btn-sm" (click)="error.set(null)"></button>
+      <div class="alert alert-danger d-flex align-items-center gap-2 py-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        <span class="flex-grow-1">{{ error() }}</span>
+        <button type="button" class="btn-close btn-sm" aria-label="Dismiss error" (click)="error.set(null)"></button>
       </div>
     }
 
     @if (showForm()) {
-      <div class="card border-0 shadow-sm mb-3">
+      <div class="card border-0 shadow-sm mb-3" role="region" aria-label="New stock transfer form">
         <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
           <h2 class="h6 fw-bold mb-0 text-dark">New stock transfer</h2>
-          <button class="btn-close btn-sm" (click)="toggleForm()"></button>
+          <button class="btn-close btn-sm" aria-label="Close new transfer form" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3">
-          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
+          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3" novalidate>
             <fieldset class="form-fieldset">
-              <legend class="form-fieldset__legend"><i class="bi bi-arrow-left-right text-secondary"></i> Header</legend>
+              <legend class="form-fieldset__legend">
+                <i class="bi bi-arrow-left-right text-secondary" aria-hidden="true"></i> Header
+              </legend>
               <div class="row g-2">
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Number</label>
-                  <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="ST0001">
+                  <label class="form-label small fw-semibold text-secondary" for="tr-number">Number</label>
+                  <input id="tr-number" class="form-control font-monospace" name="num"
+                         [(ngModel)]="newNumber" required placeholder="ST0001">
                 </div>
                 <div class="col-md-4">
                   <orbix-branch-picker
@@ -74,7 +79,9 @@ import { StockTransfer } from './stock.models';
             </fieldset>
 
             <fieldset class="form-fieldset">
-              <legend class="form-fieldset__legend"><i class="bi bi-list-ul text-secondary"></i> First line</legend>
+              <legend class="form-fieldset__legend">
+                <i class="bi bi-list-ul text-secondary" aria-hidden="true"></i> First line
+              </legend>
               <div class="row g-2">
                 <div class="col-md-6">
                   <orbix-item-typeahead
@@ -84,8 +91,8 @@ import { StockTransfer } from './stock.models';
                   </orbix-item-typeahead>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Quantity</label>
-                  <input class="form-control text-end" type="number" step="0.0001" min="0.0001"
+                  <label class="form-label small fw-semibold text-secondary" for="tr-qty">Quantity</label>
+                  <input id="tr-qty" class="form-control text-end" type="number" step="0.0001" min="0.0001"
                          name="qt" [(ngModel)]="newQty" required>
                 </div>
               </div>
@@ -94,8 +101,12 @@ import { StockTransfer } from './stock.models';
             <div class="d-flex gap-2 pt-2 border-top">
               <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
                       [disabled]="busy() || !newFrom || !newTo || !newItemId || !newNumber">
-                @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
-                @else { <i class="bi bi-arrow-left-right"></i> }
+                @if (busy()) {
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  <span class="visually-hidden">Creating…</span>
+                } @else {
+                  <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                }
                 Create transfer
               </button>
               <button type="button" class="btn btn-outline-secondary" (click)="toggleForm()">Cancel</button>
@@ -106,6 +117,7 @@ import { StockTransfer } from './stock.models';
     }
 
     <div class="row g-3 g-md-4">
+      <!-- Left: transfer list -->
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm overflow-hidden">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
@@ -113,26 +125,30 @@ import { StockTransfer } from './stock.models';
             <span class="badge text-bg-light text-secondary">{{ transfers().length }}</span>
           </div>
           @if (transfers().length === 0) {
-            <div class="p-5 text-center">
-              <div class="empty-icon mx-auto mb-3"><i class="bi bi-arrow-left-right"></i></div>
+            <div class="p-5 text-center" role="status">
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></div>
               <p class="small text-secondary mb-0">No transfers yet.</p>
             </div>
           } @else {
-            <ul class="list-unstyled mb-0 tr-list">
+            <ul class="list-unstyled mb-0 tr-list" role="list">
               @for (t of transfers(); track t.id) {
-                <li>
+                <li role="listitem">
                   <button type="button" class="tr-row"
                           [class.is-active]="selected()?.id === t.id"
+                          [attr.aria-pressed]="selected()?.id === t.id"
+                          [attr.aria-label]="'Transfer ' + t.number + ', status ' + t.status"
                           (click)="select(t)">
                     <div class="flex-grow-1 min-w-0">
                       <div class="d-flex align-items-center gap-2 mb-1">
                         <span class="badge text-bg-light border text-secondary font-monospace">{{ t.number }}</span>
-                        <span class="status-badge status-badge--{{ t.status.toLowerCase() }}">
-                          <span class="status-badge__dot"></span>{{ t.status }}
+                        <span class="status-badge status-badge--{{ t.status.toLowerCase() }}"
+                              [attr.aria-label]="'Status: ' + t.status">
+                          <span class="status-badge__dot" aria-hidden="true"></span>{{ t.status }}
                         </span>
                       </div>
                       <p class="small text-secondary mb-0">
-                        Branch #{{ t.fromBranchId }} <i class="bi bi-arrow-right"></i> #{{ t.toBranchId }}
+                        {{ t.fromBranchId }} <i class="bi bi-arrow-right" aria-hidden="true"></i> {{ t.toBranchId }}
+                        &bull; {{ t.lines.length }} line{{ t.lines.length === 1 ? '' : 's' }}
                       </p>
                     </div>
                   </button>
@@ -143,83 +159,215 @@ import { StockTransfer } from './stock.models';
         </div>
       </div>
 
+      <!-- Right: transfer detail -->
       <div class="col-12 col-lg-7">
         @if (selected(); as transfer) {
+
+          <!-- Header card -->
           <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-4">
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
                   <p class="small text-secondary mb-1">
-                    Branch #{{ transfer.fromBranchId }} <i class="bi bi-arrow-right"></i> #{{ transfer.toBranchId }}
+                    Branch {{ transfer.fromBranchId }}
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    {{ transfer.toBranchId }}
                   </p>
                   <h2 class="h4 fw-bold mb-1 text-dark">{{ transfer.number }}</h2>
-                  <span class="status-badge status-badge--{{ transfer.status.toLowerCase() }}">
-                    <span class="status-badge__dot"></span>{{ transfer.status }}
+                  <span class="status-badge status-badge--{{ transfer.status.toLowerCase() }}"
+                        [attr.aria-label]="'Status: ' + transfer.status">
+                    <span class="status-badge__dot" aria-hidden="true"></span>{{ transfer.status }}
                   </span>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
                   @if (transfer.status === 'DRAFT') {
                     <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
-                            (click)="issue(transfer)" [disabled]="busy()">
-                      <i class="bi bi-box-arrow-up"></i> Issue
+                            (click)="issue(transfer)" [disabled]="busy()"
+                            title="Issue the transfer and deduct stock from the source branch">
+                      @if (busy()) {
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                      } @else {
+                        <i class="bi bi-box-arrow-up" aria-hidden="true"></i>
+                      }
+                      Issue
                     </button>
                   }
-                  @if (transfer.status === 'ISSUED') {
-                    <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
-                            (click)="receive(transfer)" [disabled]="busy()">
-                      <i class="bi bi-box-arrow-in-down"></i> Receive
+                  @if (transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT') {
+                    <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1"
+                            (click)="receive(transfer)" [disabled]="busy() || !hasReceiveDraft()"
+                            title="Confirm receipt of goods and credit stock at the destination branch">
+                      @if (busy()) {
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                      } @else {
+                        <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i>
+                      }
+                      Confirm receipt
                     </button>
                   }
                   @if (transfer.status === 'RECEIVED') {
                     <button class="btn btn-sm btn-warning text-dark d-inline-flex align-items-center gap-1"
-                            (click)="close(transfer)" [disabled]="busy()">
-                      <i class="bi bi-lock"></i> Close
+                            (click)="close(transfer)" [disabled]="busy()"
+                            title="Close and reconcile this transfer">
+                      @if (busy()) {
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                      } @else {
+                        <i class="bi bi-lock" aria-hidden="true"></i>
+                      }
+                      Close
                     </button>
                   }
                 </div>
               </div>
+
+              @if (transfer.issuedAt) {
+                <dl class="row small mb-0">
+                  <dt class="col-5 col-md-4 text-secondary">Issued</dt>
+                  <dd class="col-7 col-md-8 mb-1">{{ transfer.issuedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+                  @if (transfer.receivedAt) {
+                    <dt class="col-5 col-md-4 text-secondary">Received</dt>
+                    <dd class="col-7 col-md-8 mb-1">{{ transfer.receivedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+                  }
+                </dl>
+              }
             </div>
           </div>
 
+          <!-- Receive-mode hint banner -->
+          @if (transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT') {
+            <div class="alert alert-info d-flex align-items-start gap-2 py-2 mb-3 small" role="note">
+              <i class="bi bi-info-circle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <span>
+                Enter the quantity actually received for each line. Quantities default to the
+                issued amount — adjust any line where the physical count differs. Click
+                <strong>Confirm receipt</strong> to credit stock at the destination branch.
+              </span>
+            </div>
+          }
+
+          <!-- Lines card -->
           <div class="card border-0 shadow-sm overflow-hidden">
             <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
               <h3 class="h6 fw-bold mb-0 text-dark">Lines</h3>
               <span class="badge text-bg-light text-secondary">{{ transfer.lines.length }}</span>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0 simple-table">
+              <table class="table table-hover align-middle mb-0 simple-table"
+                     [attr.aria-label]="'Lines for transfer ' + transfer.number">
+                <caption class="visually-hidden">
+                  Transfer lines for {{ transfer.number }}:
+                  issued quantities, received quantities{{ transfer.status === 'RECEIVED' || transfer.status === 'CLOSED' ? ', and variance' : '' }}, and costs.
+                </caption>
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th class="text-end">Issued</th>
-                    <th class="text-end">Received</th>
-                    <th class="text-end">Cost</th>
+                    <th scope="col">Item ID</th>
+                    <th scope="col" class="text-end">Issued</th>
+                    <th scope="col" class="text-end" [attr.style]="receiveColumnWidth(transfer)">
+                      @if (transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT') {
+                        Received (edit)
+                      } @else {
+                        Received
+                      }
+                    </th>
+                    @if (transfer.status === 'RECEIVED' || transfer.status === 'CLOSED') {
+                      <th scope="col" class="text-end">Variance</th>
+                    }
+                    <th scope="col" class="text-end">Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (l of transfer.lines; track l.id) {
-                    <tr>
-                      <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ l.itemId }}</span></td>
-                      <td class="text-end">{{ l.issuedQty }}</td>
-                      <td class="text-end" style="width: 160px">
-                        @if (transfer.status === 'ISSUED') {
-                          <input class="form-control form-control-sm text-end" type="number"
-                                 [(ngModel)]="receiveDraft[l.id]">
+                    <tr [class.table-warning]="isVarianceLine(l)">
+                      <td>
+                        <span class="badge text-bg-light border text-secondary font-monospace small">
+                          {{ l.itemId }}
+                        </span>
+                      </td>
+                      <td class="text-end">{{ l.issuedQty | number:'1.0-4' }}</td>
+                      <td class="text-end" [attr.style]="receiveColumnWidth(transfer)">
+                        @if (transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT') {
+                          <input class="form-control form-control-sm text-end"
+                                 type="number"
+                                 step="0.0001" min="0"
+                                 [name]="'recv-' + l.id"
+                                 [(ngModel)]="receiveDraft[l.id]"
+                                 [attr.aria-label]="'Received quantity for item ' + l.itemId"
+                                 [class.border-warning]="receiveDraft[l.id] !== null && +receiveDraft[l.id]! !== l.issuedQty">
                         } @else {
-                          <span class="fw-semibold">{{ l.receivedQty ?? '—' }}</span>
+                          <span class="fw-semibold">{{ l.receivedQty !== null ? (l.receivedQty | number:'1.0-4') : '—' }}</span>
                         }
                       </td>
+                      @if (transfer.status === 'RECEIVED' || transfer.status === 'CLOSED') {
+                        <td class="text-end">
+                          @if (l.receivedQty !== null) {
+                            @if (variance(l) === 0) {
+                              <span class="text-success fw-semibold" title="No variance">0</span>
+                            } @else {
+                              <span class="badge rounded-pill text-bg-warning"
+                                    [title]="variance(l) > 0 ? 'Surplus: received more than issued' : 'Shortage: received less than issued'">
+                                {{ variance(l) > 0 ? '+' : '' }}{{ variance(l) | number:'1.0-4' }}
+                              </span>
+                            }
+                          } @else {
+                            <span class="text-secondary">—</span>
+                          }
+                        </td>
+                      }
                       <td class="text-end small text-secondary">{{ l.costAmount | number:'1.2-2' }}</td>
                     </tr>
                   }
                 </tbody>
+                @if ((transfer.status === 'RECEIVED' || transfer.status === 'CLOSED') && totalVariance(transfer) !== 0) {
+                  <tfoot>
+                    <tr class="table-light">
+                      <td colspan="2" class="text-end small fw-semibold text-secondary">Net variance</td>
+                      <td class="text-end"></td>
+                      <td class="text-end">
+                        <span class="badge rounded-pill"
+                              [class.text-bg-warning]="totalVariance(transfer) !== 0"
+                              [class.text-bg-success]="totalVariance(transfer) === 0">
+                          {{ totalVariance(transfer) > 0 ? '+' : '' }}{{ totalVariance(transfer) | number:'1.0-4' }}
+                        </span>
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                }
               </table>
             </div>
+
+            <!-- Receive-mode footer with totals -->
+            @if (transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT') {
+              <div class="card-footer bg-white border-top px-3 py-2 d-flex align-items-center justify-content-between small">
+                <span class="text-secondary">
+                  Draft variance:
+                  @if (draftVarianceTotal(transfer) === 0) {
+                    <span class="text-success fw-semibold">none</span>
+                  } @else {
+                    <span class="fw-semibold text-warning-emphasis">
+                      {{ draftVarianceTotal(transfer) > 0 ? '+' : '' }}{{ draftVarianceTotal(transfer) | number:'1.0-4' }}
+                    </span>
+                    <span class="text-muted ms-1">(lines with differences are highlighted)</span>
+                  }
+                </span>
+                <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1"
+                        (click)="receive(transfer)"
+                        [disabled]="busy() || !hasReceiveDraft()"
+                        aria-label="Submit received quantities and post receipt">
+                  @if (busy()) {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-check-circle" aria-hidden="true"></i>
+                  }
+                  Confirm receipt
+                </button>
+              </div>
+            }
           </div>
+
         } @else {
           <div class="card border-0 shadow-sm">
             <div class="card-body p-5 text-center">
-              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor"></i></div>
+              <div class="empty-icon mx-auto mb-3"><i class="bi bi-cursor" aria-hidden="true"></i></div>
               <h2 class="h6 fw-bold mb-1 text-dark">Pick a transfer</h2>
               <p class="small text-secondary mb-0">Or draft a new one to move stock between branches.</p>
             </div>
@@ -261,6 +409,7 @@ import { StockTransfer } from './stock.models';
     .simple-table tbody td { padding: 0.65rem 1rem; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
     .simple-table tbody tr:last-child td { border-bottom: none; }
     .simple-table tbody tr:hover { background: #f8fafc; }
+    .simple-table tfoot td { padding: 0.5rem 1rem; }
 
     .status-badge {
       display: inline-flex; align-items: center; gap: 0.375rem;
@@ -268,14 +417,16 @@ import { StockTransfer } from './stock.models';
       font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
     }
     .status-badge__dot { width: 6px; height: 6px; border-radius: 50%; }
-    .status-badge--draft    { background: #f3f4f6; color: #4b5563; }
-    .status-badge--draft .status-badge__dot    { background: #9ca3af; }
-    .status-badge--issued   { background: #e0ecff; color: #1d4ed8; }
-    .status-badge--issued .status-badge__dot   { background: #3b82f6; }
-    .status-badge--received { background: #fef3c7; color: #92400e; }
-    .status-badge--received .status-badge__dot { background: #f59e0b; }
-    .status-badge--closed   { background: #d1fae5; color: #047857; }
-    .status-badge--closed .status-badge__dot   { background: #10b981; }
+    .status-badge--draft      { background: #f3f4f6; color: #4b5563; }
+    .status-badge--draft .status-badge__dot      { background: #9ca3af; }
+    .status-badge--issued     { background: #e0ecff; color: #1d4ed8; }
+    .status-badge--issued .status-badge__dot     { background: #3b82f6; }
+    .status-badge--in_transit { background: #fef3c7; color: #92400e; }
+    .status-badge--in_transit .status-badge__dot { background: #f59e0b; }
+    .status-badge--received   { background: #fef9c3; color: #854d0e; }
+    .status-badge--received .status-badge__dot   { background: #eab308; }
+    .status-badge--closed     { background: #d1fae5; color: #047857; }
+    .status-badge--closed .status-badge__dot     { background: #10b981; }
 
     .empty-icon {
       width: 64px; height: 64px; border-radius: 16px;
@@ -317,6 +468,44 @@ export class TransfersComponent implements OnInit {
     }
   }
 
+  /** True when at least one line has a non-null draft qty. */
+  hasReceiveDraft(): boolean {
+    return Object.values(this.receiveDraft).some(v => v !== null && v !== undefined);
+  }
+
+  /** Line-level variance (received – issued). */
+  variance(line: StockTransferLine): number {
+    if (line.receivedQty === null) return 0;
+    return line.receivedQty - line.issuedQty;
+  }
+
+  /** Whether the line has a non-zero variance (used to highlight table rows). */
+  isVarianceLine(line: StockTransferLine): boolean {
+    return line.receivedQty !== null && line.receivedQty !== line.issuedQty;
+  }
+
+  /** Net variance across all received lines. */
+  totalVariance(transfer: StockTransfer): number {
+    return transfer.lines.reduce((sum, l) => sum + this.variance(l), 0);
+  }
+
+  /**
+   * Draft variance (before submit) — compares the editable receiveDraft entries
+   * against the issued quantities so the user can see the net diff while editing.
+   */
+  draftVarianceTotal(transfer: StockTransfer): number {
+    return transfer.lines.reduce((sum, l) => {
+      const recv = this.receiveDraft[l.id];
+      return sum + ((recv !== null && recv !== undefined ? +recv : l.issuedQty) - l.issuedQty);
+    }, 0);
+  }
+
+  receiveColumnWidth(transfer: StockTransfer): string {
+    return transfer.status === 'ISSUED' || transfer.status === 'IN_TRANSIT'
+      ? 'width: 160px'
+      : '';
+  }
+
   create(): void {
     if (!this.newFrom || !this.newTo || !this.newItemId) return;
     this.run(this.stock.createTransfer({
@@ -340,8 +529,9 @@ export class TransfersComponent implements OnInit {
 
   receive(transfer: StockTransfer): void {
     const lines = transfer.lines
-      .filter(l => this.receiveDraft[l.id] != null)
+      .filter(l => this.receiveDraft[l.id] !== null && this.receiveDraft[l.id] !== undefined)
       .map(l => ({ lineId: l.id, receivedQty: Number(this.receiveDraft[l.id]) }));
+    if (lines.length === 0) return;
     this.run(this.stock.receiveTransfer(transfer.uid, { lines }), updated => this.refresh(updated));
   }
 
