@@ -115,6 +115,10 @@ public class RoleAdminServiceImpl implements RoleAdminService {
         if (userRoles.existsByRoleIdAndRevokedAtIsNull(role.getId())) {
             throw new IllegalArgumentException("Role still has active grants — revoke them first");
         }
+        // Revoked user_role rows are soft-deleted (revoked_at IS NOT NULL) and keep
+        // a FK reference to this role. Physically purge them before deleting the role
+        // so the FK constraint is not violated. Audit history lives in the audit_log.
+        userRoles.deleteByRoleIdAndRevokedAtIsNotNull(role.getId());
         roles.delete(role);
     }
 

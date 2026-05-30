@@ -158,11 +158,8 @@ public class SupplierDebtReadModelServiceImpl implements SupplierDebtReadModelSe
         List<SupplierDunningQueueRowDto> all = new ArrayList<>(bySupplier.size());
         for (SupplierAgingAccumulator acc : bySupplier.values()) {
             BigDecimal outstanding = acc.totalOutstanding();
-            if (outstanding.signum() <= 0) {
-                continue;
-            }
             AgingBucket worst = acc.worstBucket();
-            if (bucketFilter != null && worst != bucketFilter) {
+            if (outstanding.signum() <= 0 || !matchesDunningFilter(worst, bucketFilter)) {
                 continue;
             }
             Party party = partyById.get(acc.supplierId);
@@ -202,6 +199,25 @@ public class SupplierDebtReadModelServiceImpl implements SupplierDebtReadModelSe
     // ---------------------------------------------------------------------
     // Internals
     // ---------------------------------------------------------------------
+
+    /**
+     * Returns {@code true} when the accumulator's worst bucket should appear
+     * in the dunning queue.
+     *
+     * <ul>
+     *   <li>Explicit {@code bucketFilter}: only rows matching that bucket pass.</li>
+     *   <li>No filter ({@code null}): only suppliers with at least one overdue
+     *       invoice pass — CURRENT-only suppliers are excluded per spec
+     *       ("returns overdue suppliers").</li>
+     * </ul>
+     */
+    private static boolean matchesDunningFilter(AgingBucket worst, AgingBucket bucketFilter) {
+        if (bucketFilter != null) {
+            return worst == bucketFilter;
+        }
+        // Unfiltered queue: exclude suppliers with no overdue invoices.
+        return worst != AgingBucket.CURRENT;
+    }
 
     private SupplierStatementDto buildStatement(SupplierWithParty swp) {
         LocalDate today = LocalDate.now();

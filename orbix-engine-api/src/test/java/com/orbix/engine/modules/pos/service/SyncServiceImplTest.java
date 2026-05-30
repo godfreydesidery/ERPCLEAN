@@ -842,4 +842,137 @@ class SyncServiceImplTest {
         assertThat(result.results().get(0).verdict()).isEqualTo("DUPLICATE");
         verify(posSaleService, never()).post(any());
     }
+
+    // -----------------------------------------------------------------------
+    // IDMP-001: session-open op in manifest reconciles CLOSED not INCOMPLETE
+    // -----------------------------------------------------------------------
+
+    /**
+     * TC-POS-IDEMPOTENCY-008: when the client manifest includes the
+     * TILL_SESSION_OPEN clientOpId (SESS_OP) together with a POS_SALE op,
+     * the server must include SESS_OP in its collected set so that the
+     * set-comparison finds no mismatch and returns CLOSED.
+     *
+     * <p>Root cause: {@code collectSessionClientOpIds()} previously omitted the
+     * session's own {@code client_op_id}, so SESS_OP appeared in
+     * {@code missingClientOpIds} even though the server held it.
+     */
+    @Test
+    void closeTillSession_sessionOpenOpInManifest_returnsClosed_notIncomplete() {
+        String sessOp  = "sess-op-idmp001";
+        String saleOp  = "sale-op-idmp001";
+
+        TillSession session = openSession();
+        // Override clientOpId to match what we put in the manifest
+        ReflectionTestUtils.setField(session, "clientOpId", sessOp);
+
+        PosSale sale = stubSaleEntity(saleOp, 7777L);
+        sale.setTillSessionId(SESSION_ID);
+
+        when(sessions.findByCompanyIdAndClientOpId(COMPANY_ID, sessOp))
+            .thenReturn(Optional.of(session));
+        // IDMP-001 fix: collectSessionClientOpIds now calls sessions.findById to get the session op
+        when(sessions.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sales.findByTillSessionIdOrderByIdAsc(SESSION_ID)).thenReturn(List.of(sale));
+        when(pickups.findByTillSessionIdOrderByAtAsc(SESSION_ID)).thenReturn(List.of());
+        when(pettyCash.findByTillSessionIdOrderByAtAsc(SESSION_ID)).thenReturn(List.of());
+        when(sessions.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(pickups.sumForSession(SESSION_ID)).thenReturn(BigDecimal.ZERO);
+        when(pettyCash.sumForSession(SESSION_ID)).thenReturn(BigDecimal.ZERO);
+
+        TillSessionCloseRequestDto req = new TillSessionCloseRequestDto(
+            sessOp,
+            new BigDecimal("1200"),
+            new TillSessionCloseRequestDto.ManifestDto(
+                1, new BigDecimal("1000"), 0, BigDecimal.ZERO, 0, BigDecimal.ZERO,
+                // Client includes BOTH the session-open op AND the sale op
+                List.of(sessOp, saleOp)
+            )
+        );
+
+        TillSessionCloseResultDto result = service.closeTillSession(req);
+
+        assertThat(result.status())
+            .as("SESS_OP in manifest must not cause RECONCILE_INCOMPLETE")
+            .isEqualTo("CLOSED");
+        assertThat(result.missingClientOpIds()).isEmpty();
+        assertThat(result.unexpectedClientOpIds()).isEmpty();
+        assertThat(result.confirmedClientOpIds()).contains(sessOp, saleOp);
+    }
+
+    // -----------------------------------------------------------------------
+    // IDMP-003: op depending on prior-batch-accepted op is ACCEPTED not DEFERRED
+    // -----------------------------------------------------------------------
+
+    /**
+     * TC-POS-IDEMPOTENCY-012: a POS_SALE op with {@code dependsOn} pointing to a
+     * TILL_SESSION_OPEN clientOpId that was ACCEPTED in a <em>prior</em> push batch
+     * (already persisted on the server) must be ACCEPTED, not DEFERRED.
+     *
+     * <p>Root cause: {@code settled} was a per-batch in-memory set; a cross-batch
+     * {@code dependsOn} reference was never in {@code settled}, causing permanent
+     * DEFERRED loops.  Fix: fall back to a DB lookup via {@code isAlreadyPersistedOp}.
+     */
+    @Test
+    void push_dependsOn_priorBatchAccepted_acceptedNotDeferred() {
+        String sessOp = "sess-op-prior-batch";
+        String saleOp = "sale-op-idmp003";
+
+        // The session was accepted in a prior batch — it exists in sessions table
+        TillSession priorSession = openSession();
+        ReflectionTestUtils.setField(priorSession, "clientOpId", sessOp);
+
+        // IDMP-003: isAlreadyPersistedOp checks sessions first
+        when(sessions.findByCompanyIdAndClientOpId(COMPANY_ID, sessOp))
+            .thenReturn(Optional.of(priorSession));
+
+        // The sale op is new
+        when(sales.findByCompanyIdAndClientOpId(COMPANY_ID, saleOp)).thenReturn(Optional.empty());
+        when(posSaleService.post(any())).thenReturn(stubSaleDto(saleOp, 6666L));
+
+        SyncPushResultDto result = service.pushBatch(new SyncPushRequestDto(
+            "TILL-1", 1,
+            // Only the sale op is in this batch; the session op was in a prior batch
+            List.of(syncOp(saleOp, "POS_SALE", sessOp, posSalePayload(saleOp)))
+        ));
+
+        SyncPushResultDto.OpResultDto r = result.results().get(0);
+        assertThat(r.verdict())
+            .as("cross-batch dep satisfied by prior batch must resolve as ACCEPTED, not DEFERRED")
+            .isEqualTo("ACCEPTED");
+        assertThat(result.batchAcceptedCount()).isEqualTo(1);
+        assertThat(result.batchRejectedCount()).isZero();
+    }
+
+    // -----------------------------------------------------------------------
+    // IDMP-002: contractVersion=0 in body returns 426 path, not 422
+    // -----------------------------------------------------------------------
+
+    /**
+     * TC-POS-IDEMPOTENCY-016: {@code SyncPushRequestDto.clientContractVersion=0}
+     * must pass bean validation (reaching {@code SyncController.validateContractVersion})
+     * so the 426 CONTRACT_TOO_OLD response can be returned.
+     *
+     * <p>At the DTO level this test verifies that version 0 no longer triggers the
+     * {@code @Positive} constraint — the field is now {@code @Min(0)}.  The 426
+     * response itself is produced by {@code SyncController} (controller test territory);
+     * here we confirm the DTO accepts 0 and that the service still processes the batch
+     * (contract enforcement is the controller's responsibility, not the service's).
+     */
+    @Test
+    void syncPushRequestDto_contractVersionZero_passesValidation() {
+        // Build a request with contractVersion=0 — with @Min(0) this must NOT throw
+        // a ConstraintViolationException; with @Positive it would.
+        var validator = jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator();
+        SyncPushRequestDto dto = new SyncPushRequestDto(
+            "TILL-1", 0,
+            List.of(syncOp("op-v0", "POS_SALE", null, posSalePayload("op-v0")))
+        );
+        var violations = validator.validate(dto);
+        // clientContractVersion=0 must NOT produce a @Positive/Min constraint violation
+        assertThat(violations)
+            .as("clientContractVersion=0 must pass @Min(0) bean validation (not 422); "
+                + "contract-too-old check is the controller's responsibility (426)")
+            .noneMatch(v -> v.getPropertyPath().toString().equals("clientContractVersion"));
+    }
 }

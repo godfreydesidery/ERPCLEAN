@@ -136,12 +136,21 @@ public class SyncServiceImpl implements SyncService {
         int rejected = 0;
 
         for (SyncOpDto op : request.ops()) {
-            // DEFERRED — dependsOn not yet settled
+            // DEFERRED — dependsOn not yet settled in this batch.
+            // IDMP-003: before deferring, check whether the depended-on op was already
+            // committed in a PRIOR push batch (i.e. exists in the DB for this company).
+            // A cross-batch dependency is already satisfied once the row is persisted.
             if (op.dependsOn() != null && !settled.contains(op.dependsOn())) {
-                log.debug("Sync DEFERRED clientOpId={} dependsOn={}", op.clientOpId(), op.dependsOn());
-                results.add(SyncPushResultDto.OpResultDto.deferred(op.clientOpId()));
-                // Don't count deferred as rejected; client re-pushes
-                continue;
+                if (!isAlreadyPersistedOp(op.dependsOn())) {
+                    log.debug("Sync DEFERRED clientOpId={} dependsOn={}", op.clientOpId(), op.dependsOn());
+                    results.add(SyncPushResultDto.OpResultDto.deferred(op.clientOpId()));
+                    // Don't count deferred as rejected; client re-pushes
+                    continue;
+                }
+                // Dependency satisfied by a prior batch — add to settled so siblings in
+                // this batch that also depend on it resolve in the same pass.
+                log.debug("Sync cross-batch dep resolved clientOpId={} dependsOn={}", op.clientOpId(), op.dependsOn());
+                settled.add(op.dependsOn());
             }
 
             SyncPushResultDto.OpResultDto result = applyOp(op);
@@ -683,10 +692,24 @@ public class SyncServiceImpl implements SyncService {
 
     /**
      * Collect all clientOpIds the server holds for a given till session.
-     * Includes: pos_sale, cash_pickup, petty_cash clientOpIds (non-null only).
+     *
+     * <p>IDMP-001 fix: the till_session's own {@code client_op_id} (stamped via the
+     * TILL_SESSION_OPEN push op) is now included at the head of the list.  The POS
+     * outbox naturally includes it in the manifest — omitting it from the server set
+     * caused a false RECONCILE_INCOMPLETE when the client's manifest contained it.
+     *
+     * <p>Includes: till_session (the OPEN op), pos_sale, cash_pickup, petty_cash
+     * clientOpIds (non-null only).
      */
     private List<String> collectSessionClientOpIds(Long sessionId, Long companyId) {
         List<String> ids = new ArrayList<>();
+        // IDMP-001: include the TILL_SESSION_OPEN clientOpId so it is part of the
+        // server set; the client manifest legitimately includes it.
+        sessions.findById(sessionId).ifPresent(s -> {
+            if (s.getClientOpId() != null) {
+                ids.add(s.getClientOpId());
+            }
+        });
         // Sales
         sales.findByTillSessionIdOrderByIdAsc(sessionId).stream()
             .filter(s -> s.getClientOpId() != null)
@@ -703,6 +726,25 @@ public class SyncServiceImpl implements SyncService {
             .map(PettyCash::getClientOpId)
             .forEach(ids::add);
         return ids;
+    }
+
+    /**
+     * IDMP-003: check whether a {@code clientOpId} was already committed in a prior
+     * push batch by querying all four op tables for the current company.
+     *
+     * <p>Used to resolve cross-batch {@code dependsOn} references without deferring
+     * forever.  The lookup is cheap because every table has a
+     * {@code uk_*_client_op (company_id, client_op_id)} unique index.
+     *
+     * @param clientOpId the op whose existence we are checking
+     * @return {@code true} if the op is already persisted on the server
+     */
+    private boolean isAlreadyPersistedOp(String clientOpId) {
+        Long companyId = context.companyId();
+        return sessions.findByCompanyIdAndClientOpId(companyId, clientOpId).isPresent()
+            || sales.findByCompanyIdAndClientOpId(companyId, clientOpId).isPresent()
+            || pickups.findByCompanyIdAndClientOpId(companyId, clientOpId).isPresent()
+            || pettyCash.findByCompanyIdAndClientOpId(companyId, clientOpId).isPresent();
     }
 
     /**

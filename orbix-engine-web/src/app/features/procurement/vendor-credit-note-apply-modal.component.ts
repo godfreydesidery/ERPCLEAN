@@ -299,7 +299,9 @@ export class VendorCreditNoteApplyModalComponent implements OnChanges {
       },
       error: (err: HttpErrorResponse) => {
         this.submitting.set(false);
-        if (err.status === 409) {
+        if (err.status === 409 || this.isFullyAllocated422(err)) {
+          // 409 kept for back-compat; server now emits 422 (PRECONDITION_FAILED)
+          // for the FULLY_ALLOCATED lifecycle guard — treat both as the same UX case.
           this.bannerError.set(
             'Credit note is fully allocated — no remaining credit to apply.'
           );
@@ -352,5 +354,18 @@ export class VendorCreditNoteApplyModalComponent implements OnChanges {
       return String((body as { message: unknown }).message);
     }
     return fallback;
+  }
+
+  /**
+   * Returns true when a 422 response body message signals a FULLY_ALLOCATED
+   * lifecycle guard violation (GlobalExceptionHandler maps IllegalStateException
+   * → 422 PRECONDITION_FAILED; the message contains "FULLY_ALLOCATED").
+   */
+  private isFullyAllocated422(err: HttpErrorResponse): boolean {
+    if (err.status !== 422) return false;
+    const body = err.error as unknown;
+    if (!body || typeof body !== 'object' || !('message' in body)) return false;
+    const msg = (body as Record<string, unknown>)['message'];
+    return typeof msg === 'string' && msg.includes('FULLY_ALLOCATED');
   }
 }

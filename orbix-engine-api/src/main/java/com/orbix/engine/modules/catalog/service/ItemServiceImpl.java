@@ -67,6 +67,9 @@ public class ItemServiceImpl implements ItemService {
             saved.getUid(),
             Map.of(ITEM_UID_KEY, saved.getUid(), "code", saved.getCode(), "companyId", companyId)
         );
+        if (request.batchTracked()) {
+            applyBatchTracking(saved, true, context.userId());
+        }
         return ItemResponseDto.from(saved);
     }
 
