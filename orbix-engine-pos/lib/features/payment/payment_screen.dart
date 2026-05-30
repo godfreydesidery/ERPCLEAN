@@ -4,9 +4,9 @@
 /// etc.). Tenders must sum to at least the sale total before completion is
 /// permitted. Change is calculated only on the cash tender line.
 ///
-/// Records the sale via [recordSale] in mocks.dart (existing pattern); the
-/// tender breakdown is carried in CompletedSale.tenders so the receipt and
-/// X-report can show it.
+/// Records the sale via [PosSaleRepository] (real Drift + outbox); the tender
+/// breakdown is carried in CompletedSale.tenders so the receipt and X-report
+/// can show it.
 ///
 /// Offline-capable: the sale op is enqueued in the outbox with the full
 /// tender breakdown in the payload; no network required.
@@ -16,7 +16,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/core_providers.dart' show deviceIdProvider;
 import '../_demo/mocks.dart';
+import '../till_session/till_session_providers.dart' show activeTillSessionProvider;
+import 'pos_sale_providers.dart';
 
 /// A single tender line added by the cashier.
 class TenderLine {
@@ -58,8 +61,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// Remaining amount not yet covered by committed tenders.
   double _remaining(double total) => (total - _tenderedTotal).clamp(0, double.infinity);
 
+  bool _submitting = false;
+
   bool _canComplete(double total) =>
-      _tenders.isNotEmpty && _tenderedTotal >= total;
+      _tenders.isNotEmpty && _tenderedTotal >= total && !_submitting;
 
   void _addTender(double total) {
     final rawText = _addAmountCtrl.text.replaceAll(',', '').trim();
@@ -99,15 +104,87 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     setState(() => _tenders.removeAt(index));
   }
 
-  void _complete(double total) {
+  Future<void> _complete(double total) async {
     if (!_canComplete(total)) return;
-    recordSale(
-      ref,
-      method: _tenders.length == 1 ? _tenders.first.method : PaymentMethod.cash,
+    setState(() => _submitting = true);
+    try {
+      await _recordSaleReal(total);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _recordSaleReal(double total) async {
+    final lines = ref.read(cartProvider);
+    final customer = ref.read(selectedCustomerProvider);
+    final subtotal = ref.read(cartSubtotalProvider);
+    final discount = ref.read(cartDiscountProvider);
+    final deviceId = ref.read(deviceIdProvider);
+    final tendersCopy = List<TenderLine>.unmodifiable(_tenders);
+
+    // Resolve the active session from Drift.
+    final activeSession = await ref.read(activeTillSessionProvider.future);
+
+    String receiptNo;
+    if (activeSession != null && activeSession.clientOpId.isNotEmpty) {
+      // Real path: write to Drift + outbox.
+      final saleRepo = ref.read(posSaleRepositoryProvider);
+      final today = _todayDate();
+      final result = await saleRepo.recordSale(
+        sessionLocalId: activeSession.localId,
+        sessionClientOpId: activeSession.clientOpId,
+        sessionServerId: activeSession.serverEntityId,
+        // sectionId: use 1 as the default HQ POS section. A follow-up should
+        // resolve from the till config or from a server-pushed POS section table.
+        sectionId: 1,
+        // customerId: use the walk-in customer id (1) when customer not resolved
+        // from Drift. Mock customers don't have server ids yet.
+        customerId: 1,
+        userId: activeSession.openedBy,
+        lines: lines,
+        tenders: tendersCopy,
+        deviceId: deviceId,
+        businessDate: today,
+      );
+      receiptNo = result.receiptNumber;
+    } else {
+      // Fallback: no active session — record in mock only (should not happen
+      // in production; cashier should have opened the till first).
+      receiptNo = recordSale(
+        ref,
+        method: tendersCopy.length == 1 ? tendersCopy.first.method : PaymentMethod.cash,
+        tendered: _tenderedTotal,
+        tenders: tendersCopy,
+      );
+    }
+
+    // Update the mock lastSaleProvider so the receipt screen can display it.
+    ref.read(lastSaleProvider.notifier).state = CompletedSale(
+      receiptNo: receiptNo,
+      lines: List.unmodifiable(lines),
+      customer: customer,
+      method: tendersCopy.length == 1 ? tendersCopy.first.method : PaymentMethod.cash,
+      subtotal: subtotal,
+      discount: discount,
+      total: total,
       tendered: _tenderedTotal,
-      tenders: List.unmodifiable(_tenders),
+      change: _tenderedTotal - total,
+      completedAt: DateTime.now(),
+      tillCode: activeSession?.tillCode ?? deviceId,
+      cashierName: activeSession?.cashierName ?? 'Cashier',
+      branchName: activeSession?.branchName ?? 'Branch HQ',
+      tenders: tendersCopy,
     );
-    context.go('/receipt');
+    ref.read(cartProvider.notifier).clear();
+
+    if (mounted) context.go('/receipt');
+  }
+
+  String _todayDate() {
+    final now = DateTime.now();
+    final mm = now.month.toString().padLeft(2, '0');
+    final dd = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$mm-$dd';
   }
 
   void _quickFill(double amount) {
@@ -412,8 +489,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           style: FilledButton.styleFrom(
                               padding:
                                   const EdgeInsets.symmetric(vertical: 16)),
-                          icon: const Icon(Icons.check),
-                          label: const Text('Complete payment'),
+                          icon: _submitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.check),
+                          label: Text(_submitting ? 'Recording...' : 'Complete payment'),
                         ),
                       ),
                     ],

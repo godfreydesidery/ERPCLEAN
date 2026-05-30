@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../_demo/mocks.dart';
 import '../catalog/catalog_providers.dart';
+import '../till_session/till_session_providers.dart' show cashierSessionProvider;
 import 'panes/cart_pane.dart';
 import 'panes/pharmacy_pane.dart';
 import 'panes/restaurant_pane.dart';
@@ -35,7 +36,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(cashierSessionProvider);
     final mode = ref.watch(modeProvider);
 
     if (session == null) {

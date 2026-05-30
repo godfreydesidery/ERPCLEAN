@@ -230,6 +230,16 @@ TillCloseStatus _statusFromString(String s) => switch (s.toUpperCase()) {
       _ => TillCloseStatus.reconcileIncomplete,
     };
 
+/// Convert a JSON money value to a canonical decimal string.
+/// The server returns BigDecimal values as JSON numbers; test mocks use strings.
+/// Both are accepted — callers always get a 4dp decimal string.
+String _toMoneyStr(dynamic value) {
+  if (value == null) return '0.0000';
+  if (value is String) return value;
+  if (value is num) return value.toStringAsFixed(4);
+  return value.toString();
+}
+
 class TillSessionCloseResult {
   final String tillSessionUid;
   final TillCloseStatus status;
@@ -259,10 +269,10 @@ class TillSessionCloseResult {
       TillSessionCloseResult(
         tillSessionUid: json['tillSessionUid'] as String,
         status: _statusFromString(json['status'] as String),
-        openingFloat: json['openingFloat'] as String,
-        expectedCash: json['expectedCash'] as String,
-        declaredCash: json['declaredCash'] as String,
-        variance: json['variance'] as String,
+        openingFloat: _toMoneyStr(json['openingFloat']),
+        expectedCash: _toMoneyStr(json['expectedCash']),
+        declaredCash: _toMoneyStr(json['declaredCash']),
+        variance: _toMoneyStr(json['variance']),
         confirmedClientOpIds:
             (json['confirmedClientOpIds'] as List<dynamic>).cast<String>(),
         missingClientOpIds:

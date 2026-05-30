@@ -21,13 +21,14 @@ import 'package:go_router/go_router.dart';
 import '../_demo/mocks.dart';
 import '../cash/cash_movement_providers.dart';
 import '../payment/payment_screen.dart' show TenderLine;
+import 'till_session_providers.dart' show activeTillSessionProvider, cashierSessionProvider;
 
 class XReportScreen extends ConsumerWidget {
   const XReportScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(cashierSessionProvider);
 
     if (session == null) {
       return Scaffold(
@@ -65,10 +66,10 @@ class _XReportBodyState extends ConsumerState<_XReportBody> {
   }
 
   Future<void> _loadMovements() async {
-    // SESSION_NOT_WIRED is the sentinel used when the till-open screen has not
-    // yet been wired to the Drift DB. When real wiring is in place this will
-    // be the actual sessionClientOpId from the DB row.
-    const sessionClientOpId = 'SESSION_NOT_WIRED';
+    // Read the active session clientOpId from the Drift-backed provider.
+    // Falls back to an empty string when no session is active (no ops found).
+    final activeSession = await ref.read(activeTillSessionProvider.future);
+    final sessionClientOpId = activeSession?.clientOpId ?? '';
     final repo = ref.read(cashMovementRepositoryProvider);
     final pickupTotal = await repo.cashPickupTotalForSession(sessionClientOpId);
     final pickupCount = await repo.cashPickupCountForSession(sessionClientOpId);

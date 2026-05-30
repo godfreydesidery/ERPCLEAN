@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../_demo/mocks.dart';
+import '../till_session/till_session_providers.dart' show activeTillSessionProvider;
 import 'cash_movement_providers.dart';
 
 class CashPickupScreen extends ConsumerStatefulWidget {
@@ -48,22 +49,28 @@ class _CashPickupScreenState extends ConsumerState<CashPickupScreen> {
       return;
     }
 
-    // The session clientOpId is stored in the mock session provider for now.
-    // In the real wired path this would come from the TillSession Drift row.
-    // TODO: wire to real TillSession.clientOpId from the DB when till-open is
-    // backed by the DB (the mock sessionProvider carries no clientOpId yet).
-    // For now we use a sentinel; the op is still durable in the outbox.
-    const sessionClientOpId = 'SESSION_NOT_WIRED';
-
     setState(() {
       _submitting = true;
       _error = null;
     });
 
+    // Read the active session clientOpId from the Drift-backed provider.
+    final activeSession = await ref.read(activeTillSessionProvider.future);
+    final sessionClientOpId = activeSession?.clientOpId ?? '';
+    if (sessionClientOpId.isEmpty) {
+      if (mounted) setState(() => _error = 'No active till session. Open the till first.');
+      if (mounted) setState(() => _submitting = false);
+      return;
+    }
+    // Server-side session id for the tillSessionId payload field (may be null
+    // if the session has not yet synced; back-filled by dispatcher on ACCEPTED).
+    final sessionServerId = activeSession?.serverEntityId;
+
     try {
       final repo = ref.read(cashMovementRepositoryProvider);
       await repo.recordCashPickup(
         tillSessionClientOpId: sessionClientOpId,
+        tillSessionServerId: sessionServerId,
         amount: amount,
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       );

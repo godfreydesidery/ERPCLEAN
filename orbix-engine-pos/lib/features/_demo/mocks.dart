@@ -259,7 +259,10 @@ class CartNotifier extends Notifier<List<CartLine>> {
     if (!item.hasPriceRow) return; // no synced price — not sellable
     final mockItem = MockItem(
       code: item.code,
-      barcode: '', // barcodes live in the Barcodes table; empty here is fine
+      // Store the server itemId in the barcode field so PosSaleRepository
+      // can recover it without a separate Drift lookup. This is a v1 shim;
+      // CartLine should carry itemId directly in a follow-up.
+      barcode: item.itemId.toString(),
       name: item.name,
       group: '', // item-group not exposed in CatalogItem v1
       price: item.price, // synced price from PriceRows

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../_demo/mocks.dart';
+import '../../data/auth/auth_providers.dart' show sessionProvider;
+import '../../data/sync/sync_providers.dart';
+import '../_demo/mocks.dart' hide sessionProvider;
+import 'till_session_providers.dart';
 
 class TillOpenScreen extends ConsumerStatefulWidget {
   const TillOpenScreen({super.key});
@@ -14,11 +17,17 @@ class TillOpenScreen extends ConsumerStatefulWidget {
 class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
   final _floatCtrl = TextEditingController(text: '100000');
   String _tillCode = 'TILL-1';
+  bool _opening = false;
+  String? _error;
 
+  // Till configuration: code → (server till id, display name).
+  // tillId must match the server-side till.id value. In v1 HQ has:
+  //   TILL-1 = id 1 (Front counter), TILL-2 = id 2 (Express), TILL-3 = id 3 (Bakery)
+  // These are seeded by the bootstrap / admin setup; match what the backend has.
   static const _tills = [
-    ('TILL-1', 'Front counter'),
-    ('TILL-2', 'Express lane'),
-    ('TILL-3', 'Bakery counter'),
+    (code: 'TILL-1', serverId: 1, name: 'Front counter'),
+    (code: 'TILL-2', serverId: 2, name: 'Express lane'),
+    (code: 'TILL-3', serverId: 3, name: 'Bakery counter'),
   ];
 
   @override
@@ -27,19 +36,73 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
     super.dispose();
   }
 
-  void _openTill() {
-    final tillName = _tills.firstWhere((t) => t.$1 == _tillCode).$2;
+  Future<void> _openTill() async {
+    final till = _tills.firstWhere((t) => t.code == _tillCode);
     final amount = double.tryParse(_floatCtrl.text.replaceAll(',', '')) ?? 0;
-    ref.read(sessionProvider.notifier).open(CashierSession(
-          cashierName: 'Cashier One',
-          tillCode: _tillCode,
-          tillName: tillName,
-          branchName: 'Branch HQ',
-          openedAt: DateTime.now(),
-          openingFloat: amount,
-          currency: 'TZS',
-        ));
-    context.go('/cart');
+
+    if (amount < 0) {
+      setState(() => _error = 'Opening float cannot be negative');
+      return;
+    }
+
+    setState(() {
+      _opening = true;
+      _error = null;
+    });
+
+    try {
+      final sessionRepo = ref.read(tillSessionRepositoryProvider);
+      // Pull the logged-in user identity from the auth session.
+      // Falls back to userId=1 when not available (should never happen in prod).
+      final authSession = ref.read(sessionProvider);
+      final userId = authSession?.userId ?? 1;
+      final cashierName = authSession?.displayName ?? 'Cashier';
+      const branchName = 'Branch HQ'; // TODO: resolve from JWT / config in follow-up
+
+      final businessDate = _todayDate();
+
+      final result = await sessionRepo.openSession(
+        tillId: till.serverId,
+        tillCode: till.code,
+        tillName: till.name,
+        openedBy: userId,
+        cashierName: cashierName,
+        branchName: branchName,
+        openingFloat: amount,
+        businessDate: businessDate,
+      );
+
+      // Populate the legacy mock sessionProvider so existing screens (cart header,
+      // X-report, till-close) that still watch it get a real session.
+      // cashierSessionProvider carries the real display data.
+      ref.read(cashierSessionProvider.notifier).state = CashierSession(
+        cashierName: cashierName,
+        tillCode: till.code,
+        tillName: till.name,
+        branchName: branchName,
+        openedAt: result.session.openedAt,
+        openingFloat: amount,
+        currency: 'TZS',
+      );
+
+      // Kick off a sync immediately so the TILL_SESSION_OPEN op is pushed
+      // and we get the server session id back as fast as possible.
+      ref.read(outboxDispatcherProvider).flush().ignore();
+
+      if (!mounted) return;
+      context.go('/cart');
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Failed to open till: $e');
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  String _todayDate() {
+    final now = DateTime.now();
+    final mm = now.month.toString().padLeft(2, '0');
+    final dd = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$mm-$dd';
   }
 
   @override
@@ -74,7 +137,7 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Welcome, Cashier One — pick a till, choose a mode, declare your opening float.',
+                      'Pick a till, choose a mode, declare your opening float.',
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 24),
@@ -155,8 +218,8 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
                       ),
                       items: _tills
                           .map((t) => DropdownMenuItem(
-                                value: t.$1,
-                                child: Text('${t.$1} · ${t.$2}'),
+                                value: t.code,
+                                child: Text('${t.code} · ${t.name}'),
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _tillCode = v ?? _tillCode),
@@ -167,12 +230,14 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
                     TextField(
                       controller: _floatCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Opening cash float (TZS)',
-                        prefixIcon: Icon(Icons.payments_outlined),
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.payments_outlined),
+                        border: const OutlineInputBorder(),
                         hintText: 'e.g. 100000',
+                        errorText: _error,
                       ),
+                      onChanged: (_) => setState(() => _error = null),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -200,7 +265,7 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => context.go('/login'),
+                            onPressed: _opening ? null : () => context.go('/login'),
                             style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                             child: const Text('Sign out'),
                           ),
@@ -209,10 +274,16 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
                         Expanded(
                           flex: 2,
                           child: FilledButton.icon(
-                            onPressed: _openTill,
+                            onPressed: _opening ? null : _openTill,
                             style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                            icon: const Icon(Icons.lock_open),
-                            label: const Text('Open till'),
+                            icon: _opening
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.lock_open),
+                            label: Text(_opening ? 'Opening...' : 'Open till'),
                           ),
                         ),
                       ],

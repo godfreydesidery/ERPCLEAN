@@ -298,6 +298,15 @@ class SyncRepository {
     // Express as 4dp string per Money schema (TZS = no decimals but server accepts 4dp)
     String moneyStr(double v) => v.toStringAsFixed(4);
 
+    // The manifest's clientOpIds must match what the server's collectSessionClientOpIds
+    // returns: only transactional ops (POS_SALE, CASH_PICKUP, PETTY_CASH).
+    // The TILL_SESSION_OPEN op is excluded — the server doesn't count it as a
+    // transactional op when reconciling.
+    final transactionalOpIds = ops
+        .where((o) => o.opType != OutboxOpType.tillSessionOpen)
+        .map((o) => o.clientOpId)
+        .toList();
+
     final manifest = TillCloseManifest(
       posSaleCount: saleOps.length,
       posSaleTotal: moneyStr(saleTotal),
@@ -305,7 +314,7 @@ class SyncRepository {
       cashPickupTotal: moneyStr(pickupTotal),
       pettyCashCount: pettyOps.length,
       pettyCashTotal: moneyStr(pettyTotal),
-      clientOpIds: ops.map((o) => o.clientOpId).toList(),
+      clientOpIds: transactionalOpIds,
     );
 
     final request = TillSessionCloseRequest(

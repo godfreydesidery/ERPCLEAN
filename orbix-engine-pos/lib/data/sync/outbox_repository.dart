@@ -198,12 +198,62 @@ class OutboxRepository {
     return rows.length;
   }
 
+  /// Returns the set of all CONFIRMED outbox clientOpIds.
+  /// Used by the dispatcher to decide which dependent ops are ready to push.
+  Future<Set<String>> confirmedClientOpIds() async {
+    final rows = await (_db.select(_db.outbox)
+          ..where((t) => t.status.equals(OutboxStatus.confirmed)))
+        .get();
+    return {for (final r in rows) r.clientOpId};
+  }
+
   /// Watch NEEDS_REVIEW ops — displayed in the cashier "needs attention" list.
   Stream<List<OutboxData>> watchNeedsReview() {
     return (_db.select(_db.outbox)
           ..where((t) => t.status.equals(OutboxStatus.needsReview))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .watch();
+  }
+
+  // ---------------------------------------------------------------------------
+  // tillSessionId back-fill (called by dispatcher after TILL_SESSION_OPEN ACCEPTED)
+  // ---------------------------------------------------------------------------
+
+  /// Patch all PENDING / DEFERRED ops that depend on [sessionClientOpId] to
+  /// include [serverSessionId] as their `tillSessionId` payload field.
+  ///
+  /// This satisfies SyncServiceImpl.applyCashPickup / applyPettyCash which require
+  /// tillSessionId as a required Long payload field. Without this patch, ops
+  /// taken offline (before the session synced) would arrive with tillSessionId=0
+  /// and be REJECTED by the server.
+  ///
+  /// [log] is optional; pass the caller's logger for consistent log context.
+  Future<void> backfillTillSessionId({
+    required String sessionClientOpId,
+    required int serverSessionId,
+    Logger? log,
+  }) async {
+    // Fetch all PENDING + DEFERRED rows whose dependsOn matches the session.
+    final rows = await (_db.select(_db.outbox)
+          ..where((t) =>
+              t.dependsOn.equals(sessionClientOpId) &
+              t.status.isIn([OutboxStatus.pending, OutboxStatus.deferred])))
+        .get();
+
+    for (final row in rows) {
+      final payload = _decodeJson(row.payloadJson);
+      final existing = payload['tillSessionId'];
+      // Only patch if missing or zero — don't overwrite a valid value.
+      if (existing != null && existing != 0 && existing != '0') continue;
+      payload['tillSessionId'] = serverSessionId;
+      await (_db.update(_db.outbox)
+            ..where((t) => t.clientOpId.equals(row.clientOpId)))
+          .write(OutboxCompanion(
+        payloadJson: Value(jsonEncode(payload)),
+      ));
+      log?.d('OutboxRepository.backfillTillSessionId patched '
+          '${row.opType} ${row.clientOpId} tillSessionId=$serverSessionId');
+    }
   }
 
   // ---------------------------------------------------------------------------
