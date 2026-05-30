@@ -1,11 +1,16 @@
 // Mock data + in-memory state for the POS UI prototype.
 //
-// Everything here is throwaway scaffolding so the screens have something
-// real to render before HTTP / Drift wiring lands. Each Notifier mutates
-// an in-memory list; nothing persists across an app restart.
+// [mockItems] and [mockItemGroups] are kept for offline-fallback tests and
+// the non-retail panes (pharmacy batch demo, restaurant table demo) that do
+// not yet have a live-data implementation.  The LIVE sell path (retail,
+// supermarket, wholesale, pharmacy, restaurant) reads from the Drift-backed
+// catalog and calls [CartNotifier.addCatalogItem] — never [addItem] with a
+// [MockItem] from this file.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../catalog/catalog_item.dart';
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -241,6 +246,25 @@ class CartNotifier extends Notifier<List<CartLine>> {
     } else {
       state = [...state, CartLine(item: item, qty: qty)];
     }
+  }
+
+  /// Add an item sourced from the live Drift catalog.
+  ///
+  /// Converts [CatalogItem] to the cart's internal [MockItem] shape using the
+  /// synced price from [PriceRows].  This is the canonical add path for the
+  /// live sell screens (retail, supermarket, wholesale, pharmacy, restaurant).
+  /// Items with [hasPriceRow] == false are rejected — they are not sellable.
+  void addCatalogItem(CatalogItem item, {double qty = 1}) {
+    if (!item.hasPriceRow) return; // no synced price — not sellable
+    final mockItem = MockItem(
+      code: item.code,
+      barcode: '', // barcodes live in the Barcodes table; empty here is fine
+      name: item.name,
+      group: '', // item-group not exposed in CatalogItem v1
+      price: item.price, // synced price from PriceRows
+      uom: 'EA',         // UOM not in schema v1; default
+    );
+    addItem(mockItem, qty: qty);
   }
 
   void setQty(int index, double qty) {

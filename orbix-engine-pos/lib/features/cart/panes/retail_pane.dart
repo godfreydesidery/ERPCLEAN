@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../features/catalog/catalog_item.dart';
+import '../../../features/catalog/catalog_providers.dart';
 import '../../_demo/mocks.dart';
 
 /// Retail mode — search + category chips + tile grid. The default mode,
 /// suitable for stores with ~100 active SKUs that fit on screen.
+///
+/// Catalog is read from local Drift ([catalogItemsProvider]).  Mock data is
+/// NOT used for the live sell path.
 class RetailPane extends ConsumerStatefulWidget {
   const RetailPane({super.key});
 
@@ -15,7 +20,6 @@ class RetailPane extends ConsumerStatefulWidget {
 
 class _RetailPaneState extends ConsumerState<RetailPane> {
   String _query = '';
-  String? _group;
   final _ctrl = TextEditingController();
 
   @override
@@ -24,24 +28,41 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
     super.dispose();
   }
 
-  List<MockItem> get _filtered {
+  List<CatalogItem> _filtered(List<CatalogItem> items) {
     final q = _query.trim().toLowerCase();
-    return mockItems.where((i) {
-      if (_group != null && i.group != _group) return false;
-      if (q.isEmpty) return true;
-      return i.code.toLowerCase().contains(q) || i.name.toLowerCase().contains(q);
+    return items.where((i) {
+      if (q.isNotEmpty) {
+        if (!i.code.toLowerCase().contains(q) &&
+            !i.name.toLowerCase().contains(q)) {
+          return false;
+        }
+      }
+      return true;
     }).toList();
   }
 
-  void _scan(String value) {
-    final hit = mockItems.firstWhere(
-      (i) => i.code.toLowerCase() == value.trim().toLowerCase(),
-      orElse: () => mockItems.first,
+  void _scan(String value, List<CatalogItem> items) {
+    final v = value.trim().toLowerCase();
+    final hit = items.firstWhere(
+      (i) => i.code.toLowerCase() == v,
+      orElse: () => items.isNotEmpty ? items.first : _noItem,
     );
-    ref.read(cartProvider.notifier).addItem(hit);
+    if (hit == _noItem) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Item not found: $value')),
+      );
+    } else {
+      ref.read(cartProvider.notifier).addCatalogItem(hit);
+    }
     _ctrl.clear();
     setState(() => _query = '');
   }
+
+  // Sentinel — avoids nullable gymnastics in _scan.
+  static const _noItem = CatalogItem(
+    itemId: -1, code: '', name: '', price: 0, currency: 'TZS',
+    hasPriceRow: false, priceListCode: '',
+  );
 
   Future<void> _hold(BuildContext context) async {
     final cart = ref.read(cartProvider);
@@ -98,6 +119,9 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final catalogAsync = ref.watch(catalogItemsProvider);
+    final syncState = ref.watch(catalogSyncStateProvider);
+
     return Column(
       children: [
         // Search + hold/recall
@@ -125,7 +149,9 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   ),
                   onChanged: (v) => setState(() => _query = v),
-                  onSubmitted: _scan,
+                  onSubmitted: (v) => catalogAsync.whenData(
+                    (items) => _scan(v, items),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -143,55 +169,138 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
           ),
         ),
 
-        // Group chips
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              FilterChip(
-                label: const Text('All'),
-                selected: _group == null,
-                onSelected: (_) => setState(() => _group = null),
-              ),
-              const SizedBox(width: 6),
-              for (final g in mockItemGroups) ...[
-                FilterChip(
-                  label: Text(g),
-                  selected: _group == g,
-                  onSelected: (_) => setState(() => _group = _group == g ? null : g),
+        // Sync loading / error strip
+        if (syncState.isLoading)
+          Container(
+            width: double.infinity,
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 10),
+                Text('Syncing catalog…', style: theme.textTheme.bodySmall),
               ],
-            ],
+            ),
           ),
-        ),
-
-        // Item tiles
-        Expanded(
-          child: _filtered.isEmpty
-              ? _emptyState(theme)
-              : GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 220,
-                    childAspectRatio: 1.4,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: _filtered.length,
-                  itemBuilder: (_, i) => _ItemTile(
-                    item: _filtered[i],
-                    onTap: () => ref.read(cartProvider.notifier).addItem(_filtered[i]),
+        if (syncState.hasError)
+          Container(
+            width: double.infinity,
+            color: theme.colorScheme.errorContainer.withValues(alpha: 0.45),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_off, size: 16, color: theme.colorScheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Catalog sync failed — showing cached data',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onErrorContainer),
                   ),
                 ),
+              ],
+            ),
+          ),
+
+        // Main content
+        catalogAsync.when(
+          loading: () => const Expanded(
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 8),
+                  Text('Error loading catalog: $e'),
+                ],
+              ),
+            ),
+          ),
+          data: (items) {
+            final filtered = _filtered(items);
+            final sellable = filtered.where((i) => i.hasPriceRow).toList();
+            final noPrice = filtered.where((i) => !i.hasPriceRow).toList();
+            final allShown = [...sellable, ...noPrice];
+
+            return Expanded(
+              child: Column(
+                children: [
+                  // No items at all — first sync not done
+                  if (items.isEmpty) ...[
+                    Expanded(child: _firstSyncState(theme, syncState.isLoading)),
+                  ] else ...[
+                    // Item tiles
+                    Expanded(
+                      child: allShown.isEmpty
+                          ? _emptySearchState(theme)
+                          : GridView.builder(
+                              padding: const EdgeInsets.all(12),
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 220,
+                                childAspectRatio: 1.4,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                              ),
+                              itemCount: allShown.length,
+                              itemBuilder: (_, i) => _ItemTile(
+                                item: allShown[i],
+                                onTap: allShown[i].hasPriceRow
+                                    ? () => ref
+                                        .read(cartProvider.notifier)
+                                        .addCatalogItem(allShown[i])
+                                    : null,
+                              ),
+                            ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
   }
 
-  Widget _emptyState(ThemeData theme) {
+  Widget _firstSyncState(ThemeData theme, bool syncing) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (syncing) ...[
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Downloading catalog…', style: theme.textTheme.bodyLarge),
+            const SizedBox(height: 8),
+            Text('This may take a moment on first run.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ] else ...[
+            const Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
+            const SizedBox(height: 12),
+            Text('No catalog yet', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'Connect to the network — the catalog will download automatically.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _emptySearchState(ThemeData theme) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -206,15 +315,18 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
 }
 
 class _ItemTile extends StatelessWidget {
-  final MockItem item;
-  final VoidCallback onTap;
+  final CatalogItem item;
+  final VoidCallback? onTap;
   const _ItemTile({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final sellable = onTap != null;
     return Material(
-      color: theme.colorScheme.surface,
+      color: sellable
+          ? theme.colorScheme.surface
+          : theme.colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -237,26 +349,37 @@ class _ItemTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.name,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: sellable ? null : theme.colorScheme.onSurfaceVariant,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    money(item.price),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
+              if (sellable)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      money(item.price),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  Text('/ ${item.uom}',
-                      style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                ],
-              ),
+                    Text('TZS',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                )
+              else
+                Text(
+                  'No price',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.error),
+                ),
             ],
           ),
         ),
