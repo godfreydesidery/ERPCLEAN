@@ -3,9 +3,10 @@
 /// Reads entirely from local Drift tables ([Items] + [PriceRows]).  No network
 /// calls here — the sync pipeline populates both tables; this just queries.
 ///
-/// Price-list selection priority (no server config knob wired yet):
-///   1. Rows whose [priceListCode] == 'DEFAULT'  (the canonical retail list).
-///   2. Any other row for that item (first by ascending id).
+/// Price-list selection priority:
+///   1. Rows whose [priceListCode] matches [preferredPriceList] (configurable).
+///   2. Rows whose [priceListCode] == 'DEFAULT' (canonical fallback).
+///   3. Any other row for that item (first by ascending id).
 /// If no price row exists at all, [CatalogItem.hasPriceRow] is false and the
 /// item is shown as non-sellable.  This is a hard offline-safe invariant.
 library;
@@ -16,17 +17,21 @@ import 'package:logger/logger.dart';
 import '../../data/local/database.dart';
 import 'catalog_item.dart';
 
-/// Preferred price-list code.  When the backend ships a config endpoint we
-/// can replace this constant; for now 'DEFAULT' is the agreed-upon retail list.
-const _preferredPriceList = 'DEFAULT';
-
 class CatalogRepository {
-  CatalogRepository({required PosDatabase db, Logger? logger})
-      : _db = db,
-        _log = logger ?? Logger();
+  CatalogRepository({
+    required PosDatabase db,
+    Logger? logger,
+    String preferredPriceList = 'RETAIL',
+  })  : _db = db,
+        _log = logger ?? Logger(),
+        _preferredPriceList = preferredPriceList;
 
   final PosDatabase _db;
   final Logger _log;
+
+  /// The configured price-list code. Updated by recreating the repository
+  /// via Riverpod when the user changes the price list in settings.
+  final String _preferredPriceList;
 
   /// Stream of all ACTIVE catalog items joined to their best price.
   ///
@@ -91,7 +96,8 @@ class CatalogRepository {
         .get();
 
     // Build a map: itemId → best PriceRow.
-    // Priority: DEFAULT list first, else lowest id row.
+    // Priority: configured list first, then DEFAULT, then lowest id row.
+    const _fallback = 'DEFAULT';
     final bestPrice = <int, PriceRow>{};
     for (final row in priceRows) {
       final existing = bestPrice[row.itemId];
@@ -99,10 +105,19 @@ class CatalogRepository {
         bestPrice[row.itemId] = row;
       } else if (row.priceListCode == _preferredPriceList &&
           existing.priceListCode != _preferredPriceList) {
+        // Configured list wins over anything else.
+        bestPrice[row.itemId] = row;
+      } else if (row.priceListCode == _fallback &&
+          existing.priceListCode != _preferredPriceList &&
+          existing.priceListCode != _fallback) {
+        // DEFAULT beats any other non-preferred list.
         bestPrice[row.itemId] = row;
       } else if (row.priceListCode != _preferredPriceList &&
+          row.priceListCode != _fallback &&
           existing.priceListCode != _preferredPriceList &&
+          existing.priceListCode != _fallback &&
           row.id < existing.id) {
+        // Among unpreferred rows pick lowest id.
         bestPrice[row.itemId] = row;
       }
     }

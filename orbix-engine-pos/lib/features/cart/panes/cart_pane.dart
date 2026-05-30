@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../_demo/mocks.dart';
+import '../../customer/customer_providers.dart';
 
 /// Universal cart pane — appears on the right in every mode. Restaurant mode
 /// swaps the "Pay" button for "Send to kitchen" and shows the table.
@@ -14,7 +15,7 @@ class CartPane extends ConsumerWidget {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
     final mode = ref.watch(modeProvider);
-    final customer = ref.watch(selectedCustomerProvider);
+    final customer = ref.watch(selectedPosCustomerProvider);
     final subtotal = ref.watch(cartSubtotalProvider);
     final discount = ref.watch(cartDiscountProvider);
     final total = ref.watch(cartTotalProvider);
@@ -22,7 +23,7 @@ class CartPane extends ConsumerWidget {
 
     final customerRequired =
         mode == PosMode.pharmacy || mode == PosMode.wholesale;
-    final missingCustomer = customerRequired && customer.walkIn;
+    final missingCustomer = customerRequired && customer.isWalkIn;
 
     return Container(
       color: theme.colorScheme.surface,
@@ -32,7 +33,7 @@ class CartPane extends ConsumerWidget {
           if (mode == PosMode.restaurant)
             _tableHeader(context, theme, table)
           else
-            _customerHeader(context, ref, theme, customer, missingCustomer),
+            _customerHeader(context, ref, theme, customer, missingCustomer, mode),
 
           Divider(height: 1, color: theme.dividerColor),
 
@@ -89,7 +90,7 @@ class CartPane extends ConsumerWidget {
   }
 
   Widget _customerHeader(BuildContext context, WidgetRef ref, ThemeData theme,
-      MockCustomer customer, bool missing) {
+      PosCustomer customer, bool missing, PosMode mode) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: InkWell(
@@ -105,7 +106,7 @@ class CartPane extends ConsumerWidget {
                     ? theme.colorScheme.errorContainer
                     : theme.colorScheme.primaryContainer,
                 child: Icon(
-                  customer.walkIn ? Icons.person_outline : Icons.person,
+                  customer.isWalkIn ? Icons.person_outline : Icons.person,
                   size: 18,
                   color: missing
                       ? theme.colorScheme.onErrorContainer
@@ -301,30 +302,13 @@ class CartPane extends ConsumerWidget {
   }
 
   Future<void> _pickCustomer(BuildContext context, WidgetRef ref) async {
-    final picked = await showDialog<MockCustomer>(
+    final picked = await showDialog<PosCustomer>(
       context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Pick customer'),
-        children: [
-          for (final c in mockCustomers)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, c),
-              child: Row(
-                children: [
-                  Icon(c.walkIn ? Icons.person_outline : Icons.person, size: 18),
-                  const SizedBox(width: 8),
-                  Text(c.name),
-                  const Spacer(),
-                  Text(c.code,
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-            ),
-        ],
-      ),
+      builder: (ctx) => _CustomerPickerDialog(),
     );
-    if (picked != null) ref.read(selectedCustomerProvider.notifier).state = picked;
+    if (picked != null) {
+      ref.read(selectedPosCustomerProvider.notifier).state = picked;
+    }
   }
 }
 
@@ -519,6 +503,111 @@ Future<void> _showDiscountDialog(BuildContext context, WidgetRef ref, int index,
   );
   if (ok != null) {
     ref.read(cartProvider.notifier).setDiscount(index, ok);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Customer picker dialog — reads from Drift Customers table
+// ---------------------------------------------------------------------------
+
+class _CustomerPickerDialog extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_CustomerPickerDialog> createState() =>
+      _CustomerPickerDialogState();
+}
+
+class _CustomerPickerDialogState extends ConsumerState<_CustomerPickerDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final resultsAsync = ref.watch(customerSearchResultsProvider);
+
+    return AlertDialog(
+      title: const Text('Pick customer'),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _ctrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Search by name or code…',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (v) {
+                ref.read(customerSearchQueryProvider.notifier).state = v;
+              },
+            ),
+            const SizedBox(height: 8),
+            resultsAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Error loading customers: $e',
+                    style: TextStyle(color: theme.colorScheme.error)),
+              ),
+              data: (customers) => ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 260),
+                child: customers.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No customers found'),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: customers.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final c = customers[i];
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              c.isWalkIn
+                                  ? Icons.person_outline
+                                  : Icons.person,
+                              size: 20,
+                            ),
+                            title: Text(c.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w500)),
+                            trailing: Text(c.code,
+                                style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 11,
+                                    color: Colors.grey)),
+                            onTap: () => Navigator.pop(context, c),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
   }
 }
 
