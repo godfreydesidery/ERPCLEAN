@@ -63,6 +63,136 @@ components:
         detail: { type: string }
         instance: { type: string }
 
+    # ---- Offline sync spine (US-POS-017/018, US-WMS-002/005) ----
+    # Design: docs/design/slice-sync-spine.md
+    # company_id / branch_id are NEVER in these payloads — derived from the JWT.
+    Ulid:
+      type: string
+      pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+      description: Crockford ULID (26 chars). Client-generated op identifier.
+    SyncOpType:
+      type: string
+      enum: [TILL_SESSION_OPEN, POS_SALE, POS_SALE_VOID, CASH_PICKUP, PETTY_CASH, TILL_SESSION_CLOSE, FIELD_SALE, ROUTE_VISIT]
+    SyncVerdict:
+      type: string
+      enum: [ACCEPTED, DUPLICATE, REJECTED, DEFERRED]
+    SyncOp:
+      type: object
+      required: [clientOpId, opType, seq, occurredAt, payload]
+      properties:
+        clientOpId: { $ref: '#/components/schemas/Ulid' }
+        opType: { $ref: '#/components/schemas/SyncOpType' }
+        seq: { type: integer, format: int64, description: Monotonic per-device sequence (advisory). }
+        occurredAt: { type: string, format: date-time, description: Client wall-clock; server stamps its own server_at. }
+        dependsOn:
+          oneOf: [ { $ref: '#/components/schemas/Ulid' }, { type: 'null' } ]
+          description: clientOpId that must be ACCEPTED/DUPLICATE first; null if none.
+        payload:
+          type: object
+          additionalProperties: true
+          description: Op-type-specific body (e.g. PostPosSaleRequest shape for POS_SALE).
+    SyncPushRequest:
+      type: object
+      required: [deviceId, clientContractVersion, ops]
+      properties:
+        deviceId: { type: string, description: Logical device id, audit only. }
+        clientContractVersion: { type: integer }
+        ops:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SyncOp' }
+    SyncOpResult:
+      type: object
+      required: [clientOpId, verdict]
+      properties:
+        clientOpId: { $ref: '#/components/schemas/Ulid' }
+        verdict: { $ref: '#/components/schemas/SyncVerdict' }
+        serverEntityId: { type: string, description: id of created/affected row (JSON:API string). }
+        serverEntityUid: { type: string }
+        serverNumber: { type: string, description: Server-authoritative document number. }
+        errorCode: { oneOf: [ { type: string }, { type: 'null' } ] }
+        errorMessage: { oneOf: [ { type: string }, { type: 'null' } ] }
+    SyncPushResult:
+      type: object
+      required: [batchAcceptedCount, batchRejectedCount, serverReceivedAt, results]
+      properties:
+        batchAcceptedCount: { type: integer }
+        batchRejectedCount: { type: integer }
+        serverReceivedAt: { type: string, format: date-time }
+        resyncRequired: { type: boolean, default: false }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/SyncOpResult' }
+    SyncDataset:
+      type: object
+      required: [upserts, deletes]
+      properties:
+        upserts:
+          type: array
+          items: { type: object, additionalProperties: true }
+        deletes:
+          type: array
+          items: { type: string, description: id of a row the client must remove. }
+    SyncPullResult:
+      type: object
+      required: [serverTime, nextCursor, hasMore, datasets]
+      properties:
+        serverTime: { type: string, format: date-time }
+        nextCursor: { type: string, description: Opaque token; store and replay verbatim. }
+        hasMore: { type: boolean, description: true => call pull again with nextCursor. }
+        resyncRequired: { type: boolean, default: false }
+        datasets:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/SyncDataset' }
+          description: Keyed by dataset name (catalog, price, customer, balance, route, ...).
+    TillSessionCloseRequest:
+      type: object
+      required: [tillSessionClientOpId, declaredCash, manifest]
+      properties:
+        tillSessionClientOpId: { $ref: '#/components/schemas/Ulid' }
+        declaredCash: { $ref: '#/components/schemas/Money' }
+        manifest:
+          type: object
+          required: [posSaleCount, posSaleTotal, cashPickupCount, cashPickupTotal, pettyCashCount, pettyCashTotal, clientOpIds]
+          properties:
+            posSaleCount: { type: integer }
+            posSaleTotal: { $ref: '#/components/schemas/Money' }
+            cashPickupCount: { type: integer }
+            cashPickupTotal: { $ref: '#/components/schemas/Money' }
+            pettyCashCount: { type: integer }
+            pettyCashTotal: { $ref: '#/components/schemas/Money' }
+            clientOpIds:
+              type: array
+              items: { $ref: '#/components/schemas/Ulid' }
+    TillSessionCloseResult:
+      type: object
+      required: [tillSessionUid, status, openingFloat, expectedCash, declaredCash, variance, confirmedClientOpIds]
+      properties:
+        tillSessionUid: { type: string }
+        status: { type: string, enum: [CLOSED, RECONCILE_INCOMPLETE] }
+        openingFloat: { $ref: '#/components/schemas/Money' }
+        expectedCash: { $ref: '#/components/schemas/Money' }
+        declaredCash: { $ref: '#/components/schemas/Money' }
+        variance: { $ref: '#/components/schemas/Money' }
+        confirmedClientOpIds:
+          type: array
+          items: { $ref: '#/components/schemas/Ulid' }
+        missingClientOpIds:
+          type: array
+          items: { $ref: '#/components/schemas/Ulid' }
+        unexpectedClientOpIds:
+          type: array
+          items: { $ref: '#/components/schemas/Ulid' }
+        zReportObjectKey: { oneOf: [ { type: string }, { type: 'null' } ] }
+
+  parameters:
+    ContractVersion:
+      name: X-Orbix-Contract-Version
+      in: header
+      required: true
+      schema: { type: integer, default: 1 }
+      description: Sync contract major. Too-old => 426; too-new => 409.
+
 paths:
   /api/v1/ping:
     get:
@@ -122,3 +252,100 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+
+  # ---- Offline sync spine — gated POS.SYNC; tenancy from JWT ----
+  # Responses are wrapped in ApiResponse<T>; the schemas below are the T.
+  /api/v1/sync/push:
+    post:
+      tags: [Sync]
+      summary: Push queued offline ops (sales, tenders, cash moves, till open/close) (US-POS-018)
+      description: |
+        Batched, idempotent on clientOpId (ULID). Per-op verdicts; one REJECTED
+        op never rolls back siblings. HTTP 200 whenever the batch was processed,
+        even if every op was rejected — read the per-op verdict array.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncPushRequest' }
+      responses:
+        '200':
+          description: Batch processed (see per-op verdicts)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncPushResult' }
+        '409':
+          description: Contract too new for this server (CONTRACT_TOO_NEW)
+        '426':
+          description: Client contract too old; upgrade required (CONTRACT_TOO_OLD)
+
+  /api/v1/sync/pull:
+    get:
+      tags: [Sync]
+      summary: Pull reference-data deltas since a cursor (US-POS-018, US-WMS-002)
+      description: |
+        Incremental sync via an opaque cursor backed by a shared monotonic
+        change_seq (DB-agnostic). Returns per-dataset upserts + deletes and a
+        nextCursor. Loop while hasMore=true.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque token from a prior pull/bootstrap. Omit for the zero cursor.
+        - name: datasets
+          in: query
+          required: false
+          schema: { type: string }
+          description: Comma-separated dataset names (catalog,price,customer,balance,route). Omit for all.
+      responses:
+        '200':
+          description: Delta page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncPullResult' }
+        '409':
+          description: Cursor expired beyond tombstone retention; bootstrap required (CURSOR_EXPIRED)
+
+  /api/v1/sync/bootstrap:
+    get:
+      tags: [Sync]
+      summary: Full reference snapshot + opening cursor for a fresh/restored device (US-POS-017)
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+        - name: datasets
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Full snapshot (same shape as pull; nextCursor seeds steady-state sync)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncPullResult' }
+
+  /api/v1/sync/till-session/close:
+    post:
+      tags: [Sync]
+      summary: Reconcile and close a till session against what the server received (US-POS-018)
+      description: |
+        Validates the client manifest against server-received ops. On mismatch
+        returns RECONCILE_INCOMPLETE with missing/unexpected clientOpIds. On match
+        returns server-computed expectedCash/variance and confirmedClientOpIds —
+        the client's authority to clear its outbox.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TillSessionCloseRequest' }
+      responses:
+        '200':
+          description: Closed, or RECONCILE_INCOMPLETE (see status field)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TillSessionCloseResult' }
