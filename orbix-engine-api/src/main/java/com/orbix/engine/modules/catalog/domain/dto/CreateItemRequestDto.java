@@ -12,5 +12,6 @@ public record CreateItemRequestDto(
     @NotNull ItemType type,
     @NotNull Long itemGroupId,
     @NotNull Long uomId,
-    @NotNull Long vatGroupId
+    @NotNull Long vatGroupId,
+    boolean batchTracked
 ) {}

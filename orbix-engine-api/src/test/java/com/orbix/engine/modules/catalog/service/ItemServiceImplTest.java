@@ -96,7 +96,7 @@ class ItemServiceImplTest {
         });
 
         ItemResponseDto result = service.create(
-            new CreateItemRequestDto("SKU1", "Sugar 1kg", null, ItemType.SELLABLE, 10L, 20L, 30L));
+            new CreateItemRequestDto("SKU1", "Sugar 1kg", null, ItemType.SELLABLE, 10L, 20L, 30L, false));
 
         assertThat(result.uid()).isNotBlank();
         assertThat(UidGenerator.isValid(result.uid())).isTrue();
@@ -118,7 +118,7 @@ class ItemServiceImplTest {
             return i;
         });
 
-        service.create(new CreateItemRequestDto("SKU-SEQ", "Seq Item", null, ItemType.SELLABLE, 10L, 20L, 30L));
+        service.create(new CreateItemRequestDto("SKU-SEQ", "Seq Item", null, ItemType.SELLABLE, 10L, 20L, 30L, false));
 
         // save() is called after setChangeSeq — capture via argument captor
         org.mockito.ArgumentCaptor<Item> captor = org.mockito.ArgumentCaptor.forClass(Item.class);
@@ -136,7 +136,7 @@ class ItemServiceImplTest {
             ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
             return i;
         });
-        service.create(new CreateItemRequestDto("SKU-MONO", "Mono", null, ItemType.SELLABLE, 10L, 20L, 30L));
+        service.create(new CreateItemRequestDto("SKU-MONO", "Mono", null, ItemType.SELLABLE, 10L, 20L, 30L, false));
 
         org.mockito.ArgumentCaptor<Item> createCaptor = org.mockito.ArgumentCaptor.forClass(Item.class);
         verify(repo).save(createCaptor.capture());
@@ -176,7 +176,7 @@ class ItemServiceImplTest {
             return i;
         });
 
-        service.create(new CreateItemRequestDto("SKU-ARC", "Arc Item", null, ItemType.SELLABLE, 10L, 20L, 30L));
+        service.create(new CreateItemRequestDto("SKU-ARC", "Arc Item", null, ItemType.SELLABLE, 10L, 20L, 30L, false));
 
         // Now archive the saved item — use a fresh entity that mirrors the saved state
         Item toArchive = item(3L, ItemStatus.ACTIVE);
@@ -202,7 +202,7 @@ class ItemServiceImplTest {
         when(repo.findByCompanyAndCode(COMPANY_ID, "SKU1")).thenReturn(Optional.of(item(1L, ItemStatus.ACTIVE)));
 
         assertThatThrownBy(() -> service.create(
-            new CreateItemRequestDto("SKU1", "Sugar", null, ItemType.SELLABLE, 10L, 20L, 30L)))
+            new CreateItemRequestDto("SKU1", "Sugar", null, ItemType.SELLABLE, 10L, 20L, 30L, false)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("already exists");
         verify(repo, never()).save(any());
@@ -449,5 +449,45 @@ class ItemServiceImplTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("active stock batches");
         assertThat(existing.isBatchTracked()).isTrue();
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-CB-005 / ISSUE-VR-002 — batchTracked on create
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withBatchTrackedTrue_persistsFlagAndEmitsEnabledEvent() {
+        when(repo.findByCompanyAndCode(COMPANY_ID, "SKU-BT")).thenReturn(Optional.empty());
+        when(repo.save(any(Item.class))).thenAnswer(inv -> {
+            Item i = inv.getArgument(0);
+            i.setId(50L);
+            ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
+            return i;
+        });
+
+        ItemResponseDto result = service.create(
+            new CreateItemRequestDto("SKU-BT", "Batch Item", null, ItemType.SELLABLE, 10L, 20L, 30L, true));
+
+        assertThat(result.batchTracked()).isTrue();
+        verify(events).publish(eq("ItemCreated.v1"), any(), any(), any());
+        verify(events).publish(eq("ItemBatchTrackingEnabled.v1"), any(), any(), any());
+    }
+
+    @Test
+    void create_withBatchTrackedFalse_doesNotEmitBatchEvent() {
+        when(repo.findByCompanyAndCode(COMPANY_ID, "SKU-NOBT")).thenReturn(Optional.empty());
+        when(repo.save(any(Item.class))).thenAnswer(inv -> {
+            Item i = inv.getArgument(0);
+            i.setId(51L);
+            ReflectionTestUtils.setField(i, "uid", UidGenerator.next());
+            return i;
+        });
+
+        ItemResponseDto result = service.create(
+            new CreateItemRequestDto("SKU-NOBT", "Plain Item", null, ItemType.SELLABLE, 10L, 20L, 30L, false));
+
+        assertThat(result.batchTracked()).isFalse();
+        verify(events).publish(eq("ItemCreated.v1"), any(), any(), any());
+        verify(events, never()).publish(eq("ItemBatchTrackingEnabled.v1"), any(), any(), any());
     }
 }
