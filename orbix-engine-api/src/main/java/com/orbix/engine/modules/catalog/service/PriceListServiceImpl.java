@@ -25,6 +25,7 @@ import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.SettingsService;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -59,6 +60,7 @@ public class PriceListServiceImpl implements PriceListService {
     private final RequestContext context;
     private final SettingsService settings;
     private final PermissionResolverService permissions;
+    private final SyncChangeSeqService syncSeq;
 
     // ---- price lists -------------------------------------------------------
 
@@ -219,6 +221,7 @@ public class PriceListServiceImpl implements PriceListService {
                 "Discontinuation must take effect after the price's start date (" + open.getValidFrom() + ")");
         }
         open.closeOn(eff);
+        open.setChangeSeq(syncSeq.next());
         priceChangeLog.save(new PriceChangeLog(open.getId(), open.getPrice(), null, eff,
             context.userId(), request.reason()));
         events.publish("ItemPriceDiscontinued.v1", "Item", String.valueOf(request.itemId()),
@@ -296,10 +299,14 @@ public class PriceListServiceImpl implements PriceListService {
             if (prior.getValidTo() == null) {
                 oldPrice = prior.getPrice();
                 prior.closeOn(eff);
+                // Bump change_seq on the closing row so the pull endpoint surfaces
+                // it in the deletes array (validTo != null → delete signal).
+                prior.setChangeSeq(syncSeq.next());
             }
         }
-        PriceListItem newRow = priceListItems.save(
-            new PriceListItem(listId, itemId, uomId, minQty, newPrice, eff));
+        PriceListItem newRow = new PriceListItem(listId, itemId, uomId, minQty, newPrice, eff);
+        newRow.setChangeSeq(syncSeq.next());
+        newRow = priceListItems.save(newRow);
         priceChangeLog.save(new PriceChangeLog(newRow.getId(), oldPrice, newPrice, eff, context.userId(), reason));
         events.publish("ItemPriceChanged.v1", "Item", String.valueOf(itemId),
             Map.of("itemId", itemId, "priceListId", listId, "uomId", uomId,

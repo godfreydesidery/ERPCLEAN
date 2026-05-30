@@ -13,6 +13,7 @@ import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.stock.domain.enums.StockBatchStatus;
 import com.orbix.engine.modules.stock.repository.StockBatchRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class ItemServiceImpl implements ItemService {
     private final StockBatchRepository stockBatches;
     private final EventPublisher events;
     private final RequestContext context;
+    private final SyncChangeSeqService syncSeq;
 
     @Override
     @Transactional
@@ -57,6 +59,7 @@ public class ItemServiceImpl implements ItemService {
             String trimmed = shortName.trim();
             item.setShortName(trimmed.isEmpty() ? null : trimmed);
         }
+        item.setChangeSeq(syncSeq.next());
         Item saved = repo.save(item);
         events.publish(
             "ItemCreated.v1",
@@ -100,6 +103,7 @@ public class ItemServiceImpl implements ItemService {
         item.update(request.name(), request.shortName(), request.type(), request.itemGroupId(),
             request.uomId(), request.vatGroupId(), request.tracked(), request.minSellPrice(),
             actorId);
+        item.setChangeSeq(syncSeq.next());
         events.publish("ItemUpdated.v1", "Item", item.getUid(),
             Map.of(ITEM_UID_KEY, item.getUid()));
 
@@ -167,6 +171,7 @@ public class ItemServiceImpl implements ItemService {
                 "Cannot archive item " + uid + " while it has active stock batches");
         }
         item.archive(context.userId());
+        item.setChangeSeq(syncSeq.next());
         events.publish("ItemArchived.v1", "Item", item.getUid(),
             Map.of(ITEM_UID_KEY, item.getUid()));
     }
@@ -180,6 +185,7 @@ public class ItemServiceImpl implements ItemService {
             throw new IllegalArgumentException("Item is already active: " + uid);
         }
         item.activate(context.userId());
+        item.setChangeSeq(syncSeq.next());
         events.publish("ItemActivated.v1", "Item", item.getUid(),
             Map.of(ITEM_UID_KEY, item.getUid()));
     }
