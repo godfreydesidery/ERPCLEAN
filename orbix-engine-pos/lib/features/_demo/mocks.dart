@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../catalog/catalog_item.dart';
+import '../payment/payment_screen.dart' show TenderLine;
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -428,6 +429,9 @@ class CompletedSale {
   final String tillCode;
   final String cashierName;
   final String branchName;
+  /// Mixed-tender breakdown. Single-tender sales have one entry.
+  final List<TenderLine> tenders;
+
   const CompletedSale({
     required this.receiptNo,
     required this.lines,
@@ -442,6 +446,7 @@ class CompletedSale {
     required this.tillCode,
     required this.cashierName,
     required this.branchName,
+    this.tenders = const [],
   });
 }
 
@@ -449,9 +454,13 @@ final lastSaleProvider = StateProvider<CompletedSale?>((_) => null);
 
 /// One-shot helper called by the payment flows so receipt-write logic lives
 /// in one place. Returns the receipt number it generated.
+///
+/// [tenders] carries the full mixed-tender breakdown. When not supplied (legacy
+/// single-tender callers) a synthetic list is built from [method] + [tendered].
 String recordSale(WidgetRef ref, {
   required PaymentMethod method,
   required double tendered,
+  List<TenderLine>? tenders,
 }) {
   final lines = ref.read(cartProvider);
   final customer = ref.read(selectedCustomerProvider);
@@ -460,6 +469,8 @@ String recordSale(WidgetRef ref, {
   final discount = ref.read(cartDiscountProvider);
   final total = ref.read(cartTotalProvider);
   final receiptNo = 'POS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+  final effectiveTenders = tenders ??
+      [TenderLine(method: method, amount: tendered)];
   ref.read(lastSaleProvider.notifier).state = CompletedSale(
     receiptNo: receiptNo,
     lines: List.unmodifiable(lines),
@@ -474,7 +485,9 @@ String recordSale(WidgetRef ref, {
     tillCode: session?.tillCode ?? 'TILL-?',
     cashierName: session?.cashierName ?? 'Cashier',
     branchName: session?.branchName ?? 'Branch',
+    tenders: List.unmodifiable(effectiveTenders),
   );
+  ref.read(cartProvider.notifier).clear();
   return receiptNo;
 }
 

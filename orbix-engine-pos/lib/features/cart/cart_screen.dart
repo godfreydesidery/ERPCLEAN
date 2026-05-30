@@ -167,6 +167,39 @@ class _TopBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
         Tooltip(
+          message: 'Mid-shift read — view session totals without closing.',
+          child: TextButton.icon(
+            onPressed: () => context.push('/till/x-report'),
+            icon: const Icon(Icons.bar_chart_outlined, size: 18),
+            label: const Text('X-report'),
+          ),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Cash movements',
+          icon: const Icon(Icons.payments_outlined),
+          onSelected: (route) => context.push(route),
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: '/cash/pickup',
+              child: ListTile(
+                leading: Icon(Icons.outbox_outlined),
+                title: Text('Cash pickup'),
+                subtitle: Text('Move cash to safe/bank'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: '/cash/petty',
+              child: ListTile(
+                leading: Icon(Icons.receipt_long_outlined),
+                title: Text('Petty cash'),
+                subtitle: Text('Small payout from drawer'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
+        Tooltip(
           message: 'End the shift — declare cash, generate Z-report, sign out.',
           child: TextButton.icon(
             onPressed: () => context.go('/till/close'),
