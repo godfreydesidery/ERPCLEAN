@@ -274,10 +274,15 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         Long actorId = context.userId();
 
         // Release any reservation (LAYBY only — PRE_ORDER never locked stock).
+        // Guard: only call release() when qty_reserved > 0 for each line — a LAYBY
+        // can reach DEPOSIT_PAID / READY without going through RESERVED if the
+        // client skipped the /reserve step, leaving qtyReserved = 0.
         if (laybyHasReservation(order)) {
             for (CustomerOrderLine line : linesFor(order.getId())) {
-                reservations.release(line.getItemId(), order.getBranchId(), line.getQty(),
-                    AGG, order.getId(), "Cancel " + order.getNumber());
+                if (reservations.qtyReserved(line.getItemId(), order.getBranchId()).signum() > 0) {
+                    reservations.release(line.getItemId(), order.getBranchId(), line.getQty(),
+                        AGG, order.getId(), "Cancel " + order.getNumber());
+                }
             }
         }
 
@@ -357,7 +362,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                     "Collection of batch-tracked item " + item.getCode()
                         + " not supported in F7.2; refund and re-sell via POS instead");
             }
-            if (order.getType() == CustomerOrderType.LAYBY) {
+            if (order.getType() == CustomerOrderType.LAYBY
+                    && reservations.qtyReserved(line.getItemId(), order.getBranchId()).signum() > 0) {
                 reservations.release(line.getItemId(), order.getBranchId(), line.getQty(),
                     AGG, order.getId(), "Collect " + order.getNumber());
             }
@@ -437,8 +443,10 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             try {
                 if (order.getType() == CustomerOrderType.LAYBY && laybyHasReservation(order)) {
                     for (CustomerOrderLine line : linesFor(order.getId())) {
-                        reservations.release(line.getItemId(), order.getBranchId(), line.getQty(),
-                            AGG, order.getId(), "Expire " + order.getNumber());
+                        if (reservations.qtyReserved(line.getItemId(), order.getBranchId()).signum() > 0) {
+                            reservations.release(line.getItemId(), order.getBranchId(), line.getQty(),
+                                AGG, order.getId(), "Expire " + order.getNumber());
+                        }
                     }
                 }
             } catch (RuntimeException ex) {

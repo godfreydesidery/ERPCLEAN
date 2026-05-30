@@ -10,6 +10,7 @@ import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.day.domain.entity.BusinessDay;
 import com.orbix.engine.modules.day.service.DayGuard;
+import com.orbix.engine.modules.iam.domain.enums.Permissions;
 import com.orbix.engine.modules.iam.service.BranchScope;
 import com.orbix.engine.modules.iam.service.PermissionResolverService;
 import com.orbix.engine.modules.party.domain.entity.Customer;
@@ -87,6 +88,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Long companyId = context.companyId();
         Long actorId = context.userId();
         branchScope.requireAccess(request.branchId());
+        dayGuard.requireOpenDay(request.branchId());
         String number = request.number().trim().toUpperCase();
         if (invoices.existsByBranchIdAndNumber(request.branchId(), number)) {
             throw new IllegalArgumentException(
@@ -328,7 +330,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     private void postLineStockMoves(SalesInvoice invoice, SalesInvoiceLine line) {
         Long companyId = invoice.getCompanyId();
+        Long actorId = context.userId();
         Item item = requireItem(line.getItemId(), companyId);
+        // Resolve STOCK.OVERSELL once per invoice post (all lines share the same actor).
+        boolean allowOversell = actorId != null
+            && permissions.resolve(actorId, companyId, invoice.getBranchId())
+                          .contains(Permissions.STOCK_OVERSELL);
         if (item.isBatchTracked()) {
             List<BatchPickDto> picks = stockBatchService.drainFefo(
                 line.getItemId(), invoice.getBranchId(), line.getQty());
@@ -339,7 +346,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     line.getItemId(), invoice.getBranchId(),
                     pick.qty().negate(), pick.cost(),
                     StockMoveType.SALE, AGG, invoice.getId(),
-                    null, false, pick.batchId()
+                    null, allowOversell, pick.batchId()
                 ));
                 totalCostValue = totalCostValue.add(pick.qty().multiply(pick.cost()));
                 totalPickQty = totalPickQty.add(pick.qty());
@@ -358,7 +365,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 line.getItemId(), invoice.getBranchId(),
                 line.getQty().negate(), null,
                 StockMoveType.SALE, AGG, invoice.getId(),
-                null, false, null
+                null, allowOversell, null
             ));
             line.setCostAmount(avgCost);
         }

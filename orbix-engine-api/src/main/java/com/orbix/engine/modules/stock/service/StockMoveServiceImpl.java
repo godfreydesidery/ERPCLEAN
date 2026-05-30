@@ -74,16 +74,24 @@ public class StockMoveServiceImpl implements StockMoveService {
         dayGuard.requireOpenDay(branchId);
 
         Instant now = Instant.now();
-        ItemBranchBalance balance = balances.findById(new ItemBranchBalanceId(itemId, branchId))
-            .orElseGet(() -> new ItemBranchBalance(itemId, branchId));
-
         BigDecimal qty = request.qty();
         BigDecimal costAmount;
+
+        // Load the balance row. For outbound moves, use a pessimistic write lock so
+        // that concurrent transactions are serialised at the row level and cannot both
+        // pass the negative-stock guard on the same in-memory snapshot (ISSUE-NFR-002).
+        ItemBranchBalance balance;
         if (qty.signum() >= 0) {
+            // Inbound — no contention risk; plain read is fine.
+            balance = balances.findById(new ItemBranchBalanceId(itemId, branchId))
+                .orElseGet(() -> new ItemBranchBalance(itemId, branchId));
             BigDecimal unitCost = request.unitCost() != null ? request.unitCost() : BigDecimal.ZERO;
             balance.applyInbound(qty, unitCost, now);
             costAmount = unitCost;
         } else {
+            // Outbound — acquire a pessimistic row lock before reading.
+            balance = balances.findByItemIdAndBranchIdForUpdate(itemId, branchId)
+                .orElseGet(() -> new ItemBranchBalance(itemId, branchId));
             BigDecimal absQty = qty.abs();
             if (balance.wouldGoNegative(absQty)) {
                 enforceOversellGate(request, itemId, branchId, absQty, balance.getQtyOnHand());
@@ -189,9 +197,16 @@ public class StockMoveServiceImpl implements StockMoveService {
         List<StockMove> content = page.getContent();
         Map<String, String> docNumbers = resolveDocNumbers(content);
 
-        // Accumulate running balance across the page in chronological order.
-        // Already ordered by at ASC from the repository query.
-        BigDecimal running = BigDecimal.ZERO;
+        // Compute the opening balance for this page by summing all moves whose id
+        // is strictly less than the first row's id. This carries the balance forward
+        // correctly across pages so page 2+ does not reset to zero (ISSUE-STOCK-001).
+        BigDecimal running;
+        if (content.isEmpty()) {
+            running = BigDecimal.ZERO;
+        } else {
+            BigDecimal prior = moves.sumQtyBeforeId(itemId, branchId, content.get(0).getId());
+            running = prior != null ? prior : BigDecimal.ZERO;
+        }
         List<StockMoveDto> enriched = new ArrayList<>(content.size());
         for (StockMove move : content) {
             running = running.add(move.getQty());

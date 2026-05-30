@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -38,4 +39,19 @@ public interface StockMoveRepository extends JpaRepository<StockMove, Long> {
                                             @Param("moveTypes") List<StockMoveType> moveTypes,
                                             @Param("from") Instant from,
                                             @Param("to") Instant to);
+
+    /**
+     * Stock-card opening balance — sum of all move quantities for the given
+     * item+branch whose id is strictly less than {@code beforeId}. Used to
+     * seed the running-balance accumulator when paginating the stock card so
+     * that page 2+ does not reset to zero (ISSUE-STOCK-001).
+     *
+     * <p>Returns {@code null} when there are no qualifying rows (no prior
+     * moves); callers must treat {@code null} as zero.
+     */
+    @Query("SELECT COALESCE(SUM(m.qty), 0) FROM StockMove m"
+        + " WHERE m.itemId = :itemId AND m.branchId = :branchId AND m.id < :beforeId")
+    BigDecimal sumQtyBeforeId(@Param("itemId") Long itemId,
+                               @Param("branchId") Long branchId,
+                               @Param("beforeId") Long beforeId);
 }
