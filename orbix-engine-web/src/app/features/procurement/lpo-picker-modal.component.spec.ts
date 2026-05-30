@@ -21,7 +21,7 @@ import { Page } from '../../core/api/page';
 const LPO1: LpoOrder = {
   id: '30', uid: '01JLPO00000000000001',
   number: 'LPO-001', companyId: '1', branchId: '10',
-  supplierId: '20',
+  supplierId: '20', supplierName: null, supplierCode: null,
   orderDate: '2026-05-10', expectedDeliveryDate: '2026-05-20',
   currencyCode: 'TZS',
   subtotalAmount: 200000, taxAmount: 36000, totalAmount: 236000,

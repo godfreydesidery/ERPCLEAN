@@ -7,6 +7,8 @@ import { ApiResponse } from '../../core/api/api-response';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
 import { PartyService } from './party.service';
+import { CatalogService } from '../catalog/catalog.service';
+import { PriceList } from '../catalog/catalog.models';
 import { PartyDetailsFormComponent } from './party-details-form.component';
 import {
   Customer,
@@ -127,6 +129,15 @@ import {
                            [(ngModel)]="taxExempt">
                     <label class="form-check-label small" for="texempt">Tax exempt</label>
                   </div>
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label small fw-semibold text-secondary" for="customerPriceList">Price list <span class="text-muted">(optional)</span></label>
+                  <orbix-search-select id="customerPriceList" name="pl"
+                                       [options]="priceListOptions()"
+                                       [(ngModel)]="selectedPriceListId"
+                                       placeholder="Select a price list…">
+                  </orbix-search-select>
+                  <p class="form-text small mb-0">Overrides the company default price list for this customer's sales.</p>
                 </div>
               </div>
             </fieldset>
@@ -386,9 +397,11 @@ import {
 })
 export class CustomersComponent implements OnInit {
   private readonly party = inject(PartyService);
+  private readonly catalog = inject(CatalogService);
 
   protected readonly customers = signal<Customer[]>([]);
   protected readonly parties = signal<PartyResponse[]>([]);
+  protected readonly priceLists = signal<PriceList[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly tinMatch = signal<PartyResponse | null>(null);
@@ -405,6 +418,12 @@ export class CustomersComponent implements OnInit {
       .filter(p => p.status === 'ACTIVE' && !customerIds.has(p.id))
       .map(p => ({ id: p.id, label: `${p.code} · ${p.name}` }));
   });
+
+  protected readonly priceListOptions = computed<SearchSelectOption[]>(() =>
+    this.priceLists()
+      .filter(pl => pl.status === 'ACTIVE')
+      .map(pl => ({ id: pl.id, label: `${pl.code} · ${pl.name}` }))
+  );
 
   protected readonly submitTooltip = computed(() => {
     if (this.editing()) return 'Save the edits to this customer';
@@ -434,12 +453,18 @@ export class CustomersComponent implements OnInit {
   protected creditLimitAmount = 0;
   protected creditTermsDays = 0;
   protected taxExempt = false;
+  /** Bound to the price-list picker; null means "use company default". */
+  protected selectedPriceListId: string | null = null;
 
   ngOnInit(): void {
     this.load();
     this.party.listParties().subscribe({
       next: list => this.parties.set(list),
       error: () => this.parties.set([])
+    });
+    this.catalog.listPriceLists().subscribe({
+      next: list => this.priceLists.set(list),
+      error: () => this.priceLists.set([])
     });
   }
 
@@ -468,6 +493,7 @@ export class CustomersComponent implements OnInit {
     this.creditLimitAmount = customer.creditLimitAmount;
     this.creditTermsDays = customer.creditTermsDays;
     this.taxExempt = customer.taxExempt;
+    this.selectedPriceListId = customer.priceListId;
     this.partyDetails = partyToDetails(customer.party);
     this.showForm.set(true);
   }
@@ -506,7 +532,7 @@ export class CustomersComponent implements OnInit {
       party: pickMode ? null : this.partyDetails,
       creditLimitAmount: Number(this.creditLimitAmount),
       creditTermsDays: Number(this.creditTermsDays),
-      priceListId: null,
+      priceListId: this.selectedPriceListId,
       defaultSalesAgentId: null,
       defaultBranchId: null,
       taxExempt: this.taxExempt
@@ -524,7 +550,7 @@ export class CustomersComponent implements OnInit {
       party: this.partyDetails,
       creditLimitAmount: Number(this.creditLimitAmount),
       creditTermsDays: Number(this.creditTermsDays),
-      priceListId: editing.priceListId,
+      priceListId: this.selectedPriceListId,
       defaultSalesAgentId: editing.defaultSalesAgentId,
       defaultBranchId: editing.defaultBranchId,
       taxExempt: this.taxExempt
@@ -550,6 +576,7 @@ export class CustomersComponent implements OnInit {
     this.creditLimitAmount = 0;
     this.creditTermsDays = 0;
     this.taxExempt = false;
+    this.selectedPriceListId = null;
     this.tinMatch.set(null);
   }
 
