@@ -60,4 +60,6 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
                                                       Pageable pageable);
 
     boolean existsByItemGroupId(Long itemGroupId);
+
+    long countByItemGroupIdAndStatus(Long itemGroupId, ItemStatus status);
 }

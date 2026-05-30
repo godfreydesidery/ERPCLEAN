@@ -105,11 +105,90 @@ class BranchServiceImplTest {
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
         BranchResponseDto result = service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
-            "Downtown Mall", BranchType.WAREHOUSE, "2 New St", "0711", "Africa/Nairobi"));
+            "Downtown Mall", BranchType.WAREHOUSE, "2 New St", "0711", "Africa/Nairobi", null));
 
         assertThat(result.name()).isEqualTo("Downtown Mall");
         assertThat(existing.getType()).isEqualTo(BranchType.WAREHOUSE);
         assertThat(existing.getTimeZone()).isEqualTo("Africa/Nairobi");
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-ADMIN-001: captureBeforeState returns current branch snapshot
+    // -----------------------------------------------------------------------
+
+    @Test
+    void captureBeforeState_returnsSnapshotForKnownUid() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        String before = service.captureBeforeState(existing.getUid());
+
+        assertThat(before).isNotNull().contains("DT");
+    }
+
+    @Test
+    void captureBeforeState_returnsNullForUnknownUid() {
+        when(branches.findByUid("UNKNOWN")).thenReturn(Optional.empty());
+
+        String before = service.captureBeforeState("UNKNOWN");
+
+        assertThat(before).isNull();
+    }
+
+    @Test
+    void captureBeforeState_returnsNullForNonStringArg() {
+        String before = service.captureBeforeState(42L);
+        assertThat(before).isNull();
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-ADMIN-002: isDefault promotion clears the previous default
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateBranch_promotesToDefault_clearsPreviousDefault() {
+        Branch hq = new Branch(COMPANY_ID, "HQ", "Head Office", BranchType.RETAIL,
+            "Africa/Dar_es_Salaam", true, ACTOR_ID);
+        hq.setId(1L);
+        ReflectionTestUtils.setField(hq, "uid", UidGenerator.next());
+
+        Branch dt = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(dt.getUid())).thenReturn(Optional.of(dt));
+        when(branches.findByCompanyIdAndIsDefaultTrue(COMPANY_ID)).thenReturn(Optional.of(hq));
+
+        service.updateBranchByUid(dt.getUid(), new UpdateBranchRequestDto(
+            "Downtown", BranchType.RETAIL, null, null, "Africa/Dar_es_Salaam", true));
+
+        assertThat(dt.isDefault()).isTrue();
+        assertThat(hq.isDefault()).isFalse();
+    }
+
+    @Test
+    void updateBranch_isDefaultFalse_doesNotChangeDefault() {
+        Branch hq = new Branch(COMPANY_ID, "HQ", "Head Office", BranchType.RETAIL,
+            "Africa/Dar_es_Salaam", true, ACTOR_ID);
+        hq.setId(1L);
+        ReflectionTestUtils.setField(hq, "uid", UidGenerator.next());
+
+        Branch dt = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(dt.getUid())).thenReturn(Optional.of(dt));
+
+        service.updateBranchByUid(dt.getUid(), new UpdateBranchRequestDto(
+            "Downtown", BranchType.RETAIL, null, null, "Africa/Dar_es_Salaam", false));
+
+        assertThat(dt.isDefault()).isFalse();
+        assertThat(hq.isDefault()).isTrue();
+    }
+
+    @Test
+    void updateBranch_isDefaultNull_doesNotChangeDefault() {
+        Branch existing = branch(50L, COMPANY_ID, "DT");
+        when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
+
+        service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
+            "Downtown", BranchType.RETAIL, null, null, "Africa/Dar_es_Salaam", null));
+
+        assertThat(existing.isDefault()).isFalse();
     }
 
     @Test
@@ -146,7 +225,7 @@ class BranchServiceImplTest {
         when(branches.findByUid(existing.getUid())).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> service.updateBranchByUid(existing.getUid(), new UpdateBranchRequestDto(
-            "Downtown", BranchType.RETAIL, null, null, "Not/AZone")))
+            "Downtown", BranchType.RETAIL, null, null, "Not/AZone", null)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Invalid time zone");
         assertThat(existing.getTimeZone()).isEqualTo("Africa/Kampala");

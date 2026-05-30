@@ -10,6 +10,7 @@ import com.orbix.engine.modules.admin.domain.enums.SectionType;
 import com.orbix.engine.modules.admin.repository.BranchRepository;
 import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.Auditable;
+import com.orbix.engine.modules.common.service.BeforeStateProvider;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.party.service.CustomerService;
@@ -27,7 +28,7 @@ import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
-public class BranchServiceImpl implements BranchService {
+public class BranchServiceImpl implements BranchService, BeforeStateProvider {
 
     private final BranchRepository branches;
     private final SectionRepository sections;
@@ -93,6 +94,15 @@ public class BranchServiceImpl implements BranchService {
         validateZone(request.timeZone());
         branch.updateDetails(request.name(), request.type(), request.physicalAddress(),
             request.phone(), request.timeZone(), context.userId());
+
+        // ISSUE-ADMIN-002: promote to default + clear the old default atomically.
+        if (Boolean.TRUE.equals(request.isDefault()) && !branch.isDefault()) {
+            branches.findByCompanyIdAndIsDefaultTrue(context.companyId())
+                .filter(existing -> !existing.getId().equals(branch.getId()))
+                .ifPresent(existing -> existing.clearDefault(context.userId()));
+            branch.makeDefault(context.userId());
+        }
+
         events.publish("BranchUpdated.v1", "Branch", branch.getUid(),
             Map.of(BRANCH_UID_KEY, branch.getUid()));
         return BranchResponseDto.from(branch);
@@ -130,6 +140,20 @@ public class BranchServiceImpl implements BranchService {
         branch.activate(context.userId());
         events.publish("BranchActivated.v1", "Branch", branch.getUid(),
             Map.of(BRANCH_UID_KEY, branch.getUid(), "reason", reason));
+    }
+
+    /**
+     * Called by {@link com.orbix.engine.modules.common.service.AuditAspect} before
+     * any UPDATE method executes. The first arg of updateBranchByUid is the uid.
+     */
+    @Override
+    public String captureBeforeState(Object firstArg) {
+        if (!(firstArg instanceof String uid)) return null;
+        return branches.findByUid(uid)
+            .filter(b -> b.getCompanyId().equals(context.companyId()))
+            .map(BranchResponseDto::from)
+            .map(Object::toString)
+            .orElse(null);
     }
 
     private static void validateZone(String timeZone) {

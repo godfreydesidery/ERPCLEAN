@@ -11,5 +11,9 @@ public record UpdateBranchRequestDto(
     @NotNull BranchType type,
     @Size(max = 4000) String physicalAddress,
     @Size(max = 40) String phone,
-    @NotBlank @Size(max = 64) String timeZone
+    @NotBlank @Size(max = 64) String timeZone,
+    /** When {@code true}, makes this branch the default for its company,
+     *  clearing the flag on any other branch. {@code null} / {@code false}
+     *  leaves the current default unchanged. */
+    Boolean isDefault
 ) {}

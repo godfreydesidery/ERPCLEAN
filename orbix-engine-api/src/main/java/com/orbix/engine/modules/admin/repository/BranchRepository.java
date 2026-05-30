@@ -15,4 +15,7 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
     Optional<Branch> findByCompanyIdAndCode(Long companyId, String code);
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
+
+    /** Returns the current default branch for the company, if any. */
+    java.util.Optional<Branch> findByCompanyIdAndIsDefaultTrue(Long companyId);
 }

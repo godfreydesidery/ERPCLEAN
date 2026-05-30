@@ -119,7 +119,7 @@ public class AuthServiceImpl implements AuthService {
             // wrong password by response timing (username enumeration defence).
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
-                0L, null, null, "LOGIN_FAILED", ENTITY, request.username(), null,
+                0L, null, null, "LOGIN_FAILED", ENTITY, request.username(), null, null,
                 authMeta("reason", "NO_SUCH_USER")));
             throw new InvalidCredentialsException();
         }
@@ -131,7 +131,7 @@ public class AuthServiceImpl implements AuthService {
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "LOGIN_WHILE_LOCKED")));
             throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
         }
@@ -141,7 +141,7 @@ public class AuthServiceImpl implements AuthService {
             passwords.matches(request.password(), dummyHash);
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "INACTIVE")));
             throw new InvalidCredentialsException();
         }
@@ -157,14 +157,14 @@ public class AuthServiceImpl implements AuthService {
                     // This attempt tripped the lockout — say so immediately.
                     audit.write(new AuditLogWriter.Record(
                         user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                        "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null,
+                        "ACCOUNT_LOCKED", ENTITY, user.getId().toString(), null, null,
                         authMeta("reason", "THRESHOLD_REACHED")));
                     throw new AccountLockedException(lockMessage(now, user.getLockedUntil()));
                 }
             }
             audit.write(new AuditLogWriter.Record(
                 user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-                "LOGIN_FAILED", ENTITY, user.getId().toString(), null,
+                "LOGIN_FAILED", ENTITY, user.getId().toString(), null, null,
                 authMeta("reason", "BAD_CREDENTIALS")));
             throw new InvalidCredentialsException();
         }
@@ -174,7 +174,7 @@ public class AuthServiceImpl implements AuthService {
 
         audit.write(new AuditLogWriter.Record(
             user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
-            "LOGIN", ENTITY, user.getId().toString(), null, authMeta("method", "PASSWORD")));
+            "LOGIN", ENTITY, user.getId().toString(), null, null, authMeta("method", "PASSWORD")));
         return issueTokens(user);
     }
 
@@ -198,7 +198,7 @@ public class AuthServiceImpl implements AuthService {
             log.warn("Refresh token reuse detected for user {} — revoked all tokens", stored.getUserId());
             audit.write(new AuditLogWriter.Record(
                 stored.getUserId(), null, null, "REFRESH_REUSE", ENTITY,
-                stored.getUserId().toString(), null, authMeta("reason", "TOKEN_REUSE_REVOKED_ALL")));
+                stored.getUserId().toString(), null, null, authMeta("reason", "TOKEN_REUSE_REVOKED_ALL")));
             throw new InvalidRefreshTokenException();
         }
         if (!stored.isUsable(now)) {
@@ -228,7 +228,7 @@ public class AuthServiceImpl implements AuthService {
             refreshTokens.save(t);
             audit.write(new AuditLogWriter.Record(
                 t.getUserId(), null, null, "LOGOUT", ENTITY,
-                t.getUserId().toString(), null, authMeta("scope", "SESSION")));
+                t.getUserId().toString(), null, null, authMeta("scope", "SESSION")));
         });
         // Kill the caller's current access token immediately, not just at expiry.
         tokenGuard.blacklistJti(context.jti());
@@ -241,7 +241,7 @@ public class AuthServiceImpl implements AuthService {
         tokenGuard.invalidateUserTokens(userId);
         audit.write(new AuditLogWriter.Record(
             userId, null, null, "LOGOUT_EVERYWHERE", ENTITY,
-            userId.toString(), null, authMeta("scope", "ALL_SESSIONS")));
+            userId.toString(), null, null, authMeta("scope", "ALL_SESSIONS")));
     }
 
     @Override
