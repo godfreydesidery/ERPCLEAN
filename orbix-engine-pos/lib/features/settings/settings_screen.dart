@@ -80,6 +80,57 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _SectionCard(
+                title: 'Pricing',
+                children: [
+                  _EditableTile(
+                    icon: Icons.price_change_outlined,
+                    title: 'Active price list',
+                    value: configStore.priceListCode,
+                    hint: 'RETAIL',
+                    onSave: (v) async {
+                      await ref
+                          .read(posConfigStoreProvider)
+                          .savePriceListCode(v);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Price list saved — catalog prices updated.')),
+                        );
+                      }
+                    },
+                  ),
+                  _EditableTile(
+                    icon: Icons.storefront_outlined,
+                    title: 'POS Section ID',
+                    value: configStore.sectionId.toString(),
+                    hint: '1',
+                    onSave: (v) async {
+                      final id = int.tryParse(v);
+                      if (id == null || id <= 0) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Section ID must be a positive integer.')),
+                          );
+                        }
+                        return;
+                      }
+                      await ref
+                          .read(posConfigStoreProvider)
+                          .saveSectionId(id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Section ID saved.')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _SectionCard(
                 title: 'Connection',
                 children: [
                   _EditableTile(

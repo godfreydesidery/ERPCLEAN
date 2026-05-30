@@ -57,7 +57,12 @@ class _TillOpenScreenState extends ConsumerState<TillOpenScreen> {
       final authSession = ref.read(sessionProvider);
       final userId = authSession?.userId ?? 1;
       final cashierName = authSession?.displayName ?? 'Cashier';
-      const branchName = 'Branch HQ'; // TODO: resolve from JWT / config in follow-up
+      // Resolve branch name from the JWT session. The branch id is stored in
+      // activeBranchId/defaultBranchId; the display name is not in the JWT
+      // payload itself (the server doesn't include it). Use a config-derivable
+      // label: "Branch <id>" until a branch-name pull is added.
+      final branchId = authSession?.effectiveBranchId;
+      final branchName = branchId != null ? 'Branch $branchId' : 'Branch';
 
       final businessDate = _todayDate();
 

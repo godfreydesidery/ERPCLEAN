@@ -435,6 +435,17 @@ class CompletedSale {
   /// Mixed-tender breakdown. Single-tender sales have one entry.
   final List<TenderLine> tenders;
 
+  /// Fiscal status from the server after fiscalisation.
+  /// Null = never fiscalised / regime=NONE.
+  /// Values: 'PROVISIONAL' | 'FISCALIZED' (mirrors PosReceiptFiscalStatus enum).
+  final String? fiscalStatus;
+
+  /// Fiscal verification code (alphanumeric string printed on the receipt).
+  final String? fiscalVerificationCode;
+
+  /// Base64 or raw payload for the fiscal QR code.
+  final String? fiscalQrPayload;
+
   const CompletedSale({
     required this.receiptNo,
     required this.lines,
@@ -450,6 +461,9 @@ class CompletedSale {
     required this.cashierName,
     required this.branchName,
     this.tenders = const [],
+    this.fiscalStatus,
+    this.fiscalVerificationCode,
+    this.fiscalQrPayload,
   });
 }
 

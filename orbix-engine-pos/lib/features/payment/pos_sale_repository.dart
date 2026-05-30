@@ -22,6 +22,71 @@ import '../../data/sync/outbox_repository.dart';
 import '../_demo/mocks.dart' show CartLine, PaymentMethod;
 import '../payment/payment_screen.dart' show TenderLine;
 
+// ---------------------------------------------------------------------------
+// Local sale view models (used by the refund screen)
+// ---------------------------------------------------------------------------
+
+/// A single line of a [LocalSale] — joined from PosSaleLines + Items.
+class LocalSaleLine {
+  const LocalSaleLine({
+    required this.itemId,
+    required this.itemCode,
+    required this.itemName,
+    required this.qty,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  final int itemId;
+  final String itemCode;
+  final String itemName;
+  final double qty;
+  final double unitPrice;
+  final double lineTotal;
+}
+
+/// A past sale record read from local Drift (for the refund picker).
+class LocalSale {
+  const LocalSale({
+    required this.id,
+    required this.clientOpId,
+    required this.receiptNo,
+    required this.saleAt,
+    required this.total,
+    required this.status,
+    required this.synced,
+    required this.lines,
+    this.serverEntityUid,
+  });
+
+  final int id;
+  final String clientOpId;
+  /// Displayed receipt number: server number if synced, else clientOpId.
+  final String receiptNo;
+  final DateTime saleAt;
+  final double total;
+  final String status; // POSTED | VOIDED
+  final bool synced;
+  final List<LocalSaleLine> lines;
+  /// Server uid — non-null only after the outbox op is ACCEPTED.
+  final String? serverEntityUid;
+}
+
+/// A line submitted as part of a refund request.
+class RefundLine {
+  const RefundLine({
+    required this.itemId,
+    required this.qty,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  final int itemId;
+  final double qty;
+  final double unitPrice;
+  final double lineTotal;
+}
+
 /// Wire value for a [PaymentMethod] sent to the server (PosPaymentMethod enum).
 String _tenderMethodWire(PaymentMethod m) => switch (m) {
       PaymentMethod.cash => 'CASH',
@@ -195,6 +260,149 @@ class PosSaleRepository {
       clientOpId: saleClientOpId,
       receiptNumber: receiptNumber,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Query past sales (for refund picker)
+  // ---------------------------------------------------------------------------
+
+  /// Returns the [limit] most-recent POSTED sales from Drift (newest first).
+  ///
+  /// Joins [PosSales] with [PosSaleLines] + [Items] so the caller gets full
+  /// line detail without extra queries.  Used by the refund screen.
+  Future<List<LocalSale>> recentSales({int limit = 50}) async {
+    final sales = await (_db.select(_db.posSales)
+          ..where((t) => t.status.equals('POSTED'))
+          ..orderBy([(t) => OrderingTerm.desc(t.saleAt)])
+          ..limit(limit))
+        .get();
+
+    if (sales.isEmpty) return const [];
+
+    final result = <LocalSale>[];
+    for (final sale in sales) {
+      final lines = await (_db.select(_db.posSaleLines)
+            ..where((t) => t.saleId.equals(sale.id)))
+          .get();
+
+      final itemIds = lines.map((l) => l.itemId).toSet().toList();
+      final itemRows = await (_db.select(_db.items)
+            ..where((t) => t.id.isIn(itemIds)))
+          .get();
+      final itemMap = {for (final i in itemRows) i.id: i};
+
+      final saleLines = lines
+          .map((l) {
+            final item = itemMap[l.itemId];
+            if (item == null) return null;
+            return LocalSaleLine(
+              itemId: l.itemId,
+              itemCode: item.code,
+              itemName: item.name,
+              qty: l.qty,
+              unitPrice: l.unitPrice,
+              lineTotal: l.lineTotal,
+            );
+          })
+          .whereType<LocalSaleLine>()
+          .toList();
+
+      result.add(LocalSale(
+        id: sale.id,
+        clientOpId: sale.clientOpId,
+        receiptNo: sale.serverNumber ?? sale.clientOpId,
+        saleAt: sale.saleAt,
+        total: sale.total,
+        status: sale.status,
+        synced: sale.synced,
+        lines: saleLines,
+        serverEntityUid: sale.serverEntityUid,
+      ));
+    }
+    return result;
+  }
+
+  /// Enqueue a refund op against a past sale.
+  ///
+  /// The refund is written as a POS_SALE outbox op with kind=REFUND.
+  /// The server-side sale uid is needed for correlation; if the sale hasn't
+  /// synced yet [originalSaleClientOpId] is used as the correlation key and
+  /// the dispatcher back-fills the server uid on acceptance.
+  Future<String> recordRefund({
+    required int sessionLocalId,
+    required String sessionClientOpId,
+    String? sessionServerId,
+    required String originalSaleClientOpId,
+    String? originalSaleServerUid,
+    required int customerId,
+    required int userId,
+    required List<RefundLine> lines,
+    required String reason,
+    required String deviceId,
+    required String businessDate,
+  }) async {
+    if (lines.isEmpty) throw ArgumentError('Refund has no lines');
+
+    final refundAt = DateTime.now().toUtc();
+    final total = lines.fold(0.0, (s, l) => s + l.lineTotal);
+
+    final datePart = businessDate.replaceAll('-', '');
+    final suffix = (refundAt.millisecondsSinceEpoch % 100000)
+        .toString()
+        .padLeft(5, '0');
+    final refundNumber = 'REF-$deviceId-$datePart-$suffix';
+
+    _log.i('PosSaleRepository.recordRefund number=$refundNumber total=$total');
+
+    String refundClientOpId = '';
+
+    await _db.transaction(() async {
+      final payload = <String, dynamic>{
+        'number': refundNumber,
+        'kind': 'REFUND',
+        'originalSaleClientOpId': originalSaleClientOpId,
+        if (originalSaleServerUid != null)
+          'originalSaleUid': originalSaleServerUid,
+        'tillSessionId': sessionServerId != null
+            ? int.tryParse(sessionServerId) ?? 0
+            : 0,
+        'tillSessionClientOpId': sessionClientOpId,
+        'customerId': customerId,
+        'supervisorId': userId,
+        'saleAt': refundAt.toIso8601String(),
+        'total': total.toStringAsFixed(4),
+        'reason': reason,
+        'lines': lines
+            .map((l) => {
+                  'itemId': l.itemId,
+                  'qty': l.qty.toStringAsFixed(4),
+                  'unitPrice': l.unitPrice.toStringAsFixed(4),
+                })
+            .toList(),
+        'payments': [
+          {'method': 'CASH', 'amount': total.toStringAsFixed(4)},
+        ],
+      };
+
+      refundClientOpId = await _outbox.enqueueInTxn(
+        _db,
+        opType: OutboxOpType.posSale,
+        payload: payload,
+        dependsOn: sessionClientOpId,
+        occurredAt: refundAt,
+      );
+
+      final payloadWithId = Map<String, dynamic>.from(payload)
+        ..['clientOpId'] = refundClientOpId;
+      await (_db.update(_db.outbox)
+            ..where((t) => t.clientOpId.equals(refundClientOpId)))
+          .write(OutboxCompanion(
+        payloadJson: Value(jsonEncode(payloadWithId)),
+      ));
+    });
+
+    _log.d('PosSaleRepository.recordRefund clientOpId=$refundClientOpId');
+    return refundClientOpId;
   }
 
   // ---------------------------------------------------------------------------

@@ -69,26 +69,40 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
     _scanFocus.requestFocus();
   }
 
-  void _scan(String value, List<CatalogItem> items) {
+  Future<void> _scan(String value, List<CatalogItem> items) async {
     final v = value.trim();
     if (v.isEmpty) {
       _scanFocus.requestFocus();
       return;
     }
-    // Look up by item code (barcode lookup through the barcodes table is a
-    // TODO once the scanner integration is wired; code match covers most SKUs).
+    _scanCtrl.clear();
+
+    // 1. Try barcode lookup in Drift (EAN-13, QR, internal barcodes).
+    final catalogRepo = ref.read(catalogRepositoryProvider);
+    final byBarcode = await catalogRepo.findByBarcode(v);
+    if (byBarcode != null) {
+      if (!byBarcode.hasPriceRow) {
+        setState(() => _scanError = '${byBarcode.name} has no price — cannot sell');
+      } else {
+        ref.read(cartProvider.notifier).addCatalogItem(byBarcode);
+        setState(() => _scanError = null);
+      }
+      _scanFocus.requestFocus();
+      return;
+    }
+
+    // 2. Fallback: match by item code in the catalog list already in memory.
     final hit = items
-            .where((i) => i.code.toLowerCase() == v.toLowerCase())
-            .firstOrNull;
+        .where((i) => i.code.toLowerCase() == v.toLowerCase())
+        .firstOrNull;
     if (hit == null) {
-      setState(() => _scanError = 'Unknown code: $v');
+      setState(() => _scanError = 'Unknown barcode/code: $v');
     } else if (!hit.hasPriceRow) {
       setState(() => _scanError = '${hit.name} has no price — cannot sell');
     } else {
       ref.read(cartProvider.notifier).addCatalogItem(hit);
       setState(() => _scanError = null);
     }
-    _scanCtrl.clear();
     _scanFocus.requestFocus();
   }
 
@@ -254,7 +268,7 @@ class _SupermarketPaneState extends ConsumerState<SupermarketPane> {
                 focusedBorder: InputBorder.none,
                 enabledBorder: InputBorder.none,
               ),
-              onSubmitted: (v) => _scan(v, catalogItems),
+              onSubmitted: (v) => _scan(v, catalogItems).ignore(),
             ),
           ),
           Container(

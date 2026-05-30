@@ -52,6 +52,14 @@ final deviceIdProvider = Provider<String>((ref) {
   return ref.watch(posConfigStoreProvider).deviceId;
 });
 
+final priceListCodeProvider = Provider<String>((ref) {
+  return ref.watch(posConfigStoreProvider).priceListCode;
+});
+
+final sectionIdProvider = Provider<int>((ref) {
+  return ref.watch(posConfigStoreProvider).sectionId;
+});
+
 // ---------------------------------------------------------------------------
 // Base (un-intercepted) Dio — used by AuthRepository only.
 // Do NOT add the AuthInterceptor here; that would cause re-entrant 401 loops.

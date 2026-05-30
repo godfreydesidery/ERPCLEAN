@@ -17,13 +17,14 @@ import 'catalog_item.dart';
 import 'catalog_repository.dart';
 
 // ---------------------------------------------------------------------------
-// Catalog repository
+// Catalog repository — rebuilds when price list selection changes
 // ---------------------------------------------------------------------------
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   return CatalogRepository(
     db: ref.watch(posDatabaseProvider),
     logger: ref.watch(loggerProvider),
+    preferredPriceList: ref.watch(priceListCodeProvider),
   );
 });
 

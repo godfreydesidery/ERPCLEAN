@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../features/catalog/catalog_item.dart';
 import '../../../features/catalog/catalog_providers.dart';
+import '../../../features/customer/customer_providers.dart';
 import '../../_demo/mocks.dart';
 
 /// Retail mode — search + category chips + tile grid. The default mode,
@@ -41,21 +42,42 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
     }).toList();
   }
 
-  void _scan(String value, List<CatalogItem> items) {
-    final v = value.trim().toLowerCase();
+  Future<void> _scan(String value, List<CatalogItem> items) async {
+    final v = value.trim();
+    if (v.isEmpty) return;
+    _ctrl.clear();
+    setState(() => _query = '');
+
+    // 1. Try barcode lookup in Drift (covers EAN-13, QR, etc.)
+    final catalogRepo = ref.read(catalogRepositoryProvider);
+    final byBarcode = await catalogRepo.findByBarcode(v);
+    if (byBarcode != null) {
+      if (!byBarcode.hasPriceRow) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${byBarcode.name} has no price — cannot sell')),
+          );
+        }
+        return;
+      }
+      ref.read(cartProvider.notifier).addCatalogItem(byBarcode);
+      return;
+    }
+
+    // 2. Fallback: match by item code in the already-loaded catalog list.
     final hit = items.firstWhere(
-      (i) => i.code.toLowerCase() == v,
-      orElse: () => items.isNotEmpty ? items.first : _noItem,
+      (i) => i.code.toLowerCase() == v.toLowerCase(),
+      orElse: () => _noItem,
     );
     if (hit == _noItem) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Item not found: $value')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Item not found: $v')),
+        );
+      }
     } else {
       ref.read(cartProvider.notifier).addCatalogItem(hit);
     }
-    _ctrl.clear();
-    setState(() => _query = '');
   }
 
   // Sentinel — avoids nullable gymnastics in _scan.
@@ -102,13 +124,20 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
       ),
     );
     if (ok != true) return;
+    // Bridge: HeldCart still holds a MockCustomer; convert from PosCustomer.
+    final posCustomer = ref.read(selectedPosCustomerProvider);
+    final legacyCustomer = MockCustomer(
+      code: posCustomer.code,
+      name: posCustomer.name,
+      walkIn: posCustomer.isWalkIn,
+    );
     final id = ref.read(heldCartsProvider.notifier).hold(
           cart,
-          ref.read(selectedCustomerProvider),
+          legacyCustomer,
           note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
         );
     ref.read(cartProvider.notifier).clear();
-    ref.read(selectedCustomerProvider.notifier).state = mockCustomers.first;
+    ref.read(selectedPosCustomerProvider.notifier).state = PosCustomer.walkIn;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cart held as $id — recall from the history button')),
@@ -150,7 +179,7 @@ class _RetailPaneState extends ConsumerState<RetailPane> {
                   ),
                   onChanged: (v) => setState(() => _query = v),
                   onSubmitted: (v) => catalogAsync.whenData(
-                    (items) => _scan(v, items),
+                    (items) => _scan(v, items).ignore(),
                   ),
                 ),
               ),

@@ -16,8 +16,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/core_providers.dart' show deviceIdProvider;
-import '../_demo/mocks.dart';
+import '../../data/auth/auth_providers.dart' show sessionProvider;
+import '../../data/core_providers.dart' show deviceIdProvider, sectionIdProvider;
+import '../_demo/mocks.dart' hide sessionProvider;
+import '../customer/customer_providers.dart';
 import '../till_session/till_session_providers.dart' show activeTillSessionProvider;
 import 'pos_sale_providers.dart';
 
@@ -116,14 +118,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   Future<void> _recordSaleReal(double total) async {
     final lines = ref.read(cartProvider);
-    final customer = ref.read(selectedCustomerProvider);
+    final posCustomer = ref.read(selectedPosCustomerProvider);
     final subtotal = ref.read(cartSubtotalProvider);
     final discount = ref.read(cartDiscountProvider);
     final deviceId = ref.read(deviceIdProvider);
+    final sectionId = ref.read(sectionIdProvider);
     final tendersCopy = List<TenderLine>.unmodifiable(_tenders);
+
+    // Resolve branch name from the stored JWT session.
+    // StoredSession carries defaultBranchId but not a name string; use the
+    // cashierSession label (stamped at till-open from the auth session).
+    final authSession = ref.read(sessionProvider);
 
     // Resolve the active session from Drift.
     final activeSession = await ref.read(activeTillSessionProvider.future);
+
+    // Effective customer id: use synced Drift id when available; fall back to
+    // walk-in sentinel id=1 (the server's walk-in customer row).
+    final effectiveCustomerId = (posCustomer.isWalkIn || posCustomer.id <= 0)
+        ? 1
+        : posCustomer.id;
 
     String receiptNo;
     if (activeSession != null && activeSession.clientOpId.isNotEmpty) {
@@ -134,12 +148,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         sessionLocalId: activeSession.localId,
         sessionClientOpId: activeSession.clientOpId,
         sessionServerId: activeSession.serverEntityId,
-        // sectionId: use 1 as the default HQ POS section. A follow-up should
-        // resolve from the till config or from a server-pushed POS section table.
-        sectionId: 1,
-        // customerId: use the walk-in customer id (1) when customer not resolved
-        // from Drift. Mock customers don't have server ids yet.
-        customerId: 1,
+        sectionId: sectionId,
+        customerId: effectiveCustomerId,
         userId: activeSession.openedBy,
         lines: lines,
         tenders: tendersCopy,
@@ -158,11 +168,27 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       );
     }
 
-    // Update the mock lastSaleProvider so the receipt screen can display it.
+    // Resolve display names for the receipt.
+    final cashierName = authSession?.displayName ??
+        activeSession?.cashierName ?? 'Cashier';
+    // Branch name from the cashierSession label stamped at till-open; last
+    // resort to a generic label (never a hardcoded 'Branch HQ').
+    final branchName = activeSession?.branchName ?? 'Branch';
+
+    // Build the MockCustomer-compatible shape for the legacy CompletedSale.
+    // This is a bridge shim: receipt_screen still reads CompletedSale which
+    // holds a MockCustomer. The customer name is what matters on the receipt.
+    final legacyCustomer = MockCustomer(
+      code: posCustomer.code,
+      name: posCustomer.name,
+      walkIn: posCustomer.isWalkIn,
+    );
+
+    // Update lastSaleProvider so the receipt screen can display the sale.
     ref.read(lastSaleProvider.notifier).state = CompletedSale(
       receiptNo: receiptNo,
       lines: List.unmodifiable(lines),
-      customer: customer,
+      customer: legacyCustomer,
       method: tendersCopy.length == 1 ? tendersCopy.first.method : PaymentMethod.cash,
       subtotal: subtotal,
       discount: discount,
@@ -171,11 +197,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       change: _tenderedTotal - total,
       completedAt: DateTime.now(),
       tillCode: activeSession?.tillCode ?? deviceId,
-      cashierName: activeSession?.cashierName ?? 'Cashier',
-      branchName: activeSession?.branchName ?? 'Branch HQ',
+      cashierName: cashierName,
+      branchName: branchName,
       tenders: tendersCopy,
     );
     ref.read(cartProvider.notifier).clear();
+    // Reset customer to walk-in after sale is complete.
+    ref.read(selectedPosCustomerProvider.notifier).state = PosCustomer.walkIn;
 
     if (mounted) context.go('/receipt');
   }
