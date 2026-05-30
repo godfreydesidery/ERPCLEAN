@@ -11,6 +11,7 @@ import { Currency, CurrencyService } from '../../core/currency/currency.service'
 import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { UserPickerComponent, UserSelectedEvent } from '../../core/ui/user-picker.component';
 import { CatalogService } from '../catalog/catalog.service';
 import { Item, PriceList } from '../catalog/catalog.models';
 import { PartyService } from '../party/party.service';
@@ -36,7 +37,7 @@ interface LineRow {
 @Component({
   selector: 'orbix-sales-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, HasPermissionDirective],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, HasPermissionDirective, UserPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -121,8 +122,13 @@ interface LineRow {
                   </orbix-search-select>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Discount approver <span class="text-muted">(if &gt; 10%)</span></label>
-                  <input class="form-control" type="number" name="da" [(ngModel)]="newDiscountApproverId">
+                  <orbix-user-picker
+                    instanceId="inv-discount-approver"
+                    label="Discount approver (if > 10%)"
+                    [required]="false"
+                    (userSelected)="onDiscountApproverSelected($event)"
+                    (userCleared)="newDiscountApproverId = null">
+                  </orbix-user-picker>
                 </div>
               </div>
             </fieldset>
@@ -712,6 +718,8 @@ export class InvoicesComponent implements OnInit {
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onDiscountApproverSelected(evt: UserSelectedEvent): void { this.newDiscountApproverId = evt.id; }
 
   refresh(): void {
     const status = this.statusFilter === 'ALL' ? null : this.statusFilter;

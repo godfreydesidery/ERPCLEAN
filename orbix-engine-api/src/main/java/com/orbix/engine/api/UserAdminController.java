@@ -8,6 +8,7 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
+import com.orbix.engine.modules.iam.domain.dto.UserLookupDto;
 import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 import com.orbix.engine.modules.iam.service.UserAdminService;
 import jakarta.validation.Valid;
@@ -17,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * Day-2 user administration (F0.4c). Companion to {@link RoleAdminController}.
@@ -30,6 +33,26 @@ import org.springframework.web.bind.annotation.*;
 public class UserAdminController {
 
     private final UserAdminService service;
+
+    /**
+     * Name-search picker — open to any authenticated user.
+     *
+     * The projection is intentionally narrow (id/uid/displayName/username only),
+     * so broad access is safe: no sensitive fields are exposed and the result
+     * does not confer any ability to act on the matched user. Ordinary roles
+     * (cashier, stock controller, etc.) need this to pick an approver or
+     * assignee by name without holding IAM.MANAGE_USERS.
+     *
+     * Pattern mirrors {@code CurrencyController#listCurrencies} — class-level
+     * @PreAuthorize is overridden per-method with {@code isAuthenticated()}.
+     */
+    @GetMapping("/lookup")
+    @PreAuthorize("isAuthenticated()")
+    public List<UserLookupDto> lookupUsers(
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "20") int size) {
+        return service.lookupUsers(q, size);
+    }
 
     @GetMapping
     @PreAuthorize("hasAuthority('IAM.MANAGE_USERS')")

@@ -9,6 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { PagerComponent } from '../../core/ui/pager.component';
 import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
+import { LpoPickerModalComponent } from './lpo-picker-modal.component';
 import { ProcurementService } from './procurement.service';
 import {
   CreateGrnLine,
@@ -20,7 +21,7 @@ import {
 @Component({
   selector: 'orbix-grns',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent, HasPermissionDirective],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent, HasPermissionDirective, LpoPickerModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -56,15 +57,29 @@ import {
           <button class="btn-close btn-sm" aria-label="Close" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3 d-flex flex-column gap-3">
-          <form (ngSubmit)="loadLpo()" #lf="ngForm">
-            <label class="form-label small fw-semibold text-secondary">LPO uid</label>
-            <div class="input-group">
-              <input class="form-control font-monospace" name="lpoUid" [(ngModel)]="lpoUidInput" required>
-              <button class="btn btn-outline-primary d-inline-flex align-items-center gap-1" type="submit" [disabled]="busy() || lf.invalid">
-                <i class="bi bi-arrow-down-circle"></i> Load LPO
-              </button>
+          <div>
+            <label class="form-label small fw-semibold text-secondary">LPO</label>
+            <div class="d-flex align-items-center gap-2">
+              @if (loadedLpo(); as lpo) {
+                <span class="badge text-bg-light border font-monospace">{{ lpo.number }}</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="lpoPickerVisible.set(true)">Change LPO</button>
+              } @else {
+                <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+                        (click)="lpoPickerVisible.set(true)">
+                  <i class="bi bi-search"></i> Pick LPO
+                </button>
+              }
             </div>
-          </form>
+          </div>
+
+          <orbix-lpo-picker-modal
+            [visible]="lpoPickerVisible()"
+            [supplierId]="null"
+            statusFilter="APPROVED"
+            (lpoSelected)="onLpoPicked($event)"
+            (closed)="lpoPickerVisible.set(false)">
+          </orbix-lpo-picker-modal>
 
           @if (loadedLpo(); as lpo) {
             <form (ngSubmit)="createAgainstLpo()" class="d-flex flex-column gap-3">
@@ -433,7 +448,7 @@ export class GrnsComponent implements OnInit {
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
 
-  protected lpoUidInput: string | null = null;
+  protected readonly lpoPickerVisible = signal(false);
   protected newNumber = '';
   protected receivedDate = new Date().toISOString().slice(0, 10);
   protected deliveryNote = '';
@@ -468,21 +483,15 @@ export class GrnsComponent implements OnInit {
     if (this.cancelTarget()?.id !== grn.id) this.closeCancel();
   }
 
-  loadLpo(): void {
-    if (this.lpoUidInput === null) return;
-    this.error.set(null);
-    this.procurement.getLpo(this.lpoUidInput).subscribe({
-      next: lpo => {
-        this.loadedLpo.set(lpo);
-        this.receiveQty = {};
-        this.receiveCost = {};
-        this.receiveBatch = {};
-        for (const line of lpo.lines) {
-          this.receiveCost[line.id] = line.unitPrice;
-        }
-      },
-      error: err => this.showError(err)
-    });
+  onLpoPicked(lpo: LpoOrder): void {
+    this.loadedLpo.set(lpo);
+    this.lpoPickerVisible.set(false);
+    this.receiveQty = {};
+    this.receiveCost = {};
+    this.receiveBatch = {};
+    for (const line of lpo.lines) {
+      this.receiveCost[line.id] = line.unitPrice;
+    }
   }
 
   createAgainstLpo(): void {

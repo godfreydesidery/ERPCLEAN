@@ -27,6 +27,25 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findByDefaultCompanyIdOrderByIdAsc(Long defaultCompanyId);
 
     /**
+     * Lightweight name-search for picker fields. Scoped to the caller's
+     * company; returns only ACTIVE users. {@code q} matches displayName or
+     * username (case-insensitive). Results are ordered by displayName for
+     * predictable picker ordering.
+     */
+    @Query("""
+        select u from AppUser u
+        where u.defaultCompanyId = :companyId
+          and u.status = com.orbix.engine.modules.iam.domain.enums.AppUserStatus.ACTIVE
+          and (:q is null
+               or lower(u.displayName) like lower(concat('%', :q, '%'))
+               or lower(u.username) like lower(concat('%', :q, '%')))
+        order by u.displayName asc
+        """)
+    List<AppUser> lookupByName(@Param("companyId") Long companyId,
+                               @Param("q") String q,
+                               Pageable pageable);
+
+    /**
      * Server-side paginated + searchable + status-filtered user listing. One
      * query for both scopes: company-wide callers ({@code companyWide = true})
      * see everyone in the company; branch-scoped callers see only users whose

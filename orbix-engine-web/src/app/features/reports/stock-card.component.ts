@@ -14,6 +14,7 @@ import { ReportExport } from './report-export.service';
 import { ReportsService } from './reports.service';
 import { StockMove } from './reports.models';
 import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { Page } from '../../core/api/page';
@@ -40,7 +41,7 @@ const DOC_ROUTE: Record<string, string> = {
   standalone: true,
   imports: [
     CommonModule, RouterLink, DatePipe, DecimalPipe,
-    FormsModule, ReportExportMenuComponent, ItemTypeaheadComponent,
+    FormsModule, ReportExportMenuComponent, ItemTypeaheadComponent, BranchPickerComponent,
   ],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
@@ -92,12 +93,13 @@ const DOC_ROUTE: Record<string, string> = {
 
         <!-- Branch -->
         <div class="col-12 col-sm-6 col-md-3">
-          <label for="sc-branch" class="form-label small fw-semibold mb-1">Branch ID</label>
-          <input id="sc-branch" type="text" class="form-control form-control-sm"
-                 [(ngModel)]="branchInput" name="branchId"
-                 placeholder="Default: current branch"
-                 aria-describedby="sc-branch-hint">
-          <div id="sc-branch-hint" class="form-text">Numeric branch ID</div>
+          <orbix-branch-picker
+            instanceId="sc"
+            label="Branch (optional — blank = current)"
+            [required]="false"
+            (branchSelected)="onBranchSelected($event)"
+            (branchCleared)="onBranchCleared()">
+          </orbix-branch-picker>
         </div>
 
         <!-- Client-side date from -->
@@ -327,6 +329,14 @@ export class StockCardComponent implements OnInit {
     this.page.set(null);
     this.fetched.set(false);
     this.error.set(null);
+  }
+
+  protected onBranchSelected(evt: BranchSelectedEvent): void {
+    this.branchInput = evt.id;
+  }
+
+  protected onBranchCleared(): void {
+    this.branchInput = '';
   }
 
   protected fetch(): void {

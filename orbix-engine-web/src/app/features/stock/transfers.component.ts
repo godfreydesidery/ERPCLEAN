@@ -6,13 +6,15 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
 import { StockTransfer } from './stock.models';
 
 @Component({
   selector: 'orbix-stock-transfers',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DecimalPipe, BranchPickerComponent, ItemTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -51,12 +53,22 @@ import { StockTransfer } from './stock.models';
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="ST0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">From branch ID</label>
-                  <input class="form-control" type="number" name="fb" [(ngModel)]="newFrom" required>
+                  <orbix-branch-picker
+                    instanceId="transfer-from"
+                    label="From branch"
+                    [required]="true"
+                    (branchSelected)="onFromBranch($event)"
+                    (branchCleared)="newFrom = null">
+                  </orbix-branch-picker>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">To branch ID</label>
-                  <input class="form-control" type="number" name="tb" [(ngModel)]="newTo" required>
+                  <orbix-branch-picker
+                    instanceId="transfer-to"
+                    label="To branch"
+                    [required]="true"
+                    (branchSelected)="onToBranch($event)"
+                    (branchCleared)="newTo = null">
+                  </orbix-branch-picker>
                 </div>
               </div>
             </fieldset>
@@ -65,8 +77,11 @@ import { StockTransfer } from './stock.models';
               <legend class="form-fieldset__legend"><i class="bi bi-list-ul text-secondary"></i> First line</legend>
               <div class="row g-2">
                 <div class="col-md-6">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" name="it" [(ngModel)]="newItemId" required>
+                  <orbix-item-typeahead
+                    instanceId="transfer-item"
+                    (itemSelected)="onItemSelected($event)"
+                    (itemCleared)="newItemId = null">
+                  </orbix-item-typeahead>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-semibold text-secondary">Quantity</label>
@@ -78,7 +93,7 @@ import { StockTransfer } from './stock.models';
 
             <div class="d-flex gap-2 pt-2 border-top">
               <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
-                      [disabled]="busy() || f.invalid">
+                      [disabled]="busy() || !newFrom || !newTo || !newItemId || !newNumber">
                 @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
                 @else { <i class="bi bi-arrow-left-right"></i> }
                 Create transfer
@@ -290,6 +305,10 @@ export class TransfersComponent implements OnInit {
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
+  onFromBranch(evt: BranchSelectedEvent): void { this.newFrom = evt.id; }
+  onToBranch(evt: BranchSelectedEvent): void { this.newTo = evt.id; }
+  onItemSelected(evt: ItemSelectedEvent): void { this.newItemId = evt.id; }
+
   select(transfer: StockTransfer): void {
     this.selected.set(transfer);
     this.receiveDraft = {};
@@ -299,11 +318,12 @@ export class TransfersComponent implements OnInit {
   }
 
   create(): void {
+    if (!this.newFrom || !this.newTo || !this.newItemId) return;
     this.run(this.stock.createTransfer({
       number: this.newNumber.trim(),
-      fromBranchId: this.newFrom!,
-      toBranchId: this.newTo!,
-      lines: [{ itemId: this.newItemId!, issuedQty: Number(this.newQty) }]
+      fromBranchId: this.newFrom,
+      toBranchId: this.newTo,
+      lines: [{ itemId: this.newItemId, issuedQty: Number(this.newQty) }]
     }), created => {
       this.newNumber = '';
       this.newItemId = null;
@@ -354,11 +374,6 @@ export class TransfersComponent implements OnInit {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
       const msg = envelope?.message ?? `Request failed (${err.status})`;
-      // The transfer-issue path can trip the underlying negative-stock guard
-      // (StockMoveServiceImpl) when source-branch on-hand can't cover the
-      // issued qty. Surface a clearer hint — the issue endpoint does NOT
-      // accept an allowOversell flag, so the only fix is to top up the
-      // source branch first or get a STOCK.OVERSELL-holder to adjust.
       if (err.status === 400 && msg.includes('STOCK.OVERSELL')) {
         if (this.auth.hasPermission('STOCK.OVERSELL')) {
           this.error.set(

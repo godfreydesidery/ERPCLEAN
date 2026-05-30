@@ -16,13 +16,14 @@ import { ItemBranchBalance } from './reports.models';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { ApiResponse } from '../../core/api/api-response';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 
 const PERM = 'STOCK.COUNT';
 
 @Component({
   selector: 'orbix-negative-stock',
   standalone: true,
-  imports: [CommonModule, RouterLink, DecimalPipe, FormsModule, ReportExportMenuComponent],
+  imports: [CommonModule, RouterLink, DecimalPipe, FormsModule, ReportExportMenuComponent, BranchPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -55,12 +56,13 @@ const PERM = 'STOCK.COUNT';
       <!-- Filters -->
       <form class="row g-2 mb-4 align-items-end" (ngSubmit)="fetch()" aria-label="Negative stock filters">
         <div class="col-12 col-sm-6 col-md-4">
-          <label for="ns-branch" class="form-label small fw-semibold mb-1">Branch ID</label>
-          <input id="ns-branch" type="text" class="form-control form-control-sm"
-                 [(ngModel)]="branchInput" name="branchId"
-                 placeholder="Default: current branch"
-                 aria-describedby="ns-branch-hint">
-          <div id="ns-branch-hint" class="form-text">Numeric branch ID</div>
+          <orbix-branch-picker
+            instanceId="ns"
+            label="Branch (optional — blank = all)"
+            [required]="false"
+            (branchSelected)="onBranchSelected($event)"
+            (branchCleared)="onBranchCleared()">
+          </orbix-branch-picker>
         </div>
         <div class="col-auto">
           <button type="submit" class="btn btn-primary btn-sm" [disabled]="loading()">
@@ -196,17 +198,24 @@ export class NegativeStockComponent implements OnInit {
   protected readonly fetched = signal(false);
 
   ngOnInit(): void {
-    // Pre-fill branch from query params or current branch
+    // Pre-fill branch from query params; picker handles active-branch display.
     this.route.queryParamMap.subscribe(params => {
       const b = params.get('branchId');
-      if (b) {
-        this.branchInput = b;
-      } else {
+      if (b) this.branchInput = b;
+      else {
         const active = this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId;
         if (active) this.branchInput = active;
       }
       if (this.hasPerm()) this.fetch();
     });
+  }
+
+  protected onBranchSelected(evt: BranchSelectedEvent): void {
+    this.branchInput = evt.id;
+  }
+
+  protected onBranchCleared(): void {
+    this.branchInput = '';
   }
 
   protected fetch(): void {

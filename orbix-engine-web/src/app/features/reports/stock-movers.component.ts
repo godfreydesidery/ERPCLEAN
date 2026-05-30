@@ -13,6 +13,7 @@ import { ReportExportMenuComponent } from './report-export-menu.component';
 import { ReportExport } from './report-export.service';
 import { ReportsService } from './reports.service';
 import { ItemMovementRow } from './reports.models';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { ApiResponse } from '../../core/api/api-response';
@@ -39,7 +40,7 @@ function last30DaysRange(): { from: string; to: string } {
 @Component({
   selector: 'orbix-stock-movers',
   standalone: true,
-  imports: [CommonModule, RouterLink, DecimalPipe, FormsModule, ReportExportMenuComponent],
+  imports: [CommonModule, RouterLink, DecimalPipe, FormsModule, ReportExportMenuComponent, BranchPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -65,10 +66,13 @@ function last30DaysRange(): { from: string; to: string } {
       <form class="row g-2 mb-4 align-items-end" (ngSubmit)="fetchBoth()" aria-label="Stock movers filters">
         <!-- Branch -->
         <div class="col-12 col-sm-6 col-md-3">
-          <label for="sm-branch" class="form-label small fw-semibold mb-1">Branch ID</label>
-          <input id="sm-branch" type="text" class="form-control form-control-sm"
-                 [(ngModel)]="branchInput" name="branchId"
-                 placeholder="Default: current branch">
+          <orbix-branch-picker
+            instanceId="sm"
+            label="Branch (optional — blank = all)"
+            [required]="false"
+            (branchSelected)="onBranchSelected($event)"
+            (branchCleared)="onBranchCleared()">
+          </orbix-branch-picker>
         </div>
 
         <!-- Date from -->
@@ -335,6 +339,14 @@ export class StockMoversComponent implements OnInit {
       }
       if (this.hasPerm()) this.fetchBoth();
     });
+  }
+
+  protected onBranchSelected(evt: BranchSelectedEvent): void {
+    this.branchInput = evt.id;
+  }
+
+  protected onBranchCleared(): void {
+    this.branchInput = '';
   }
 
   protected toggleMoveType(mt: string): void {
