@@ -12,6 +12,9 @@ public interface CashPickupRepository extends JpaRepository<CashPickup, Long> {
     /** External lookup by ULID (URL handle). */
     Optional<CashPickup> findByUid(String uid);
 
+    /** Idempotency lookup for device-outbox sync (pre-check before insert). */
+    Optional<CashPickup> findByCompanyIdAndClientOpId(Long companyId, String clientOpId);
+
     List<CashPickup> findByTillSessionIdOrderByAtAsc(Long tillSessionId);
 
     /** Sum of all pickups taken from a till session — used by close-till reconciliation. */

@@ -25,7 +25,8 @@ import java.time.LocalDate;
 @Table(
     name = "petty_cash",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_petty_cash_uid", columnNames = {"uid"})
+        @UniqueConstraint(name = "uk_petty_cash_uid",       columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_petty_cash_client_op", columnNames = {"company_id", "client_op_id"})
     }
 )
 @Getter
@@ -44,6 +45,12 @@ public class PettyCash extends UidEntity {
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
+
+    /** Idempotency key for device-outbox pushes. NULL for payouts posted online.
+     *  Unique per (company_id, client_op_id) — see uk_petty_cash_client_op. */
+    @Setter
+    @Column(name = "client_op_id", length = 40)
+    private String clientOpId;
 
     @Column(name = "branch_id", nullable = false)
     private Long branchId;

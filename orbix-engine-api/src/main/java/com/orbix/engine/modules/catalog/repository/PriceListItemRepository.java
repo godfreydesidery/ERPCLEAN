@@ -1,6 +1,7 @@
 package com.orbix.engine.modules.catalog.repository;
 
 import com.orbix.engine.modules.catalog.domain.entity.PriceListItem;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -49,4 +50,11 @@ public interface PriceListItemRepository extends JpaRepository<PriceListItem, Lo
         Long priceListId, Long itemId, Long uomId, BigDecimal minQty);
 
     boolean existsByPriceListId(Long priceListId);
+
+    /** Sync pull delta: price rows whose change_seq is above the cursor watermark.
+     *  Scoped to a single price list so each pull request can target the till's list. */
+    @Query("select p from PriceListItem p where p.priceListId = :priceListId and p.changeSeq > :cursor order by p.changeSeq asc")
+    List<PriceListItem> findByPriceListIdAndChangeSeqGreaterThan(@Param("priceListId") Long priceListId,
+                                                                  @Param("cursor") Long cursor,
+                                                                  Pageable pageable);
 }

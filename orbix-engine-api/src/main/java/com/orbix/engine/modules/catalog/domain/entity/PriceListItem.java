@@ -51,6 +51,10 @@ public class PriceListItem {
     @Column(name = "valid_to")
     private LocalDate validTo;
 
+    /** Monotonic cursor stamp — see {@code sync_change_seq}. */
+    @Column(name = "change_seq")
+    private Long changeSeq;
+
     public PriceListItem(Long priceListId, Long itemId, Long uomId, BigDecimal minQty,
                          BigDecimal price, LocalDate validFrom) {
         this.priceListId = priceListId;

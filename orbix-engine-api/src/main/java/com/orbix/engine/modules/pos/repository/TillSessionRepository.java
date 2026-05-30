@@ -14,6 +14,9 @@ public interface TillSessionRepository extends JpaRepository<TillSession, Long> 
 
     Optional<TillSession> findFirstByTillIdAndStatus(Long tillId, TillSessionStatus status);
 
+    /** Idempotency lookup for device-outbox sync (pre-check before insert). */
+    Optional<TillSession> findByCompanyIdAndClientOpId(Long companyId, String clientOpId);
+
     List<TillSession> findByCompanyIdOrderByIdDesc(Long companyId);
 
     List<TillSession> findByCompanyIdAndBranchIdOrderByIdDesc(Long companyId, Long branchId);

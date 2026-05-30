@@ -53,6 +53,10 @@ public class VatGroup extends UidEntity {
     @Column(nullable = false, length = 32)
     private ItemStatus status = ItemStatus.ACTIVE;
 
+    /** Monotonic cursor stamp — see {@code sync_change_seq}. */
+    @Column(name = "change_seq")
+    private Long changeSeq;
+
     @Version
     private Integer version;
 

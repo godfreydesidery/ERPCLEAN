@@ -49,5 +49,15 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     /** Snapshot accessor for the F5.4 offline-sync endpoint. */
     List<Item> findByCompanyIdAndStatusOrderByIdAsc(Long companyId, ItemStatus status);
 
+    /**
+     * Sync pull delta: items whose change_seq is above the cursor watermark,
+     * ordered for stable cursor advancement. Includes archived (= delete signal).
+     * change_seq NULL treated as 0 in service layer — these rows are not returned.
+     */
+    @Query("select i from Item i where i.companyId = :companyId and i.changeSeq > :cursor order by i.changeSeq asc")
+    List<Item> findByCompanyIdAndChangeSeqGreaterThan(@Param("companyId") Long companyId,
+                                                      @Param("cursor") Long cursor,
+                                                      Pageable pageable);
+
     boolean existsByItemGroupId(Long itemGroupId);
 }
