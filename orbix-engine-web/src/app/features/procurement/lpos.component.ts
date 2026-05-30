@@ -166,7 +166,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                         </span>
                       </div>
                       <p class="small text-secondary mb-0">
-                        Supplier #{{ l.supplierId }} · {{ l.orderDate | date:'mediumDate' }}
+                        {{ l.supplierCode ? (l.supplierCode + ' · ' + l.supplierName) : ('Supplier #' + l.supplierId) }} · {{ l.orderDate | date:'mediumDate' }}
                       </p>
                     </div>
                     <div class="fw-bold text-dark">{{ l.totalAmount | number:'1.2-2' }}</div>
@@ -191,7 +191,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
             <div class="card-body p-4">
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
-                  <p class="small text-secondary mb-1">Supplier #{{ lpo.supplierId }} · {{ lpo.orderDate | date:'mediumDate' }}</p>
+                  <p class="small text-secondary mb-1">{{ lpo.supplierCode ? (lpo.supplierCode + ' · ' + lpo.supplierName) : ('Supplier #' + lpo.supplierId) }} · {{ lpo.orderDate | date:'mediumDate' }}</p>
                   <h2 class="h4 fw-bold mb-1 text-dark">{{ lpo.number }}</h2>
                   <span class="status-badge status-badge--{{ lpo.status.toLowerCase() }}">
                     <span class="status-badge__dot"></span>{{ statusLabel(lpo.status) }}
@@ -275,7 +275,7 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                 <dd class="col-8 mb-1 font-monospace">{{ lpo.currencyCode }}</dd>
                 @if (lpo.approvedBy) {
                   <dt class="col-4 text-secondary">Approved</dt>
-                  <dd class="col-8 mb-1">by #{{ lpo.approvedBy }} at {{ lpo.approvedAt | date:'medium' }}</dd>
+                  <dd class="col-8 mb-1">at {{ lpo.approvedAt | date:'medium' }}</dd>
                 }
                 @if (lpo.notes) {
                   <dt class="col-4 text-secondary">Notes</dt>
@@ -308,7 +308,14 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                   @for (line of lpo.lines; track line.id) {
                     <tr>
                       <td class="small text-secondary">{{ line.lineNo }}</td>
-                      <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span></td>
+                      <td>
+                        @if (line.itemCode) {
+                          <span class="badge text-bg-light border text-secondary font-monospace">{{ line.itemCode }}</span>
+                          @if (line.itemName) { <span class="ms-1 small text-secondary">{{ line.itemName }}</span> }
+                        } @else {
+                          <span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span>
+                        }
+                      </td>
                       <td class="text-end">{{ line.orderedQty }}</td>
                       <td class="text-end small"
                           [class.text-success]="line.receivedQty >= line.orderedQty"
@@ -454,17 +461,33 @@ export class LposComponent implements OnInit {
 
   protected newNumber = '';
   protected newSupplierId: string | null = null;
+  protected newSupplierCode: string | null = null;
+  protected newSupplierName: string | null = null;
   protected newOrderDate = new Date().toISOString().slice(0, 10);
   protected newExpectedDelivery: string | null = null;
   protected newCurrency = 'TZS';
   protected newItemId: string | null = null;
+  protected newItemCode: string | null = null;
+  protected newItemName: string | null = null;
   protected newQty: number | null = null;
   protected newUnitPrice: number | null = null;
+
+  /** Map supplierPartyId → {code, name} for display in the list and detail panel. */
+  private readonly supplierMap = new Map<string, { code: string; name: string }>();
 
   ngOnInit(): void {
     this.currencyService.listCurrencies().subscribe({
       next: list => this.currencies.set(list),
       error: () => this.currencies.set([])
+    });
+    // Pre-load all active suppliers (first 200) for the display name map.
+    this.procurement.searchSuppliers('', 0, 200).subscribe({
+      next: page => {
+        for (const s of page.content) {
+          this.supplierMap.set(s.id, { code: s.code, name: s.name });
+        }
+      },
+      error: () => { /* non-fatal — display falls back to supplier id */ }
     });
     // Slice F — query-param-driven status filter. Read on every URL change so
     // deep-links from the dashboard alert pre-apply the matching bucket.
@@ -497,20 +520,37 @@ export class LposComponent implements OnInit {
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
-  onSupplierSelected(evt: SupplierSelectedEvent): void { this.newSupplierId = evt.id; }
-  onItemSelected(evt: ItemSelectedEvent): void { this.newItemId = evt.id; }
+  onSupplierSelected(evt: SupplierSelectedEvent): void {
+    this.newSupplierId = evt.id;
+    this.newSupplierCode = evt.code;
+    this.newSupplierName = evt.name;
+    // Cache so the list display name updates immediately after create.
+    this.supplierMap.set(evt.id, { code: evt.code, name: evt.name });
+  }
+  onItemSelected(evt: ItemSelectedEvent): void {
+    this.newItemId = evt.id;
+    this.newItemCode = evt.code;
+    this.newItemName = evt.name;
+  }
 
   refresh(): void {
     const status = this.statusFilter === 'ALL' ? null : this.statusFilter;
     this.procurement.listLpos(this.branchId(), this.pageNo(), this.pageSize, status).subscribe({
       next: page => {
-        this.lpos.set(page.content);
+        this.lpos.set(page.content.map(lpo => this.hydrateSupplierName(lpo)));
         this.total.set(page.totalElements);
         this.totalPages.set(page.totalPages);
         this.pageNo.set(page.page);
       },
       error: err => this.showError(err)
     });
+  }
+
+  /** Attach supplierCode/supplierName from the local map if available. */
+  private hydrateSupplierName(lpo: LpoOrder): LpoOrder {
+    const info = this.supplierMap.get(lpo.supplierId);
+    if (!info) return lpo;
+    return { ...lpo, supplierCode: info.code, supplierName: info.name };
   }
 
   goTo(p: number): void {
@@ -558,6 +598,8 @@ export class LposComponent implements OnInit {
     }), `LPO ${this.newNumber} created.`);
     this.newNumber = '';
     this.newItemId = null;
+    this.newItemCode = null;
+    this.newItemName = null;
     this.newQty = null;
     this.newUnitPrice = null;
     this.showForm.set(false);
@@ -605,7 +647,7 @@ export class LposComponent implements OnInit {
       next: order => {
         this.busy.set(false);
         this.info.set(successMessage);
-        this.selected.set(order);
+        this.selected.set(this.hydrateSupplierName(order));
         this.refresh();
       },
       error: err => { this.busy.set(false); this.showError(err); }

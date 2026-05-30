@@ -85,7 +85,7 @@ import {
             <form (ngSubmit)="createAgainstLpo()" class="d-flex flex-column gap-3">
               <div class="alert alert-info py-2 mb-0 d-flex align-items-center gap-2 small">
                 <i class="bi bi-info-circle-fill"></i>
-                <span>LPO <strong class="font-monospace">{{ lpo.number }}</strong> · supplier #{{ lpo.supplierId }} · status {{ lpo.status }}</span>
+                <span>LPO <strong class="font-monospace">{{ lpo.number }}</strong> · {{ lpo.supplierCode ? (lpo.supplierCode + ' ' + lpo.supplierName) : ('supplier #' + lpo.supplierId) }} · status {{ lpo.status }}</span>
               </div>
 
               <fieldset class="form-fieldset">
@@ -121,7 +121,14 @@ import {
                       @for (line of lpo.lines; track line.id) {
                         <tr>
                           <td class="small text-secondary">#{{ line.lineNo }}</td>
-                          <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span></td>
+                          <td>
+                            @if (line.itemCode) {
+                              <span class="badge text-bg-light border text-secondary font-monospace">{{ line.itemCode }}</span>
+                              @if (line.itemName) { <span class="ms-1 small text-secondary">{{ line.itemName }}</span> }
+                            } @else {
+                              <span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span>
+                            }
+                          </td>
                           <td class="text-end small text-secondary">{{ line.orderedQty }}</td>
                           <td class="text-end small text-secondary">{{ line.receivedQty }}</td>
                           <td class="text-end fw-semibold">{{ line.orderedQty - line.receivedQty }}</td>
@@ -187,8 +194,8 @@ import {
                         </span>
                       </div>
                       <p class="small text-secondary mb-0">
-                        Supplier #{{ g.supplierId }} · {{ g.receivedDate | date:'mediumDate' }}
-                        @if (g.lpoOrderId) { · LPO #{{ g.lpoOrderId }} }
+                        {{ supplierLabel(g.supplierId) }} · {{ g.receivedDate | date:'mediumDate' }}
+                        @if (g.lpoOrderId) { · LPO linked }
                       </p>
                     </div>
                     <div class="fw-bold text-dark">{{ g.totalAmount | number:'1.2-2' }}</div>
@@ -214,9 +221,9 @@ import {
               <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
                 <div>
                   <p class="small text-secondary mb-1">
-                    Supplier #{{ grn.supplierId }}
-                    @if (grn.lpoOrderId) { · LPO #{{ grn.lpoOrderId }} }
-                    @else { · direct }
+                    {{ supplierLabel(grn.supplierId) }}
+                    @if (grn.lpoOrderId) { · via LPO }
+                    @else { · direct receive }
                     · {{ grn.receivedDate | date:'mediumDate' }}
                   </p>
                   <h2 class="h4 fw-bold mb-1 text-dark">{{ grn.number }}</h2>
@@ -301,7 +308,7 @@ import {
                 <dd class="col-8 mb-1">{{ grn.supplierDeliveryNote ?? '—' }}</dd>
                 @if (grn.postedAt) {
                   <dt class="col-4 text-secondary">Posted</dt>
-                  <dd class="col-8 mb-1">by #{{ grn.postedBy }} at {{ grn.postedAt | date:'medium' }}</dd>
+                  <dd class="col-8 mb-1">{{ grn.postedAt | date:'medium' }}</dd>
                 }
                 @if (grn.cancellationReason) {
                   <dt class="col-4 text-secondary">Cancellation reason</dt>
@@ -327,7 +334,14 @@ import {
                 <tbody>
                   @for (line of grn.lines; track line.id) {
                     <tr>
-                      <td><span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span></td>
+                      <td>
+                        @if (line.itemCode) {
+                          <span class="badge text-bg-light border text-secondary font-monospace">{{ line.itemCode }}</span>
+                          @if (line.itemName) { <span class="ms-1 small text-secondary">{{ line.itemName }}</span> }
+                        } @else {
+                          <span class="badge text-bg-light border text-secondary font-monospace">#{{ line.itemId }}</span>
+                        }
+                      </td>
                       <td class="text-end">{{ line.receivedQty }}</td>
                       <td class="text-end">{{ line.unitCost | number:'1.2-2' }}</td>
                       <td class="text-end fw-semibold">{{ line.lineTotal | number:'1.2-2' }}</td>
@@ -456,7 +470,26 @@ export class GrnsComponent implements OnInit {
   protected receiveCost: Record<string, number> = {};
   protected receiveBatch: Record<string, string> = {};
 
-  ngOnInit(): void { this.refresh(); }
+  /** Map supplierPartyId → "CODE · Name" for human-readable display. */
+  private readonly supplierMap = new Map<string, string>();
+
+  /** Returns a human-readable supplier label if known, otherwise a stable fallback. */
+  protected supplierLabel(supplierId: string): string {
+    return this.supplierMap.get(supplierId) ?? `Supplier #${supplierId}`;
+  }
+
+  ngOnInit(): void {
+    // Pre-load all active suppliers (first 200) so the list can show names.
+    this.procurement.searchSuppliers('', 0, 200).subscribe({
+      next: page => {
+        for (const s of page.content) {
+          this.supplierMap.set(s.id, `${s.code} · ${s.name}`);
+        }
+      },
+      error: () => { /* non-fatal — display falls back to supplier id */ }
+    });
+    this.refresh();
+  }
 
   toggleForm(): void { this.showForm.update(v => !v); }
 
