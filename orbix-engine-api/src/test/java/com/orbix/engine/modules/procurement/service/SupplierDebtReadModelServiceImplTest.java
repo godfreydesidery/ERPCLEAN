@@ -227,6 +227,56 @@ class SupplierDebtReadModelServiceImplTest {
         assertThat(page.getTotalElements()).isZero();
     }
 
+    /**
+     * SDBT-001: the unfiltered dunning queue must NOT include suppliers whose
+     * entire outstanding balance is CURRENT (no overdue invoices). Before the
+     * fix, such suppliers appeared because the only guard was outstanding > 0.
+     */
+    @Test
+    void dunning_currentOnlySupplier_excludedFromUnfilteredQueue() {
+        Party current = party(410L, "CURRENT-Only Supplier");
+        Party overdue = party(411L, "Overdue Supplier");
+
+        // CURRENT-only: invoice due in 60 days from today.
+        SupplierInvoice currentInv = invoice(current.getId(), TODAY.plusDays(60),
+            new BigDecimal("30000"), BigDecimal.ZERO);
+        // Overdue: invoice due 15 days ago.
+        SupplierInvoice overdueInv = invoice(overdue.getId(), TODAY.minusDays(15),
+            new BigDecimal("10000"), BigDecimal.ZERO);
+
+        whenLoadOpen(currentInv, overdueInv);
+        whenLookupParties(current, overdue);
+
+        Page<SupplierDunningQueueRowDto> page = service.dunning(BRANCH_ID, null, PageRequest.of(0, 25));
+
+        // Only the overdue supplier must appear; CURRENT-only must be excluded.
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).supplierName()).isEqualTo("Overdue Supplier");
+        assertThat(page.getContent().get(0).worstBucket()).isEqualTo(AgingBucket.D_1_30);
+    }
+
+    /**
+     * When an explicit bucketFilter=CURRENT is supplied, CURRENT-only suppliers
+     * ARE returned (the caller explicitly asked for that bucket).
+     */
+    @Test
+    void dunning_explicitCurrentBucketFilter_includesCurrentOnlySuppliers() {
+        Party current = party(420L, "CURRENT-Only Supplier");
+
+        SupplierInvoice currentInv = invoice(current.getId(), TODAY.plusDays(60),
+            new BigDecimal("30000"), BigDecimal.ZERO);
+
+        whenLoadOpen(currentInv);
+        whenLookupParties(current);
+
+        Page<SupplierDunningQueueRowDto> page =
+            service.dunning(BRANCH_ID, AgingBucket.CURRENT, PageRequest.of(0, 25));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).supplierName()).isEqualTo("CURRENT-Only Supplier");
+        assertThat(page.getContent().get(0).worstBucket()).isEqualTo(AgingBucket.CURRENT);
+    }
+
     // ---------------------------------------------------------------------
     // supplierStatement()
     // ---------------------------------------------------------------------
