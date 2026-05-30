@@ -1,5 +1,6 @@
 package com.orbix.engine.modules.stock.domain.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +15,7 @@ public record CreateStockTransferRequestDto(
     @NotBlank @Size(max = 40) String number,
     @NotNull Long fromBranchId,
     @NotNull Long toBranchId,
-    @NotEmpty List<TransferLine> lines
+    @NotEmpty @Valid List<TransferLine> lines
 ) {
     public record TransferLine(
         @NotNull Long itemId,

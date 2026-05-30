@@ -18,6 +18,9 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     boolean existsByRoleIdAndRevokedAtIsNull(Long roleId);
 
+    /** Physically removes all revoked (soft-deleted) grants for the given role. */
+    void deleteByRoleIdAndRevokedAtIsNotNull(Long roleId);
+
     /**
      * True when the user holds at least one active role grant that covers the
      * given branch in the given company — either a branch-specific grant or a

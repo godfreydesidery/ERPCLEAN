@@ -222,6 +222,25 @@ class RoleAdminServiceImplTest {
         verify(roles, never()).delete(any());
     }
 
+    /**
+     * RBAC-ISS-001: a role that had grants (all subsequently revoked) left residual
+     * user_role rows with revokedAt IS NOT NULL.  Without the fix these rows caused
+     * a FK violation → 500.  After the fix the service purges them before deletion.
+     */
+    @Test
+    void deleteRole_afterAllGrantsRevoked_purgesResidualsAndDeletes() {
+        Role existing = role(5L, "R5", "BUYER", false);
+        when(roles.findByUid("R5")).thenReturn(Optional.of(existing));
+        // Active-grant guard: no active grants remain (all revoked).
+        when(userRoles.existsByRoleIdAndRevokedAtIsNull(5L)).thenReturn(false);
+
+        service.deleteRoleByUid("R5");
+
+        // Revoked rows must be purged first, then the role deleted.
+        verify(userRoles).deleteByRoleIdAndRevokedAtIsNotNull(5L);
+        verify(roles).delete(existing);
+    }
+
     // ---- grantRole --------------------------------------------------------
 
     @Test

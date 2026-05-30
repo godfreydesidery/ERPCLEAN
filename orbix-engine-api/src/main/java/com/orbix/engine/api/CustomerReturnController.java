@@ -69,6 +69,11 @@ public class CustomerReturnController {
         return service.listCreditNotes(branchId);
     }
 
+    @GetMapping("/customer-credit-notes/uid/{uid}")
+    public CustomerCreditNoteDto getCreditNote(@PathVariable @ValidUlid String uid) {
+        return service.getCreditNote(uid);
+    }
+
     /** Slice H — apply a credit note to an open invoice for the same customer (US-SALES-011). */
     @PostMapping("/customer-credit-notes/uid/{uid}/apply")
     public CustomerCreditNoteDto applyCreditNote(@PathVariable @ValidUlid String uid,
