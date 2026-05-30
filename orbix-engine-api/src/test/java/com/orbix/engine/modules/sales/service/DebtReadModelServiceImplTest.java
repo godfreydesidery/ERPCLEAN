@@ -33,6 +33,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -270,7 +271,10 @@ class DebtReadModelServiceImplTest {
         assertThat(dto.openInvoices()).hasSize(1);
         assertThat(dto.openInvoices().get(0).number()).isEqualTo("INV-001");
         assertThat(dto.openInvoices().get(0).outstanding()).isEqualByComparingTo("70000");
-        assertThat(dto.openInvoices().get(0).daysOverdue()).isEqualTo(10);
+        // daysOverdue is computed by the service against LocalDate.now() (not the pinned TODAY
+        // constant), so derive the expected value the same way to keep the assertion stable.
+        int expectedDaysOverdue = (int) ChronoUnit.DAYS.between(TODAY.minusDays(10), LocalDate.now());
+        assertThat(dto.openInvoices().get(0).daysOverdue()).isEqualTo(expectedDaysOverdue);
         assertThat(dto.openInvoiceCount()).isEqualTo(1L);
         assertThat(dto.overdueInvoiceCount()).isEqualTo(1L);
     }
