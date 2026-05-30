@@ -59,6 +59,7 @@ CREATE TABLE fiscal_receipt (
 
     -- Timestamps.
     submitted_at         TIMESTAMP,     -- when the EFDMS POST succeeded
+    version              INT            NOT NULL DEFAULT 0,  -- optimistic-lock column inherited from base entity
     created_at           TIMESTAMP      NOT NULL,
     updated_at           TIMESTAMP      NOT NULL,
     created_by           BIGINT         NOT NULL,
