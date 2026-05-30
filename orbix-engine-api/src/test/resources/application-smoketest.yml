@@ -1,0 +1,61 @@
+# Boot-smoke profile: used exclusively by BootSmokeIT.
+# The test overrides spring.datasource.* via @DynamicPropertySource from the
+# MariaDB Testcontainer, so those values here are placeholders that will be
+# overwritten before the context starts.
+#
+# Everything else is wired to safe defaults so the context can start without
+# Redis, Meilisearch, or the env-driven bootstrap runner.
+
+spring:
+  # MariaDB dialect + both Flyway dirs — same as the production mysql profile.
+  jpa:
+    database-platform: org.hibernate.dialect.MariaDBDialect
+    hibernate:
+      ddl-auto: validate   # must stay validate — that is the gate we are testing
+  flyway:
+    locations:
+      - classpath:db/migration/common
+      - classpath:db/migration/mysql
+  # Datasource placeholder — BootSmokeIT sets the real URL/user/password via
+  # @DynamicPropertySource before the ApplicationContext is created.
+  datasource:
+    url: jdbc:mysql://localhost:3306/placeholder
+    username: placeholder
+    password: placeholder
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Redis: point at a non-existent host. TokenGuardServiceImpl.* wraps every
+  # Redis call in try/catch and fails open, so a dead Redis host is safe for
+  # runtime. We disable the Redis health indicator so actuator reports UP based
+  # only on the DB health (which is what we actually care about).
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 16399   # almost certainly nothing listening here
+
+# Env-driven first-run bootstrap: disabled so BootstrapRunner is a no-op.
+# DevSeed only activates on profile "local", which we do not activate.
+orbix:
+  bootstrap:
+    enabled: false
+  jwt:
+    signing-mode: dev-in-memory
+  search:
+    meilisearch-url: http://127.0.0.1:17700   # unreachable — search not exercised
+    meilisearch-key: smoke-test-key
+
+# Disable the Redis health indicator so /actuator/health reports UP when the
+# DB is healthy. In production Redis has its own health check; for the boot
+# smoke test we only care that Flyway + Hibernate + the application context are
+# sound — Redis availability is a separate operational concern.
+management:
+  health:
+    redis:
+      enabled: false
+
+# Suppress verbose output during the smoke test
+logging:
+  level:
+    root: WARN
+    com.orbix.engine: INFO
+    org.flywaydb: INFO
+    org.hibernate.SQL: WARN
