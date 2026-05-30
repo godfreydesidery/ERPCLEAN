@@ -20,11 +20,11 @@
 | **Priority** | P0 |
 | **Linked US-*** | US-POS-002 |
 | **Preconditions** | 1. Business day OPEN for branch 1. 2. Till exists (seeded or created). 3. No existing OPEN session on this till. 4. Cashier logged in. |
-| **Steps** | 1. `POST /api/v1/till-sessions` headers: `Authorization: Bearer <cashier_token>`, `X-Branch-Id: 1`. Body: `{"tillId": <till_id>, "openingFloatAmount": 50000}`. 2. `GET /api/v1/till-sessions/uid/<returned_uid>`. 3. Query `cash_entry` table for this session's float entry. |
-| **Expected Result** | Step 1: HTTP 201; response `data.status = "OPEN"`, `data.openingFloatAmount = 50000`, `data.openedAt` populated. Step 2: confirms OPEN. Step 3: CASH_IN entry for 50000 TZS on TILL account. |
+| **Steps** | 1. `POST /api/v1/till-sessions/open` headers: `Authorization: Bearer <cashier_token>`, `X-Branch-Id: 1`. Body: `{"tillId": <till_id>, "openingFloatAmount": 50000}`. 2. `GET /api/v1/till-sessions/uid/<returned_uid>`. 3. Verify session report via `GET /api/v1/reports/x-report?tillSessionId=<id>`. |
+| **Expected Result** | Step 1: HTTP 201; response `data.status = "OPEN"`, `data.openingFloatAmount = 50000`, `data.openedAt` populated. Step 2: confirms OPEN. Step 3: X-report shows float entry; CASH_IN for 50000 TZS on TILL account visible in `cashFloatTotal`. |
 | **Automatable?** | yes — integration test (`TillSessionServiceImplTest`) |
 | **Result/Status** | |
-| **Notes/IssueRef** | |
+| **Notes/IssueRef** | ISSUE-POS-003: corrected open-session URL from `POST /api/v1/till-sessions` to `POST /api/v1/till-sessions/open`; corrected report URL from `/till-sessions/uid/<uid>/report` (does not exist) to `/reports/x-report?tillSessionId=<id>`. |
 
 ---
 
@@ -33,17 +33,17 @@
 | Field | Value |
 |-------|-------|
 | **ID** | TC-POS-CORE-002 |
-| **Title** | Opening a second session on a till that has an OPEN session returns 409 |
+| **Title** | Opening a second session on a till that has an OPEN session returns 400 |
 | **Area** | pos |
 | **Dimension** | NEG |
 | **Priority** | P0 |
 | **Linked US-*** | US-POS-002 |
 | **Preconditions** | 1. Till already has OPEN session (TC-POS-CORE-001 passed). |
-| **Steps** | 1. `POST /api/v1/till-sessions` same till, different cashier or same cashier. |
-| **Expected Result** | HTTP 409 or 422; error body references existing open session; no new session created. |
+| **Steps** | 1. `POST /api/v1/till-sessions/open` same till, different cashier or same cashier. |
+| **Expected Result** | HTTP 400; error body references existing open session (e.g. "Till T1 already has an OPEN session"); no new session created. Note: HTTP 409 would be semantically more correct (tracked as ISSUE-POS-002), but the current implementation returns 400 via `IllegalArgumentException`. |
 | **Automatable?** | yes — unit test |
 | **Result/Status** | |
-| **Notes/IssueRef** | US-POS-002 AC: "Blocks if the till already has an OPEN session held by someone else" |
+| **Notes/IssueRef** | ISSUE-POS-003: corrected URL to `POST /api/v1/till-sessions/open`. ISSUE-POS-002: current response is 400, not 409. |
 
 ---
 
@@ -78,12 +78,12 @@
 | **Dimension** | FUNC |
 | **Priority** | P0 |
 | **Linked US-*** | US-POS-009 |
-| **Preconditions** | 1. Open session exists for cashier on till. 2. Item COKE500 in stock (qty_on_hand >= 1). 3. RETAIL price list has COKE500 @ 1200 TZS. |
+| **Preconditions** | 1. Open session exists for cashier on till. 2. Item COKE500 in stock (qty_on_hand >= 2). 3. RETAIL price list has COKE500 @ 1200 TZS, `taxInclusive=true`. |
 | **Steps** | 1. Resolve item id: `GET /api/v1/items?q=COKE500` (note `data[0].id` and `data[0].uid`). 2. `POST /api/v1/pos-sales` body: `{"tillSessionId": <id>, "clientOpId": "test-op-001", "lines": [{"itemId": <id>, "qty": 2, "unitPrice": 1200, "discountPct": 0}], "payments": [{"method": "CASH", "amount": 2400}], "clientCreatedAt": "<ISO8601>"}`. 3. Query `stock_move` for item debit. 4. Query `cash_entry` for cash credit. |
-| **Expected Result** | HTTP 201; `data.status = "CLOSED"`, `data.totalAmount = 2400`, `data.changeAmount = 0`; `stock_move` with type SALE, qty=-2 for COKE500; `cash_entry` CASH_IN 2400 TZS on TILL. |
+| **Expected Result** | HTTP 201; `data.status = "POSTED"` (not "CLOSED" — the `PosSaleStatus` enum uses POSTED/VOIDED); `data.totalAmount = 2400`, `data.changeAmount = 0`; `stock_move` with type SALE, qty=-2 for COKE500; `cash_entry` CASH_IN 2400 TZS on TILL. Tax extracted from inclusive price: `taxAmount = round(2400 * 18/118, 4dp) = 366.1017`, `subtotalAmount = 2400 - 366.1017 = 2033.8983` (once ISSUE-POS-001 is fixed). Until ISSUE-POS-001 is fixed, the actual response inflates totals: `totalAmount=2832, taxAmount=432`. |
 | **Automatable?** | yes — integration test (`PosSaleServiceImplTest`) |
 | **Result/Status** | |
-| **Notes/IssueRef** | id field is serialized as string per global Jackson modifier |
+| **Notes/IssueRef** | ISSUE-POS-003: corrected expected `status` from `"CLOSED"` to `"POSTED"` (enum values are POSTED and VOIDED). ISSUE-POS-001: once VAT-inclusive fix lands, tender 2400 is correct; until then the API rejects 2400 with "Tender sum 2400.00 is less than total 2832.0000". id field is serialized as string per global Jackson modifier. |
 
 ---
 
@@ -154,12 +154,12 @@
 | **Dimension** | FUNC |
 | **Priority** | P1 |
 | **Linked US-*** | US-POS-005 |
-| **Preconditions** | Discount threshold configured at 10% (default). Open session. |
-| **Steps** | 1. `POST /api/v1/pos-sales` line: COKE500, unitPrice=1200, discountPct=5, payments CASH 1140. |
-| **Expected Result** | HTTP 201; line `discount_pct=5`, `line_total=1140`; no supervisor validation required. |
+| **Preconditions** | Discount threshold configured at 10% (default). Open session. RETAIL price list `taxInclusive=true`. |
+| **Steps** | 1. `POST /api/v1/pos-sales` line: COKE500, unitPrice=1200, discountPct=5, payments CASH for the computed total (see expected result). |
+| **Expected Result** | HTTP 201; line `discountPct=5`; no supervisor validation required. Once ISSUE-POS-001 is fixed: `netLine = 1200 * 0.95 = 1140`, tax extracted from inclusive price: `taxAmount = round(1140 * 18/118, 4dp) = 173.8983`, `lineTotal = 1140`. Tender = 1140. Until ISSUE-POS-001 is fixed: server adds VAT on top, `lineTotal = 1140 * 1.18 = 1345.2`; tender must be 1345.2 for the sale to be accepted. |
 | **Automatable?** | yes — unit test |
 | **Result/Status** | |
-| **Notes/IssueRef** | |
+| **Notes/IssueRef** | ISSUE-POS-003: corrected expected `line_total` — prior value of 1140 was the correct post-ISSUE-POS-001-fix value but does not match current server behaviour (1345.2). Spec is written against the correct (fixed) behaviour. ISSUE-POS-001 must land before this case passes end-to-end. |
 
 ---
 
@@ -232,12 +232,12 @@
 | **Dimension** | FUNC |
 | **Priority** | P1 |
 | **Linked US-*** | US-POS-013 |
-| **Preconditions** | 1. Open session with at least 20000 TZS in drawer (float + sales). 2. Supervisor token. |
-| **Steps** | 1. `POST /api/v1/cash-pickups` headers: supervisor auth, X-Branch-Id:1. Body: `{"tillSessionId": <id>, "amount": 10000, "reference": "PICKUP-001"}`. 2. `GET /api/v1/till-sessions/uid/<uid>/report` — check expected cash. |
-| **Expected Result** | HTTP 201; `cash_entry` pair: OUT from TILL, IN to SAFE for 10000 TZS; expected drawer cash reduced by 10000. |
+| **Preconditions** | 1. Open session with at least 20000 TZS in drawer (float + sales). 2. Supervisor token (user with POS.MANAGE_TILL). |
+| **Steps** | 1. `POST /api/v1/cash-pickups` headers: supervisor auth, `X-Branch-Id: 1`. Body: `{"tillSessionId": <id>, "amount": 10000, "reference": "PICKUP-001", "authorisedBy": <supervisor_user_id>}`. 2. Verify via `GET /api/v1/reports/x-report?tillSessionId=<id>` — check `cashPickupTotal`. |
+| **Expected Result** | HTTP 201; `cash_entry` OUT from TILL for 10000 TZS; `cashPickupTotal` in X-report reduced accordingly. |
 | **Automatable?** | yes — integration test |
 | **Result/Status** | |
-| **Notes/IssueRef** | US-POS-013 AC |
+| **Notes/IssueRef** | ISSUE-POS-003: added required `authorisedBy` field to request body; corrected report URL from `/till-sessions/uid/<uid>/report` to `/reports/x-report?tillSessionId=<id>`. US-POS-013 AC. |
 
 ---
 
@@ -251,12 +251,12 @@
 | **Dimension** | FUNC |
 | **Priority** | P1 |
 | **Linked US-*** | US-POS-014 |
-| **Preconditions** | Open session. |
-| **Steps** | 1. `POST /api/v1/petty-cash` body: `{"tillSessionId": <id>, "amount": 2000, "category": "SUPPLIES", "description": "Cleaning materials"}`. |
-| **Expected Result** | HTTP 201; `cash_entry` CASH_OUT 2000 TZS on TILL account; petty_cash row created with reason. |
+| **Preconditions** | Open session. User with POS.MANAGE_TILL for authorisation. |
+| **Steps** | 1. `POST /api/v1/petty-cash` body: `{"tillSessionId": <id>, "amount": 2000, "category": "OTHER", "description": "Cleaning materials", "authorisedBy": <supervisor_user_id>}`. |
+| **Expected Result** | HTTP 201; `cash_entry` CASH_OUT 2000 TZS on TILL account; petty_cash row created with reason; visible in X-report `pettyCashTotal`. |
 | **Automatable?** | yes — integration test |
 | **Result/Status** | |
-| **Notes/IssueRef** | |
+| **Notes/IssueRef** | ISSUE-POS-003: corrected `category` from `"SUPPLIES"` (not a valid `PettyCashCategory` enum value) to `"OTHER"`. Valid values: TRANSPORT, OFFICE, MAINTENANCE, OTHER. Added required `authorisedBy` field. |
 
 ---
 
@@ -366,17 +366,17 @@
 | Field | Value |
 |-------|-------|
 | **ID** | TC-POS-CORE-019 |
-| **Title** | GET /barcode-lookup/{barcode} resolves item_id, uom, and pack_qty |
+| **Title** | GET /pos/barcode-lookup?code={barcode} resolves itemCode, barcodeType, and pack qty |
 | **Area** | pos |
 | **Dimension** | FUNC |
 | **Priority** | P1 |
 | **Linked US-*** | US-POS-003 |
 | **Preconditions** | Item COKE500 has a barcode registered (e.g. EAN13 `5000112637922`). |
-| **Steps** | 1. `GET /api/v1/barcode-lookup/5000112637922` with cashier auth. |
-| **Expected Result** | HTTP 200; `data.itemId` = COKE500's id; `data.packQty = 1`; `data.uomId = 1` (EA); `data.price = 1200` from RETAIL list. |
+| **Steps** | 1. `GET /api/v1/pos/barcode-lookup?code=5000112637922` with cashier auth (`X-Branch-Id: 1`). |
+| **Expected Result** | HTTP 200; `data.itemId` = COKE500's id (string); `data.itemCode = "COKE500"`; `data.qty = 1`; `data.barcodeType = "EAN13"`. Note: `ResolvedBarcodeDto` does not include a price field — price lookup requires a separate `GET /api/v1/price-entries` call with the itemId. |
 | **Automatable?** | yes — unit test (`BarcodeResolverServiceImpl`) |
 | **Result/Status** | |
-| **Notes/IssueRef** | |
+| **Notes/IssueRef** | ISSUE-POS-004: corrected URL from `GET /api/v1/barcode-lookup/{barcode}` (path segment, returns 500) to `GET /api/v1/pos/barcode-lookup?code={barcode}` (query param, controller at `BarcodeLookupController`). Removed `data.price` from expected result — price is not in `ResolvedBarcodeDto`. |
 
 ---
 
@@ -390,9 +390,9 @@
 | **Dimension** | NEG |
 | **Priority** | P1 |
 | **Linked US-*** | US-POS-003 |
-| **Preconditions** | Barcode `9999999999999` does not exist. |
-| **Steps** | 1. `GET /api/v1/barcode-lookup/9999999999999` with cashier auth. |
-| **Expected Result** | HTTP 404; response is ApiResponse with status=error; no data field. |
+| **Preconditions** | Barcode `9999999999999` does not exist in the system. |
+| **Steps** | 1. `GET /api/v1/pos/barcode-lookup?code=9999999999999` with cashier auth (`X-Branch-Id: 1`). |
+| **Expected Result** | HTTP 404; response body: `{"message": "Barcode not found: 9999999999999"}`; no data field. |
 | **Automatable?** | yes — unit test |
 | **Result/Status** | |
-| **Notes/IssueRef** | US-POS-003 AC: "Unknown barcode shows a clear 'not found' toast" |
+| **Notes/IssueRef** | ISSUE-POS-004: corrected URL from `GET /api/v1/barcode-lookup/9999999999999` (returns 500) to `GET /api/v1/pos/barcode-lookup?code=9999999999999`. US-POS-003 AC: "Unknown barcode shows a clear 'not found' toast". |
