@@ -277,6 +277,24 @@ class SyncRepository {
       saleTotal += t;
     }
 
+    // Sum pickup and petty-cash amounts from the outbox payload.
+    double sumPayloadAmount(Iterable<OutboxData> ops) {
+      double total = 0;
+      for (final op in ops) {
+        final p = jsonDecode(op.payloadJson) as Map<String, dynamic>;
+        final v = p['amount'];
+        if (v is num) {
+          total += v.toDouble();
+        } else if (v is String) {
+          total += double.tryParse(v) ?? 0.0;
+        }
+      }
+      return total;
+    }
+
+    final pickupTotal = sumPayloadAmount(pickupOps);
+    final pettyTotal = sumPayloadAmount(pettyOps);
+
     // Express as 4dp string per Money schema (TZS = no decimals but server accepts 4dp)
     String moneyStr(double v) => v.toStringAsFixed(4);
 
@@ -284,9 +302,9 @@ class SyncRepository {
       posSaleCount: saleOps.length,
       posSaleTotal: moneyStr(saleTotal),
       cashPickupCount: pickupOps.length,
-      cashPickupTotal: moneyStr(0), // TODO: sum pickup amounts from payload
+      cashPickupTotal: moneyStr(pickupTotal),
       pettyCashCount: pettyOps.length,
-      pettyCashTotal: moneyStr(0), // TODO: sum petty amounts from payload
+      pettyCashTotal: moneyStr(pettyTotal),
       clientOpIds: ops.map((o) => o.clientOpId).toList(),
     );
 
