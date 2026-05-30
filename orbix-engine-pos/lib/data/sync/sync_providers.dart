@@ -7,8 +7,10 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logger/logger.dart';
 
+import '../auth/auth_interceptor.dart';
+import '../auth/auth_providers.dart';
+import '../core_providers.dart';
 import '../local/database.dart';
 import 'outbox_dispatcher.dart';
 import 'outbox_repository.dart';
@@ -16,24 +18,37 @@ import 'sync_api_client.dart';
 import 'sync_repository.dart';
 
 // ---------------------------------------------------------------------------
-// Base infrastructure
+// Intercepted Dio — used by the sync API client and all server calls.
+// Attaches Authorization + X-Branch-Id; handles 401 → refresh → retry.
 // ---------------------------------------------------------------------------
 
-/// Base URL for the API.  Override via shared prefs / settings screen.
-const kApiBaseUrl = 'http://localhost:8081';
-
-final loggerProvider = Provider<Logger>((ref) => Logger());
-
 final dioProvider = Provider<Dio>((ref) {
+  final baseUrl = ref.watch(apiBaseUrlProvider);
+  final tokenStore = ref.watch(authTokenStoreProvider);
+  final authRepo = ref.watch(authRepositoryProvider);
+  final logger = ref.watch(loggerProvider);
+
   final dio = Dio(BaseOptions(
-    baseUrl: kApiBaseUrl,
+    baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
     // Don't throw on 4xx/5xx — sync reads status codes directly.
     validateStatus: (status) => status != null,
   ));
+
+  dio.interceptors.add(AuthInterceptor(
+    dio: dio,
+    tokenStore: tokenStore,
+    authRepository: authRepo,
+    logger: logger,
+  ));
+
   return dio;
 });
+
+// ---------------------------------------------------------------------------
+// Database
+// ---------------------------------------------------------------------------
 
 final posDatabaseProvider = Provider<PosDatabase>((ref) {
   final db = PosDatabase();
@@ -73,6 +88,7 @@ final outboxDispatcherProvider = Provider<OutboxDispatcher>((ref) {
     outboxRepo: ref.watch(outboxRepositoryProvider),
     apiClient: ref.watch(syncApiClientProvider),
     syncRepo: ref.watch(syncRepositoryProvider),
+    deviceId: ref.watch(deviceIdProvider),
     logger: ref.watch(loggerProvider),
   );
   ref.onDispose(dispatcher.stop);

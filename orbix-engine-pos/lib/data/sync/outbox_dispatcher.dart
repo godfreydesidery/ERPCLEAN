@@ -32,21 +32,21 @@ import 'sync_repository.dart';
 /// Maximum ops per push batch (server cap per slice-sync-spine.md §5.1).
 const kPushBatchSize = 100;
 
-/// Logical device id — in production read from device config / shared prefs.
-/// For the pilot this is a static value; wiring to real config is a follow-up.
-const kDeviceId = 'TILL-1';
-
 class OutboxDispatcher {
   OutboxDispatcher({
     required OutboxRepository outboxRepo,
     required SyncApiClient apiClient,
     required SyncRepository syncRepo,
+    /// Device / till identifier sent in every push batch.
+    /// Sourced from [PosConfigStore] via [deviceIdProvider]; defaults to 'TILL-1'.
+    String? deviceId,
     Duration? pushInterval,
     Duration? pullInterval,
     Logger? logger,
   })  : _outbox = outboxRepo,
         _api = apiClient,
         _sync = syncRepo,
+        _deviceId = deviceId ?? 'TILL-1',
         _pushInterval = pushInterval ?? const Duration(seconds: 5),
         _pullInterval = pullInterval ?? const Duration(seconds: 30),
         _log = logger ?? Logger();
@@ -54,6 +54,7 @@ class OutboxDispatcher {
   final OutboxRepository _outbox;
   final SyncApiClient _api;
   final SyncRepository _sync;
+  final String _deviceId;
   final Duration _pushInterval;
   final Duration _pullInterval;
   final Logger _log;
@@ -109,7 +110,7 @@ class OutboxDispatcher {
 
     final ops = batch.map(_rowToSyncOp).toList();
     final request = SyncPushRequest(
-      deviceId: kDeviceId,
+      deviceId: _deviceId,
       clientContractVersion: kSyncContractVersion,
       ops: ops,
     );
@@ -143,10 +144,12 @@ class OutboxDispatcher {
       pullDeltas().ignore();
     }
 
-    // If there are more pending ops, flush again immediately.
-    final remaining = await _outbox.pendingCount();
-    if (remaining > 0) {
-      _log.d('OutboxDispatcher: $remaining ops remaining, flushing again');
+    // Recurse immediately if there are strictly-PENDING ops beyond the batch
+    // limit (e.g. batch_size < total pending ops). Do NOT recurse for DEFERRED
+    // ops — those are retried on the next timer tick once their dependsOn op
+    // is ACCEPTED, not by hammering the server in the same cycle.
+    if (batch.length >= kPushBatchSize) {
+      _log.d('OutboxDispatcher: batch full — flushing again for remaining PENDING ops');
       await _flushOnce();
     }
   }
