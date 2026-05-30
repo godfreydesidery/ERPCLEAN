@@ -14,6 +14,7 @@ import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.service.TokenGuardService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -169,8 +170,11 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException();
         }
 
-        user.recordSuccessfulLogin(now);
-        users.save(user);
+        // recordSuccessfulLogin mutates the @Version-guarded row (lastLoginAt, failedLoginCount).
+        // Two concurrent logins for the same user both read the same version and one loses the
+        // optimistic-lock race. We retry once with a fresh read: the write is idempotent
+        // (last-login bookkeeping) so the second committer simply overwrites with a later timestamp.
+        saveSuccessfulLogin(user, now);
 
         audit.write(new AuditLogWriter.Record(
             user.getId(), user.getDefaultCompanyId(), user.getDefaultBranchId(),
@@ -262,6 +266,30 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException();
         }
         return issueTokens(user);
+    }
+
+    /**
+     * Persist a successful login's bookkeeping (lastLoginAt, failedLoginCount reset).
+     *
+     * <p>The {@link AppUser} entity carries {@code @Version} for admin-mutation safety.
+     * Concurrent logins for the same user cause one transaction to win and the other
+     * to throw {@link ObjectOptimisticLockingFailureException}. Since
+     * {@code recordSuccessfulLogin} is idempotent (last-writer-wins on a timestamp),
+     * we reload the entity and retry once — the second writer simply commits a
+     * marginally later {@code lastLoginAt}. A second failure propagates as-is (extremely
+     * unlikely: would require a third concurrent login within the same millisecond).
+     */
+    private void saveSuccessfulLogin(AppUser user, Instant now) {
+        try {
+            user.recordSuccessfulLogin(now);
+            users.save(user);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("Optimistic-lock on AppUser {} during login — reloading and retrying", user.getId());
+            AppUser fresh = users.findById(user.getId())
+                .orElseThrow(InvalidCredentialsException::new);
+            fresh.recordSuccessfulLogin(Instant.now());
+            users.save(fresh);
+        }
     }
 
     private LoginResponseDto issueTokens(AppUser user) {
