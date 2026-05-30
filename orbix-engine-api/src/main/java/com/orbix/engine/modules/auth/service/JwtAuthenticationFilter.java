@@ -73,8 +73,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             long invalidatedAt = tokenGuard.userInvalidatedAtEpoch(claims.userId());
+            // Use <= so a token issued in the same wall-clock second as the invalidation
+            // is also rejected (US-IAM-007: "immediately invalidates active sessions").
+            // Both iat and invalidatedAt are truncated to whole seconds, so strict < allows
+            // a token issued at second T to survive an invalidation also written at T.
             if (invalidatedAt > 0 && claims.issuedAt() != null
-                    && claims.issuedAt().getEpochSecond() < invalidatedAt) {
+                    && claims.issuedAt().getEpochSecond() <= invalidatedAt) {
                 deny(response, HttpServletResponse.SC_UNAUTHORIZED, "Session revoked");
                 return;
             }

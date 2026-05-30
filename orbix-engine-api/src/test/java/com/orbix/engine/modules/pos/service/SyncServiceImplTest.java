@@ -151,20 +151,18 @@ class SyncServiceImplTest {
 
     @Test
     void push_posSale_duplicateClientOpId_returnsDuplicateVerdictNotSecondRow() {
-        // Server already holds this clientOpId.
+        // Server already holds this clientOpId (sequential retry path).
         PosSale existing = stubSaleEntity("op-dup", 9002L);
         when(sales.findByCompanyIdAndClientOpId(COMPANY_ID, "op-dup"))
             .thenReturn(Optional.of(existing));
-        // posSaleService.post still called — it returns original on constraint hit.
-        when(posSaleService.post(any())).thenReturn(stubSaleDto("op-dup", 9002L));
 
         SyncPushResultDto result = service.pushBatch(pushRequest("op-dup", posSalePayload("op-dup")));
 
         SyncPushResultDto.OpResultDto r = result.results().get(0);
         assertThat(r.verdict()).isEqualTo("DUPLICATE");
         assertThat(r.serverEntityId()).isEqualTo("9002");
-        // Crucially: post was called exactly once (idempotent path) — no second insert.
-        verify(posSaleService, times(1)).post(any());
+        // SYNC-003 fix: pre-check short-circuits — post() is never called on a known duplicate.
+        verify(posSaleService, never()).post(any());
     }
 
     // -----------------------------------------------------------------------
@@ -725,5 +723,123 @@ class SyncServiceImplTest {
         ReflectionTestUtils.setField(p, "status", status);
         p.setChangeSeq(changeSeq);
         return p;
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-SYNC-001: price dataset must include taxInclusive + priceListCode
+    // -----------------------------------------------------------------------
+
+    /**
+     * The POS client needs {@code taxInclusive} and {@code priceListCode} from
+     * the price dataset rows so it can apply the correct VAT formula locally.
+     * Regression: old code omitted both fields, leaving the POS unable to
+     * determine whether a synced price already includes VAT.
+     */
+    @Test
+    void pull_priceDataset_includesTaxInclusiveAndPriceListCode() {
+        com.orbix.engine.modules.catalog.domain.entity.PriceList pl =
+            new com.orbix.engine.modules.catalog.domain.entity.PriceList(
+                COMPANY_ID, "RETAIL", "Retail Price List", "TZS",
+                java.time.LocalDate.of(2024, 1, 1), null, true, true, ACTOR_ID);
+        ReflectionTestUtils.setField(pl, "id", PRICE_LIST_ID);
+
+        PriceListItem pli = new PriceListItem(PRICE_LIST_ID, ITEM_A, UOM_ID, BigDecimal.ZERO,
+            new BigDecimal("1300"), java.time.LocalDate.of(2024, 1, 1));
+        ReflectionTestUtils.setField(pli, "id", 11L);
+        ReflectionTestUtils.setField(pli, "changeSeq", 1000L);
+
+        when(priceListRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of(pl));
+        when(priceListItems.findByPriceListIdAndChangeSeqGreaterThan(
+            eq(PRICE_LIST_ID), eq(0L), any())).thenReturn(List.of(pli));
+
+        SyncPullResultDto result = service.pull(null, "price");
+
+        assertThat(result.datasets()).containsKey("price");
+        var ds = result.datasets().get("price");
+        assertThat(ds.upserts()).hasSize(1);
+
+        @SuppressWarnings("unchecked")
+        var row = (java.util.Map<String, Object>) ds.upserts().get(0);
+        assertThat(row).containsKey("taxInclusive");
+        assertThat(row.get("taxInclusive")).isEqualTo(true);
+        assertThat(row).containsKey("priceListCode");
+        assertThat(row.get("priceListCode")).isEqualTo("RETAIL");
+        assertThat((BigDecimal) row.get("price")).isEqualByComparingTo(new BigDecimal("1300"));
+        assertThat(row.get("priceListId")).isEqualTo(String.valueOf(PRICE_LIST_ID));
+    }
+
+    @Test
+    void pull_priceDataset_taxExclusive_includesTaxInclusiveFalse() {
+        com.orbix.engine.modules.catalog.domain.entity.PriceList pl =
+            new com.orbix.engine.modules.catalog.domain.entity.PriceList(
+                COMPANY_ID, "WHOLE", "Wholesale", "TZS",
+                java.time.LocalDate.of(2024, 1, 1), null, false, false, ACTOR_ID);
+        ReflectionTestUtils.setField(pl, "id", PRICE_LIST_ID);
+
+        PriceListItem pli = new PriceListItem(PRICE_LIST_ID, ITEM_A, UOM_ID, BigDecimal.ZERO,
+            new BigDecimal("900"), java.time.LocalDate.of(2024, 1, 1));
+        ReflectionTestUtils.setField(pli, "id", 12L);
+        ReflectionTestUtils.setField(pli, "changeSeq", 2000L);
+
+        when(priceListRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of(pl));
+        when(priceListItems.findByPriceListIdAndChangeSeqGreaterThan(
+            eq(PRICE_LIST_ID), eq(0L), any())).thenReturn(List.of(pli));
+
+        SyncPullResultDto result = service.pull(null, "price");
+
+        @SuppressWarnings("unchecked")
+        var row = (java.util.Map<String, Object>) result.datasets().get("price").upserts().get(0);
+        assertThat(row.get("taxInclusive")).isEqualTo(false);
+        assertThat(row.get("priceListCode")).isEqualTo("WHOLE");
+    }
+
+    // -----------------------------------------------------------------------
+    // ISSUE-SYNC-003: applyPosSale TOCTOU — concurrent replay must return DUPLICATE
+    // -----------------------------------------------------------------------
+
+    /**
+     * If the {@code uk_pos_sale_client_op} constraint fires during insert
+     * (concurrent replay, not caught by the sequential pre-check), the service
+     * must reload the existing row and return DUPLICATE — not propagate the
+     * DataIntegrityViolationException as REJECTED or 500.
+     */
+    @Test
+    void push_posSale_constraintViolation_returnsDuplicate() {
+        PosSale prior = stubSaleEntity("op-race", 9999L);
+
+        // Pre-check: first call finds nothing (race window is open)
+        when(sales.findByCompanyIdAndClientOpId(COMPANY_ID, "op-race"))
+            .thenReturn(Optional.empty())
+            // Reload after constraint hit: winner's row is now visible
+            .thenReturn(Optional.of(prior));
+
+        // Insert attempt hits the unique constraint
+        when(posSaleService.post(any()))
+            .thenThrow(new org.springframework.dao.DataIntegrityViolationException(
+                "uk_pos_sale_client_op constraint violation"));
+
+        SyncPushResultDto result = service.pushBatch(pushRequest("op-race", posSalePayload("op-race")));
+
+        SyncPushResultDto.OpResultDto r = result.results().get(0);
+        assertThat(r.verdict()).isEqualTo("DUPLICATE");
+        assertThat(r.serverEntityId()).isEqualTo(String.valueOf(prior.getId()));
+        // DUPLICATE is not counted as rejected
+        assertThat(result.batchRejectedCount()).isZero();
+    }
+
+    /**
+     * Sequential retry (pre-check finds the existing row immediately) still
+     * returns DUPLICATE without calling post() again.
+     */
+    @Test
+    void push_posSale_sequentialRetry_returnsDuplicateWithoutPost() {
+        PosSale prior = stubSaleEntity("op-seq-dup", 8888L);
+        when(sales.findByCompanyIdAndClientOpId(COMPANY_ID, "op-seq-dup"))
+            .thenReturn(Optional.of(prior));
+
+        SyncPushResultDto result = service.pushBatch(pushRequest("op-seq-dup", posSalePayload("op-seq-dup")));
+
+        assertThat(result.results().get(0).verdict()).isEqualTo("DUPLICATE");
+        verify(posSaleService, never()).post(any());
     }
 }

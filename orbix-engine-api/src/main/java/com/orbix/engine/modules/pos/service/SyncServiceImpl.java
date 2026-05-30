@@ -43,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -190,18 +191,44 @@ public class SyncServiceImpl implements SyncService {
         }
     }
 
+    /**
+     * Apply a POS_SALE op.
+     *
+     * <p>Idempotency is enforced by the unique {@code (company_id, client_op_id)} constraint
+     * on {@code pos_sale} — we do NOT pre-check then insert (TOCTOU race). Instead:
+     * <ol>
+     *   <li>Attempt the insert via {@code posSaleService.post}.</li>
+     *   <li>If the constraint fires ({@link DataIntegrityViolationException}), reload the
+     *       existing row and return DUPLICATE with its original ids.</li>
+     * </ol>
+     * This means two concurrent replays of the same {@code clientOpId} can never both
+     * return ACCEPTED — the second one always loses the constraint race and becomes DUPLICATE.
+     */
     private SyncPushResultDto.OpResultDto applyPosSale(SyncOpDto op) {
         PostPosSaleRequestDto saleRequest = convertPayload(op.payload(), PostPosSaleRequestDto.class);
-        // PosSaleService.post has idempotency built in — returns original on dup.
         Long companyId = context.companyId();
-        boolean isDuplicate = sales.findByCompanyIdAndClientOpId(companyId, op.clientOpId()).isPresent();
-        PosSaleDto posted = posSaleService.post(saleRequest);
-        if (isDuplicate) {
+        // Fast-path: already persisted (e.g. sequential retry). PosSaleService.post
+        // checks the same key first and returns the existing row without a second insert.
+        Optional<PosSale> existing = sales.findByCompanyIdAndClientOpId(companyId, op.clientOpId());
+        if (existing.isPresent()) {
+            PosSale prior = existing.get();
             return SyncPushResultDto.OpResultDto.duplicate(op.clientOpId(),
-                posted.id(), posted.uid(), posted.number());
+                prior.getId(), prior.getUid(), prior.getNumber());
         }
-        return SyncPushResultDto.OpResultDto.accepted(op.clientOpId(),
-            posted.id(), posted.uid(), posted.number());
+        try {
+            PosSaleDto posted = posSaleService.post(saleRequest);
+            return SyncPushResultDto.OpResultDto.accepted(op.clientOpId(),
+                posted.id(), posted.uid(), posted.number());
+        } catch (DataIntegrityViolationException ex) {
+            // Concurrent replay hit the uk_pos_sale_client_op constraint — reload and
+            // return DUPLICATE so both callers get a consistent response.
+            log.debug("applyPosSale constraint hit for clientOpId={}, reloading as DUPLICATE",
+                op.clientOpId());
+            return sales.findByCompanyIdAndClientOpId(companyId, op.clientOpId())
+                .map(prior -> SyncPushResultDto.OpResultDto.duplicate(op.clientOpId(),
+                    prior.getId(), prior.getUid(), prior.getNumber()))
+                .orElseThrow(() -> ex); // constraint fired but row not found — rethrow original
+        }
     }
 
     @Transactional
@@ -489,14 +516,16 @@ public class SyncServiceImpl implements SyncService {
                     deletes.add(String.valueOf(pli.getId()));
                 } else {
                     Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("id",           String.valueOf(pli.getId()));
-                    m.put("priceListId",  String.valueOf(pli.getPriceListId()));
-                    m.put("itemId",       String.valueOf(pli.getItemId()));
-                    m.put("uomId",        String.valueOf(pli.getUomId()));
-                    m.put("minQty",       pli.getMinQty());
-                    m.put("price",        pli.getPrice());
-                    m.put("validFrom",    pli.getValidFrom().toString());
-                    m.put("changeSeq",    pli.getChangeSeq());
+                    m.put("id",            String.valueOf(pli.getId()));
+                    m.put("priceListId",   String.valueOf(pli.getPriceListId()));
+                    m.put("priceListCode", pl.getCode());
+                    m.put("taxInclusive",  pl.isTaxInclusive());
+                    m.put("itemId",        String.valueOf(pli.getItemId()));
+                    m.put("uomId",         String.valueOf(pli.getUomId()));
+                    m.put("minQty",        pli.getMinQty());
+                    m.put("price",         pli.getPrice());
+                    m.put("validFrom",     pli.getValidFrom().toString());
+                    m.put("changeSeq",     pli.getChangeSeq());
                     upserts.add(m);
                 }
             }

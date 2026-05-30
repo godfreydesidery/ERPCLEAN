@@ -15,6 +15,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.List;
@@ -83,6 +84,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseDto<Object>> onForbidden(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
             ApiResponseDto.error(403, ResponseCode.FORBIDDEN, "Access denied")
+        );
+    }
+
+    /**
+     * ResponseStatusException carries an embedded HTTP status (e.g. 426 from
+     * SyncController.validateContractVersion). Without this handler the catch-all
+     * below swallows the status and returns 500 instead.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponseDto<Object>> onResponseStatus(ResponseStatusException ex) {
+        int code = ex.getStatusCode().value();
+        String rc = switch (code) {
+            case 404 -> ResponseCode.NOT_FOUND;
+            case 409 -> ResponseCode.SYNC_CONTRACT_TOO_NEW;
+            case 426 -> ResponseCode.SYNC_CONTRACT_TOO_OLD;
+            default  -> ResponseCode.BAD_REQUEST;
+        };
+        String reason = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        return ResponseEntity.status(ex.getStatusCode()).body(
+            ApiResponseDto.error(code, rc, reason)
         );
     }
 

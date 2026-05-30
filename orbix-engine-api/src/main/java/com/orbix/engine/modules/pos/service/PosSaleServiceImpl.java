@@ -39,10 +39,13 @@ import com.orbix.engine.modules.pos.domain.enums.PosPaymentMethod;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleKind;
 import com.orbix.engine.modules.pos.domain.enums.PosSaleStatus;
 import com.orbix.engine.modules.pos.domain.enums.TillSessionStatus;
+import com.orbix.engine.modules.catalog.domain.entity.PriceList;
+import com.orbix.engine.modules.catalog.repository.PriceListRepository;
 import com.orbix.engine.modules.pos.repository.PosPaymentRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleLineRepository;
 import com.orbix.engine.modules.pos.repository.PosSaleRepository;
 import com.orbix.engine.modules.pos.repository.TillCurrencyRepository;
+import com.orbix.engine.modules.pos.repository.TillRepository;
 import com.orbix.engine.modules.pos.repository.TillSessionRepository;
 import com.orbix.engine.modules.stock.domain.dto.BatchPickDto;
 import com.orbix.engine.modules.stock.domain.dto.PostStockMoveRequestDto;
@@ -85,6 +88,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final PosPaymentRepository payments;
     private final TillSessionRepository tillSessions;
     private final TillCurrencyRepository tillCurrencies;
+    private final TillRepository tills;
+    private final PriceListRepository priceLists;
     private final SectionRepository sections;
     private final ItemRepository items;
     private final VatGroupRepository vatGroups;
@@ -134,8 +139,12 @@ public class PosSaleServiceImpl implements PosSaleService {
                 "POS-sale number already exists: " + request.number());
         }
 
+        // Resolve whether the till's price list is tax-inclusive so the correct
+        // VAT formula is applied: back-extraction if inclusive, forward addition if not.
+        boolean taxInclusive = resolveTaxInclusive(session.getTillId());
+
         // Compute line totals + tax, then apply optional header-level discount before tender check.
-        Totals totals = computeTotals(request, companyId);
+        Totals totals = computeTotals(request, companyId, taxInclusive);
         String functional = requireCompanyCurrency(companyId);
         List<TenderResolution> tenders = resolveTenders(request.payments(),
             session.getTillId(), functional, request.saleAt());
@@ -165,7 +174,7 @@ public class PosSaleServiceImpl implements PosSaleService {
             request.notes()
         ));
 
-        List<PosSaleLine> savedLines = saveLines(sale, request.lines(), companyId, totals);
+        List<PosSaleLine> savedLines = saveLines(sale, request.lines(), companyId, taxInclusive);
         List<PosPayment> savedPayments = savePayments(sale, tenders);
 
         postCashEntriesForPayments(sale, savedPayments, CashDirection.IN,
@@ -297,8 +306,10 @@ public class PosSaleServiceImpl implements PosSaleService {
                     + original.getBusinessDate() + ")");
         }
 
+        boolean taxInclusive = resolveTaxInclusive(session.getTillId());
+
         Map<Long, BigDecimal> snapCosts = snapOriginalCosts(original.getId());
-        RefundTotals totals = computeRefundTotals(request, companyId, snapCosts);
+        RefundTotals totals = computeRefundTotals(request, companyId, snapCosts, taxInclusive);
         String functional = requireCompanyCurrency(companyId);
         List<TenderResolution> tenders = resolveRefundTenders(request.payments(),
             session.getTillId(), functional, request.saleAt());
@@ -330,7 +341,7 @@ public class PosSaleServiceImpl implements PosSaleService {
         ));
         refund.setRefundedFromSaleId(original.getId());
 
-        List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts);
+        List<PosSaleLine> savedLines = saveRefundLines(refund, request.lines(), companyId, snapCosts, taxInclusive);
         List<PosPayment> savedPayments = saveRefundPayments(refund, tenders);
 
         postCashEntriesForPayments(refund, savedPayments, CashDirection.OUT,
@@ -359,8 +370,17 @@ public class PosSaleServiceImpl implements PosSaleService {
             .toList();
     }
 
-    /** Header totals + per-line subtotal/tax computed before any persistence. */
-    private Totals computeTotals(PostPosSaleRequestDto request, Long companyId) {
+    /**
+     * Header totals + per-line subtotal/tax computed before any persistence.
+     *
+     * <p>When {@code taxInclusive=true} the unitPrice already contains VAT — we
+     * back-extract the tax component: {@code tax = gross * rate / (1 + rate)},
+     * {@code net = gross - tax}, and the line total stays equal to gross (the
+     * customer does not pay extra). When {@code taxInclusive=false} the current
+     * forward-addition formula applies: {@code tax = net * rate},
+     * {@code lineTotal = net + tax}.
+     */
+    private Totals computeTotals(PostPosSaleRequestDto request, Long companyId, boolean taxInclusive) {
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO;
         for (PostPosSaleRequestDto.Line input : request.lines()) {
@@ -374,10 +394,14 @@ public class PosSaleServiceImpl implements PosSaleService {
             BigDecimal discountAmount = gross.multiply(discountPct)
                 .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
             BigDecimal netLine = gross.subtract(discountAmount);
-            BigDecimal lineTax = netLine.multiply(vat.getRate())
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
 
-            subtotal = subtotal.add(netLine);
+            BigDecimal lineTax = computeLineTax(netLine, vat.getRate(), taxInclusive);
+            // For inclusive pricing the subtotal is the ex-tax net; for exclusive it stays netLine.
+            BigDecimal netExTax = taxInclusive
+                ? netLine.subtract(lineTax)
+                : netLine;
+
+            subtotal = subtotal.add(netExTax);
             tax = tax.add(lineTax);
         }
         BigDecimal headerDiscount = request.headerDiscountAmount() != null
@@ -390,8 +414,39 @@ public class PosSaleServiceImpl implements PosSaleService {
             throw new IllegalArgumentException(
                 "headerDiscountAmount " + headerDiscount + " exceeds subtotal " + subtotal);
         }
-        BigDecimal total = subtotal.subtract(headerDiscount).add(tax);
+        // For inclusive prices the total = subtotal + tax + any additional header discount impact.
+        // The total paid stays equal to gross (already paid), so no extra added.
+        BigDecimal total = taxInclusive
+            ? subtotal.add(tax).subtract(headerDiscount)
+            : subtotal.subtract(headerDiscount).add(tax);
         return new Totals(subtotal, headerDiscount, tax, total);
+    }
+
+    /**
+     * Compute the tax component from a net (post-discount) line amount.
+     * <ul>
+     *   <li>Inclusive: {@code tax = net * rate / (1 + rate)} — extract from the gross.</li>
+     *   <li>Exclusive: {@code tax = net * rate} — add on top.</li>
+     * </ul>
+     */
+    private static BigDecimal computeLineTax(BigDecimal net, BigDecimal rate, boolean taxInclusive) {
+        if (taxInclusive) {
+            BigDecimal divisor = BigDecimal.ONE.add(rate);
+            return net.multiply(rate).divide(divisor, MONEY_SCALE, RoundingMode.HALF_UP);
+        }
+        return net.multiply(rate).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Resolve whether the till's default price list is tax-inclusive.
+     * Falls back to {@code false} if the till or price list cannot be found,
+     * so existing exclusive-price configurations are unaffected.
+     */
+    private boolean resolveTaxInclusive(Long tillId) {
+        return tills.findById(tillId)
+            .flatMap(till -> priceLists.findById(till.getDefaultPriceListId()))
+            .map(PriceList::isTaxInclusive)
+            .orElse(false);
     }
 
     private void validateDiscountApprover(PostPosSaleRequestDto request, Long actorId, Long companyId) {
@@ -422,7 +477,7 @@ public class PosSaleServiceImpl implements PosSaleService {
 
     private List<PosSaleLine> saveLines(PosSale sale,
                                         List<PostPosSaleRequestDto.Line> requestLines,
-                                        Long companyId, Totals ignoredTotals) {
+                                        Long companyId, boolean taxInclusive) {
         List<PosSaleLine> savedLines = new ArrayList<>(requestLines.size());
         int lineNo = 1;
         for (PostPosSaleRequestDto.Line input : requestLines) {
@@ -437,9 +492,10 @@ public class PosSaleServiceImpl implements PosSaleService {
             BigDecimal discountAmount = gross.multiply(discountPct)
                 .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
             BigDecimal netLine = gross.subtract(discountAmount);
-            BigDecimal lineTax = netLine.multiply(vat.getRate())
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal lineTotal = netLine.add(lineTax);
+            BigDecimal lineTax = computeLineTax(netLine, vat.getRate(), taxInclusive);
+            // Inclusive: lineTotal = gross (customer pays exactly what's on the shelf).
+            // Exclusive: lineTotal = net + tax (customer pays the marked price plus VAT).
+            BigDecimal lineTotal = taxInclusive ? netLine : netLine.add(lineTax);
 
             PosSaleLine line = lines.save(new PosSaleLine(
                 sale.getId(), lineNo++, input.itemId(), uomId,
@@ -765,7 +821,8 @@ public class PosSaleServiceImpl implements PosSaleService {
 
     private RefundTotals computeRefundTotals(PostPosRefundRequestDto request,
                                              Long companyId,
-                                             Map<Long, BigDecimal> snapCosts) {
+                                             Map<Long, BigDecimal> snapCosts,
+                                             boolean taxInclusive) {
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO;
         for (PostPosRefundRequestDto.Line input : request.lines()) {
@@ -789,10 +846,10 @@ public class PosSaleServiceImpl implements PosSaleService {
             BigDecimal discountAmount = gross.multiply(discountPct)
                 .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
             BigDecimal netLine = gross.subtract(discountAmount);
-            BigDecimal lineTax = netLine.multiply(vat.getRate())
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal lineTax = computeLineTax(netLine, vat.getRate(), taxInclusive);
+            BigDecimal netExTax = taxInclusive ? netLine.subtract(lineTax) : netLine;
 
-            subtotal = subtotal.add(netLine);
+            subtotal = subtotal.add(netExTax);
             tax = tax.add(lineTax);
         }
         BigDecimal total = subtotal.add(tax);
@@ -822,7 +879,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private List<PosSaleLine> saveRefundLines(PosSale refund,
                                               List<PostPosRefundRequestDto.Line> requestLines,
                                               Long companyId,
-                                              Map<Long, BigDecimal> snapCosts) {
+                                              Map<Long, BigDecimal> snapCosts,
+                                              boolean taxInclusive) {
         List<PosSaleLine> savedLines = new ArrayList<>(requestLines.size());
         int lineNo = 1;
         for (PostPosRefundRequestDto.Line input : requestLines) {
@@ -837,9 +895,8 @@ public class PosSaleServiceImpl implements PosSaleService {
             BigDecimal discountAmount = gross.multiply(discountPct)
                 .divide(HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
             BigDecimal netLine = gross.subtract(discountAmount);
-            BigDecimal lineTax = netLine.multiply(vat.getRate())
-                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal lineTotal = netLine.add(lineTax);
+            BigDecimal lineTax = computeLineTax(netLine, vat.getRate(), taxInclusive);
+            BigDecimal lineTotal = taxInclusive ? netLine : netLine.add(lineTax);
             BigDecimal snappedCost = snapCosts.get(input.itemId());
 
             PosSaleLine line = lines.save(new PosSaleLine(
