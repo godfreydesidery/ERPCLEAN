@@ -22,7 +22,8 @@ import java.time.LocalDate;
 @Table(
     name = "cash_pickup",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_cash_pickup_uid", columnNames = {"uid"})
+        @UniqueConstraint(name = "uk_cash_pickup_uid",        columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_cash_pickup_client_op",  columnNames = {"company_id", "client_op_id"})
     }
 )
 @Getter
@@ -41,6 +42,12 @@ public class CashPickup extends UidEntity {
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
+
+    /** Idempotency key for device-outbox pushes. NULL for pickups posted online.
+     *  Unique per (company_id, client_op_id) — see uk_cash_pickup_client_op. */
+    @Setter
+    @Column(name = "client_op_id", length = 40)
+    private String clientOpId;
 
     @Column(name = "branch_id", nullable = false)
     private Long branchId;

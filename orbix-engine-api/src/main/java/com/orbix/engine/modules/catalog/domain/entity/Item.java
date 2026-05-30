@@ -90,6 +90,13 @@ public class Item extends UidEntity {
     @Column(nullable = false, length = 32)
     private ItemStatus status = ItemStatus.ACTIVE;
 
+    /** Monotonic cursor stamp from {@code sync_change_seq} — bumped on every write
+     *  so the pull endpoint can page deltas with {@code WHERE change_seq > :cursor}.
+     *  NULL for rows that pre-date the sync spine (treated as 0 by the pull query).
+     *  Tunable cadence: {@code orbix.sync.*}. */
+    @Column(name = "change_seq")
+    private Long changeSeq;
+
     @Version
     private Integer version;
 

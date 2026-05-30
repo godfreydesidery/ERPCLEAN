@@ -12,6 +12,9 @@ public interface PettyCashRepository extends JpaRepository<PettyCash, Long> {
     /** External lookup by ULID (URL handle). */
     Optional<PettyCash> findByUid(String uid);
 
+    /** Idempotency lookup for device-outbox sync (pre-check before insert). */
+    Optional<PettyCash> findByCompanyIdAndClientOpId(Long companyId, String clientOpId);
+
     List<PettyCash> findByTillSessionIdOrderByAtAsc(Long tillSessionId);
 
     /** Sum of all petty-cash payouts from a till session — used by close-till reconciliation. */

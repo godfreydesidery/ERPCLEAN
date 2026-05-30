@@ -15,7 +15,10 @@ import java.time.LocalDate;
 /** A cashier shift on a till. DATA-MODEL.md §7.2. */
 @Entity
 @Table(name = "till_session",
-    uniqueConstraints = @UniqueConstraint(name = "uk_till_session_uid", columnNames = {"uid"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_till_session_uid",        columnNames = {"uid"}),
+        @UniqueConstraint(name = "uk_till_session_client_op",  columnNames = {"company_id", "client_op_id"})
+    })
 @Data
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EqualsAndHashCode(of = "id", callSuper = false)
@@ -35,6 +38,11 @@ public class TillSession extends UidEntity {
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
+
+    /** Idempotency key for device-outbox pushes. NULL for sessions opened online.
+     *  Unique per (company_id, client_op_id) — see uk_till_session_client_op. */
+    @Column(name = "client_op_id", length = 40)
+    private String clientOpId;
 
     @Column(name = "business_date", nullable = false)
     private LocalDate businessDate;

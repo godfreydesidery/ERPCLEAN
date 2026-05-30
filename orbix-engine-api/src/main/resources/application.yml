@@ -133,6 +133,21 @@ orbix:
     # Refund total above which a supervisor holding POS.REFUND_APPROVE must
     # authorise the refund. Currency-agnostic (functional currency).
     refund-threshold: 10000
+  sync:
+    # Offline-sync spine (US-POS-017/018, docs/design/slice-sync-spine.md).
+    # contract-version: the server's current sync contract major. Clients with
+    # a lower major get 426; clients with a higher major get 409.
+    contract-version: 1
+    # Maximum ops per push batch (defence-in-depth on payload size).
+    push-batch-max: 500
+    # Maximum rows per dataset per pull page. Keeps long-offline reconnect from
+    # returning a 50MB body. Client loops while hasMore=true.
+    pull-page-size: 2000
+    # Tombstone retention window (days). Archived/deleted rows are returned as
+    # deletes in the pull delta for this long. A device offline longer than this
+    # window gets CURSOR_EXPIRED (HTTP 409) and must bootstrap.
+    # PM-approved default: 90 days (adequate for rural TZ tills).
+    tombstone-days: 90
   flags:
     cache-ttl-seconds: 30
 
