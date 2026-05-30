@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -7,6 +7,7 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { ReportExportMenuComponent } from './report-export-menu.component';
 import { ReportExport } from './report-export.service';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 
 // ---------------------------------------------------------------------------
 // DTO shapes — mirrors DailySummaryDto from the backend
@@ -50,7 +51,7 @@ interface DailySummary {
 @Component({
   selector: 'orbix-sales-summary',
   standalone: true,
-  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe, FormsModule, ReportExportMenuComponent],
+  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe, FormsModule, ReportExportMenuComponent, BranchPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -74,12 +75,13 @@ interface DailySummary {
     <!-- Filters -->
     <form class="row g-2 mb-4 align-items-end" (ngSubmit)="fetch()" aria-label="Report filters">
       <div class="col-12 col-sm-6 col-md-4">
-        <label for="ss-branch" class="form-label small fw-semibold mb-1">Branch ID</label>
-        <input id="ss-branch" type="text" class="form-control form-control-sm"
-               [(ngModel)]="branchIdInput" name="branchId"
-               placeholder="Leave blank for all branches"
-               aria-describedby="ss-branch-hint">
-        <div id="ss-branch-hint" class="form-text">Numeric branch ID</div>
+        <orbix-branch-picker
+          instanceId="ss"
+          label="Branch (optional — blank = all)"
+          [required]="false"
+          (branchSelected)="onBranchSelected($event)"
+          (branchCleared)="onBranchCleared()">
+        </orbix-branch-picker>
       </div>
 
       <div class="col-12 col-sm-6 col-md-4">
@@ -336,6 +338,14 @@ export class SalesSummaryComponent implements OnInit {
       this.businessDateInput = date;
       this.fetch();
     });
+  }
+
+  protected onBranchSelected(evt: BranchSelectedEvent): void {
+    this.branchIdInput = evt.id;
+  }
+
+  protected onBranchCleared(): void {
+    this.branchIdInput = '';
   }
 
   fetch(): void {

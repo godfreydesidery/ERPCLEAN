@@ -8,6 +8,7 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { SalesService } from './sales.service';
+import { SalesInvoicePickerModalComponent, SalesInvoicePickedEvent } from './sales-invoice-picker-modal.component';
 import {
   CreatePackingListLine,
   PackingList,
@@ -17,7 +18,7 @@ import {
 @Component({
   selector: 'orbix-packing-lists',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, SalesInvoicePickerModalComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -62,9 +63,26 @@ import {
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="PKL0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Invoice UID</label>
-                  <input class="form-control font-monospace" type="text" name="iid"
-                         [(ngModel)]="newInvoiceUid" (ngModelChange)="loadInvoice()" required>
+                  <label class="form-label small fw-semibold text-secondary">
+                    Invoice <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  @if (loadedInvoice(); as inv) {
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge text-bg-light border font-monospace flex-grow-1">{{ inv.number }}</span>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Clear invoice selection"
+                              (click)="clearInvoice()">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  } @else {
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100"
+                            (click)="invoicePickerOpen.set(true)">
+                      <i class="bi bi-search me-1" aria-hidden="true"></i>Pick invoice…
+                    </button>
+                  }
+                  <!-- hidden required sentinel so ngForm stays invalid until invoice is picked -->
+                  <input type="hidden" name="iid" [ngModel]="newInvoiceUid" required>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Dispatch date</label>
@@ -245,6 +263,12 @@ import {
         }
       </div>
     </div>
+    <!-- Sales invoice picker modal -->
+    <orbix-sales-invoice-picker-modal
+      [visible]="invoicePickerOpen()"
+      (invoiceSelected)="onInvoicePicked($event)"
+      (closed)="invoicePickerOpen.set(false)">
+    </orbix-sales-invoice-picker-modal>
   `,
   styles: [`
     :host { display: block; }
@@ -316,6 +340,7 @@ export class PackingListsComponent implements OnInit {
   protected readonly packingLists = signal<PackingList[]>([]);
   protected readonly selected = signal<PackingList | null>(null);
   protected readonly loadedInvoice = signal<SalesInvoice | null>(null);
+  protected readonly invoicePickerOpen = signal(false);
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
@@ -336,6 +361,19 @@ export class PackingListsComponent implements OnInit {
   ngOnInit(): void { this.refresh(); }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onInvoicePicked(evt: SalesInvoicePickedEvent): void {
+    this.newInvoiceUid = evt.uid;
+    this.invoicePickerOpen.set(false);
+    this.loadInvoice();
+  }
+
+  clearInvoice(): void {
+    this.newInvoiceUid = null;
+    this.loadedInvoice.set(null);
+    this.lineSelected = {};
+    this.lineQty = {};
+  }
 
   refresh(): void {
     this.sales.listPackingLists(this.branchId()).subscribe({
@@ -394,7 +432,7 @@ export class PackingListsComponent implements OnInit {
   }
 
   cancel(p: PackingList): void {
-    if (!window.confirm(`Cancel ${p.number}?`)) return;
+    if (!globalThis.confirm(`Cancel ${p.number}?`)) return;
     this.run(this.sales.cancelPackingList(p.uid), `Cancelled.`);
   }
 

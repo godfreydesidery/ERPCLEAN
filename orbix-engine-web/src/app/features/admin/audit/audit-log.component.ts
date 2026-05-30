@@ -1,14 +1,34 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuditService } from './audit.service';
 import { AuditFilters, AuditIntegrityResult, AuditLogRow } from './audit.models';
 import { PagerComponent } from '../../../core/ui/pager.component';
+import { UserPickerComponent, UserSelectedEvent } from '../../../core/ui/user-picker.component';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../../core/ui/branch-picker.component';
+import { PriceListPickerComponent, PriceListSelectedEvent } from '../../../core/ui/price-list-picker.component';
+import { SectionPickerComponent } from '../../../core/ui/section-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../../procurement/item-typeahead.component';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from '../../procurement/supplier-typeahead.component';
+import { CustomerTypeaheadComponent, CustomerSelectedEvent } from '../../sales/customer-typeahead.component';
+
+/**
+ * Entity types that have a dedicated picker. For all others the entity-id
+ * field stays hidden (not a raw text box).
+ */
+const PICKER_ENTITY_TYPES = new Set([
+  'Item', 'Customer', 'Supplier', 'Branch', 'AppUser', 'User', 'PriceList', 'Section'
+]);
 
 @Component({
   selector: 'orbix-audit-log',
   standalone: true,
-  imports: [FormsModule, DatePipe, PagerComponent],
+  imports: [
+    CommonModule, FormsModule, DatePipe, PagerComponent,
+    UserPickerComponent, BranchPickerComponent, PriceListPickerComponent,
+    SectionPickerComponent, ItemTypeaheadComponent,
+    SupplierTypeaheadComponent, CustomerTypeaheadComponent,
+  ],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">Security</p>
@@ -25,16 +45,91 @@ import { PagerComponent } from '../../../core/ui/pager.component';
           </div>
           <div class="col-6 col-md-2">
             <label class="form-label small mb-1">Entity type</label>
-            <input class="form-control form-control-sm" [(ngModel)]="filters.entityType" placeholder="AppUser…">
+            <input class="form-control form-control-sm"
+                   [(ngModel)]="entityTypeInput"
+                   (change)="onEntityTypeChange()"
+                   placeholder="Item, Branch…">
           </div>
+
+          <!-- Entity-id: picker when entity type is known; hint otherwise -->
           <div class="col-6 col-md-2">
-            <label class="form-label small mb-1">Entity id</label>
-            <input class="form-control form-control-sm" [(ngModel)]="filters.entityId">
+            @if (entityPickerType() === 'Item') {
+              <orbix-item-typeahead
+                instanceId="audit-entity-item"
+                (itemSelected)="onEntityItem($event)"
+                (itemCleared)="filters.entityId = undefined">
+              </orbix-item-typeahead>
+            } @else if (entityPickerType() === 'Customer') {
+              <orbix-customer-typeahead
+                instanceId="audit-entity-customer"
+                (customerSelected)="onEntityCustomer($event)"
+                (customerCleared)="filters.entityId = undefined">
+              </orbix-customer-typeahead>
+            } @else if (entityPickerType() === 'Supplier') {
+              <orbix-supplier-typeahead
+                instanceId="audit-entity-supplier"
+                (supplierSelected)="onEntitySupplier($event)"
+                (supplierCleared)="filters.entityId = undefined">
+              </orbix-supplier-typeahead>
+            } @else if (entityPickerType() === 'Branch') {
+              <orbix-branch-picker
+                instanceId="audit-entity-branch"
+                label="Entity (branch)"
+                [required]="false"
+                (branchSelected)="onEntityBranch($event)"
+                (branchCleared)="filters.entityId = undefined">
+              </orbix-branch-picker>
+            } @else if (entityPickerType() === 'AppUser' || entityPickerType() === 'User') {
+              <orbix-user-picker
+                instanceId="audit-entity-user"
+                label="Entity (user)"
+                [required]="false"
+                (userSelected)="onEntityUser($event)"
+                (userCleared)="filters.entityId = undefined">
+              </orbix-user-picker>
+            } @else if (entityPickerType() === 'PriceList') {
+              <orbix-price-list-picker
+                instanceId="audit-entity-pricelist"
+                label="Entity (price list)"
+                [required]="false"
+                (priceListSelected)="onEntityPriceList($event)"
+                (priceListCleared)="filters.entityId = undefined">
+              </orbix-price-list-picker>
+            } @else if (entityPickerType() === 'Section') {
+              <!-- Section needs a branch uid — not available as a standalone filter;
+                   show a disabled placeholder with a hint. -->
+              <div>
+                <label class="form-label small mb-1">Entity id (section)</label>
+                <p class="small text-secondary mb-0">
+                  <i class="bi bi-info-circle me-1"></i>Section filter requires a branch context — filter by action or entity type instead.
+                </p>
+              </div>
+            } @else if (entityTypeInput && !hasEntityPicker()) {
+              <div>
+                <label class="form-label small mb-1">Entity id</label>
+                <p class="small text-secondary mb-0">
+                  <i class="bi bi-info-circle me-1"></i>Select a supported entity type to filter by entity.
+                </p>
+              </div>
+            } @else if (!entityTypeInput) {
+              <div>
+                <label class="form-label small mb-1">Entity id</label>
+                <p class="small text-secondary mb-0">Enter an entity type first.</p>
+              </div>
+            }
           </div>
+
+          <!-- Actor id: user-picker -->
           <div class="col-6 col-md-2">
-            <label class="form-label small mb-1">Actor id</label>
-            <input class="form-control form-control-sm" [(ngModel)]="filters.actorId">
+            <orbix-user-picker
+              instanceId="audit-actor"
+              label="Actor"
+              [required]="false"
+              (userSelected)="onActorSelected($event)"
+              (userCleared)="filters.actorId = undefined">
+            </orbix-user-picker>
           </div>
+
           <div class="col-6 col-md-2">
             <label class="form-label small mb-1">From</label>
             <input type="datetime-local" class="form-control form-control-sm" [(ngModel)]="filters.from">
@@ -105,6 +200,13 @@ export class AuditLogComponent implements OnInit {
   private readonly api = inject(AuditService);
 
   protected filters: AuditFilters = {};
+
+  /** Raw entity-type text the operator typed (drives picker switching). */
+  protected entityTypeInput = '';
+
+  /** Normalised entity type used to select which picker to render. */
+  protected readonly entityPickerType = signal<string>('');
+
   protected readonly rows = signal<AuditLogRow[]>([]);
   protected readonly page = signal(0);
   protected readonly total = signal(0);
@@ -118,6 +220,28 @@ export class AuditLogComponent implements OnInit {
   ngOnInit(): void {
     this.search(0);
   }
+
+  onEntityTypeChange(): void {
+    const trimmed = this.entityTypeInput.trim();
+    this.filters.entityType = trimmed || undefined;
+    this.filters.entityId = undefined;
+    this.entityPickerType.set(trimmed);
+  }
+
+  hasEntityPicker(): boolean {
+    return PICKER_ENTITY_TYPES.has(this.entityPickerType());
+  }
+
+  // --- Entity-id picker handlers ---
+  onEntityItem(evt: ItemSelectedEvent): void { this.filters.entityId = evt.id; }
+  onEntityCustomer(evt: CustomerSelectedEvent): void { this.filters.entityId = evt.id; }
+  onEntitySupplier(evt: SupplierSelectedEvent): void { this.filters.entityId = evt.id; }
+  onEntityBranch(evt: BranchSelectedEvent): void { this.filters.entityId = evt.id; }
+  onEntityUser(evt: UserSelectedEvent): void { this.filters.entityId = evt.id; }
+  onEntityPriceList(evt: PriceListSelectedEvent): void { this.filters.entityId = evt.id; }
+
+  // --- Actor-id picker handler ---
+  onActorSelected(evt: UserSelectedEvent): void { this.filters.actorId = evt.id; }
 
   search(page: number): void {
     this.error.set(null);
@@ -134,6 +258,8 @@ export class AuditLogComponent implements OnInit {
 
   reset(): void {
     this.filters = {};
+    this.entityTypeInput = '';
+    this.entityPickerType.set('');
     this.integrity.set(null);
     this.search(0);
   }

@@ -10,6 +10,7 @@ import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from './supplier-typeahead.component';
 import { ProcurementService } from './procurement.service';
 import {
   Grn,
@@ -25,7 +26,7 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, SupplierTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -74,9 +75,11 @@ interface AllocRow {
                   <input class="form-control font-monospace" name="sino" [(ngModel)]="newSupplierInvoiceNo" required>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Supplier ID</label>
-                  <input class="form-control" type="number" name="sid"
-                         [(ngModel)]="newSupplierId" (ngModelChange)="loadGrns()" required>
+                  <orbix-supplier-typeahead
+                    instanceId="inv-new"
+                    (supplierSelected)="onSupplierSelected($event)"
+                    (supplierCleared)="onSupplierCleared()">
+                  </orbix-supplier-typeahead>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Invoice date</label>
@@ -457,6 +460,16 @@ export class InvoicesComponent implements OnInit {
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onSupplierSelected(evt: SupplierSelectedEvent): void {
+    this.newSupplierId = evt.id;
+    this.loadGrns();
+  }
+
+  onSupplierCleared(): void {
+    this.newSupplierId = null;
+    this.grnOptions.set([]);
+  }
 
   statusLabel(status: string): string {
     return status === 'PARTIALLY_PAID' ? 'PART-PAID' : status;

@@ -51,7 +51,11 @@ describe('SalesSummaryComponent', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // BranchPickerComponent fires GET /branches on init — flush any open request.
+    http.match(r => r.url.includes('/branches')).forEach(r => r.flush({ status: true, statusCode: 200, responseCode: 'OK', message: 'OK', errors: [], data: { content: [], page: 0, size: 100, totalElements: 0, totalPages: 0 } }));
+    http.verify();
+  });
 
   // -------------------------------------------------------------------------
   // Loading state

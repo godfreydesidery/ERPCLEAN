@@ -7,13 +7,21 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { UserPickerComponent, UserSelectedEvent } from '../../core/ui/user-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
 import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
+
+interface PickedItem {
+  id: string;
+  code: string;
+  name: string;
+}
 
 @Component({
   selector: 'orbix-stock-counts',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, ItemTypeaheadComponent, UserPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -43,7 +51,7 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
           <button class="btn-close btn-sm" (click)="toggleForm()"></button>
         </div>
         <div class="card-body p-3">
-          <form (ngSubmit)="create()" #f="ngForm" class="d-flex flex-column gap-3">
+          <form (ngSubmit)="create()" class="d-flex flex-column gap-3">
             <div class="row g-2">
               <div class="col-md-4">
                 <label class="form-label small fw-semibold text-secondary">Number</label>
@@ -59,15 +67,38 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
                   @for (t of countTypes; track t) { <option [value]="t">{{ t }}</option> }
                 </select>
               </div>
-              <div class="col-12">
-                <label class="form-label small fw-semibold text-secondary">Item IDs <span class="text-muted">(comma-separated)</span></label>
-                <input class="form-control font-monospace" name="ids" [(ngModel)]="newItemIds"
-                       required placeholder="1, 2, 3">
-              </div>
             </div>
+
+            <!-- Item picker with chip list -->
+            <div>
+              <label class="form-label small fw-semibold text-secondary">Items</label>
+              <orbix-item-typeahead
+                instanceId="count-item-add"
+                (itemSelected)="addItem($event)"
+                (itemCleared)="itemPickerKey.set(itemPickerKey() + 1)">
+              </orbix-item-typeahead>
+              @if (pickedItems().length > 0) {
+                <div class="d-flex flex-wrap gap-1 mt-2" role="list" aria-label="Selected items">
+                  @for (item of pickedItems(); track item.id) {
+                    <span class="badge text-bg-light border d-inline-flex align-items-center gap-1" role="listitem">
+                      <span class="font-monospace">{{ item.code }}</span>
+                      <span class="text-secondary small">{{ item.name }}</span>
+                      <button type="button" class="btn-close btn-sm ms-1"
+                              style="font-size:0.6rem"
+                              [attr.aria-label]="'Remove ' + item.name"
+                              (click)="removeItem(item.id)">
+                      </button>
+                    </span>
+                  }
+                </div>
+              } @else {
+                <p class="small text-secondary mt-1 mb-0">Pick at least one item to count.</p>
+              }
+            </div>
+
             <div class="d-flex gap-2 pt-2 border-top">
               <button class="btn btn-primary flex-grow-1 d-inline-flex justify-content-center align-items-center gap-2"
-                      [disabled]="busy() || f.invalid">
+                      [disabled]="busy() || !newNumber || pickedItems().length === 0">
                 @if (busy()) { <span class="spinner-border spinner-border-sm"></span> }
                 @else { <i class="bi bi-clipboard-check"></i> }
                 Create count
@@ -149,15 +180,13 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
                   @if (count.status === 'CLOSED') {
                     <div class="d-flex flex-wrap align-items-end gap-2">
                       <div class="post-authoriser">
-                        <label [attr.for]="'count-authoriser-' + count.id"
-                               class="form-label small fw-semibold text-secondary mb-1">
-                          Authoriser user ID <span class="text-muted">(opt)</span>
-                        </label>
-                        <input [id]="'count-authoriser-' + count.id"
-                               class="form-control form-control-sm text-end" type="number"
-                               name="postAuthoriser"
-                               [(ngModel)]="postAuthoriserModel"
-                               placeholder="Above threshold">
+                        <orbix-user-picker
+                          instanceId="count-post-authoriser"
+                          label="Authoriser (if needed)"
+                          [required]="false"
+                          (userSelected)="onPostAuthoriserSelected($event)"
+                          (userCleared)="postAuthoriserId = null">
+                        </orbix-user-picker>
                       </div>
                       <button class="btn btn-sm btn-warning text-dark d-inline-flex align-items-center gap-1"
                               (click)="postVariances(count)" [disabled]="busy()">
@@ -270,7 +299,7 @@ import { STOCK_COUNT_TYPES, StockCount, StockCountType } from './stock.models';
       display: flex; align-items: center; justify-content: center;
     }
 
-    .post-authoriser { min-width: 160px; }
+    .post-authoriser { min-width: 220px; }
   `]
 })
 export class CountsComponent implements OnInit {
@@ -292,14 +321,14 @@ export class CountsComponent implements OnInit {
   protected newNumber = '';
   protected newDate = new Date().toISOString().slice(0, 10);
   protected newType: StockCountType = 'CYCLE';
-  protected newItemIds = '';
+
+  /** Items picked for the new count via the item typeahead chip-list. */
+  protected readonly pickedItems = signal<PickedItem[]>([]);
+  /** Increment to force the typeahead to reset after a pick. */
+  protected readonly itemPickerKey = signal(0);
+
   protected countedDraft: Record<string, number | null> = {};
-  /**
-   * Authoriser user ID for the post step. The backend's dual-control gate
-   * requires this when the count's net variance value exceeds the threshold
-   * (permission STOCK.COUNT_APPROVE). Below threshold the field is ignored.
-   */
-  protected postAuthoriserModel: number | null = null;
+  protected postAuthoriserId: string | null = null;
 
   ngOnInit(): void { this.load(); }
 
@@ -307,6 +336,23 @@ export class CountsComponent implements OnInit {
 
   statusLabel(status: string): string {
     return status === 'IN_PROGRESS' ? 'IN PROGRESS' : status;
+  }
+
+  addItem(evt: ItemSelectedEvent): void {
+    const already = this.pickedItems().some(i => i.id === evt.id);
+    if (!already) {
+      this.pickedItems.update(list => [...list, { id: evt.id, code: evt.code, name: evt.name }]);
+    }
+    // Reset the typeahead so operator can pick another item.
+    this.itemPickerKey.update(k => k + 1);
+  }
+
+  removeItem(id: string): void {
+    this.pickedItems.update(list => list.filter(i => i.id !== id));
+  }
+
+  onPostAuthoriserSelected(evt: UserSelectedEvent): void {
+    this.postAuthoriserId = evt.id;
   }
 
   select(count: StockCount): void {
@@ -320,13 +366,15 @@ export class CountsComponent implements OnInit {
   create(): void {
     const branchId = this.branchId();
     if (branchId === null) { this.error.set('No active branch.'); return; }
-    const itemIds = this.newItemIds.split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n));
+    const items = this.pickedItems();
+    if (items.length === 0) { this.error.set('Pick at least one item.'); return; }
+    const itemIds = items.map(i => Number(i.id));
     this.run(this.stock.createCount({
       number: this.newNumber.trim(), branchId, countDate: this.newDate,
       type: this.newType, itemIds
     }), created => {
       this.newNumber = '';
-      this.newItemIds = '';
+      this.pickedItems.set([]);
       this.showForm.set(false);
       this.load();
       this.select(created);
@@ -348,19 +396,11 @@ export class CountsComponent implements OnInit {
     this.run(calls[action](), updated => this.refresh(updated));
   }
 
-  /**
-   * Post the closed count. The authoriser is sent only when present; the
-   * backend rejects above-threshold posts without one (requires the named
-   * user to hold STOCK.COUNT_APPROVE).
-   */
   postVariances(count: StockCount): void {
-    const authoriserId = this.postAuthoriserModel == null
-      ? null
-      : String(this.postAuthoriserModel);
     this.run(
-      this.stock.postCount(count.uid, { authorisedByUserId: authoriserId }),
+      this.stock.postCount(count.uid, { authorisedByUserId: this.postAuthoriserId }),
       updated => {
-        this.postAuthoriserModel = null;
+        this.postAuthoriserId = null;
         this.refresh(updated);
       }
     );
@@ -391,9 +431,6 @@ export class CountsComponent implements OnInit {
     if (err instanceof HttpErrorResponse) {
       const envelope = err.error as ApiResponse<unknown> | null;
       const msg = envelope?.message ?? `Request failed (${err.status})`;
-      // Slice E1: when the count-post dual-control gate fires, the backend
-      // returns 400/403 with "authoriser" in the message. Reframe it so the
-      // operator knows which permission to chase.
       if ((err.status === 400 || err.status === 403) && /authoriser/i.test(msg)) {
         this.error.set(
           'This count\'s variance exceeds the threshold — needs an authoriser ' +

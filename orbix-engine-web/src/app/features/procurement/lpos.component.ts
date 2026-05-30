@@ -10,13 +10,15 @@ import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from './supplier-typeahead.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from './item-typeahead.component';
 import { ProcurementService } from './procurement.service';
 import { CreateLpoLine, LpoOrder } from './procurement.models';
 
 @Component({
   selector: 'orbix-lpos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, SupplierTypeaheadComponent, ItemTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -61,8 +63,11 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="LPO0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Supplier ID</label>
-                  <input class="form-control" type="number" name="sup" [(ngModel)]="newSupplierId" required>
+                  <orbix-supplier-typeahead
+                    instanceId="lpo-supplier"
+                    (supplierSelected)="onSupplierSelected($event)"
+                    (supplierCleared)="newSupplierId = null">
+                  </orbix-supplier-typeahead>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Currency</label>
@@ -85,8 +90,11 @@ import { CreateLpoLine, LpoOrder } from './procurement.models';
               <legend class="form-fieldset__legend"><i class="bi bi-list-ul text-secondary"></i> First line</legend>
               <div class="row g-2">
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" name="li" [(ngModel)]="newItemId" required>
+                  <orbix-item-typeahead
+                    instanceId="lpo-item"
+                    (itemSelected)="onItemSelected($event)"
+                    (itemCleared)="newItemId = null">
+                  </orbix-item-typeahead>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Qty</label>
@@ -488,6 +496,9 @@ export class LposComponent implements OnInit {
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onSupplierSelected(evt: SupplierSelectedEvent): void { this.newSupplierId = evt.id; }
+  onItemSelected(evt: ItemSelectedEvent): void { this.newItemId = evt.id; }
 
   refresh(): void {
     const status = this.statusFilter === 'ALL' ? null : this.statusFilter;

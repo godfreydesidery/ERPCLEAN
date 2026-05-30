@@ -7,6 +7,7 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
 import {
   STOCK_BATCH_STATUSES,
@@ -19,7 +20,7 @@ type Mode = 'all' | 'expiring';
 @Component({
   selector: 'orbix-stock-batches',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PagerComponent, ItemTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -71,10 +72,12 @@ type Mode = 'all' | 'expiring';
               @for (s of statuses; track s) { <option [ngValue]="s">{{ s }}</option> }
             </select>
           </div>
-          <div class="filter-cell">
-            <label class="form-label small fw-semibold text-secondary mb-1">Item ID</label>
-            <input class="form-control form-control-sm" [(ngModel)]="itemIdFilterModel"
-                   (change)="itemIdFilter.set(itemIdFilterModel); refresh()" placeholder="any">
+          <div class="filter-cell" style="min-width:220px;">
+            <orbix-item-typeahead
+              instanceId="batch-filter-item"
+              (itemSelected)="onItemFilterSelected($event)"
+              (itemCleared)="onItemFilterCleared()">
+            </orbix-item-typeahead>
           </div>
         } @else {
           <div class="filter-cell">
@@ -239,7 +242,6 @@ export class BatchesComponent implements OnInit {
 
   // ngModel mirrors for the filter controls
   protected statusFilterModel: StockBatchStatus | null = null;
-  protected itemIdFilterModel: string | null = null;
   protected daysAheadModel = 30;
   protected scopeToBranchModel = true;
 
@@ -248,6 +250,16 @@ export class BatchesComponent implements OnInit {
   );
 
   ngOnInit(): void { this.refresh(); }
+
+  onItemFilterSelected(evt: ItemSelectedEvent): void {
+    this.itemIdFilter.set(evt.id);
+    this.refresh();
+  }
+
+  onItemFilterCleared(): void {
+    this.itemIdFilter.set(null);
+    this.refresh();
+  }
 
   /** A mode/filter change resets to the first page. */
   refresh(): void {

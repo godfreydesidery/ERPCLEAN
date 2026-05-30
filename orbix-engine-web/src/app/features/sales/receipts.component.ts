@@ -11,6 +11,7 @@ import { Currency, CurrencyService } from '../../core/currency/currency.service'
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
 import { SalesService } from './sales.service';
+import { CustomerTypeaheadComponent, CustomerSelectedEvent } from './customer-typeahead.component';
 import {
   CreateReceiptAllocation,
   RECEIPT_METHODS,
@@ -24,7 +25,7 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
 @Component({
   selector: 'orbix-sales-receipts',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, CustomerTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -69,9 +70,11 @@ interface AllocRow { invoiceId: string | null; amount: number | null; outstandin
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="RCT0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Customer ID</label>
-                  <input class="form-control" type="number" name="cid"
-                         [(ngModel)]="newCustomerId" (ngModelChange)="loadOpenInvoices()" required>
+                  <orbix-customer-typeahead
+                    instanceId="rct-new"
+                    (customerSelected)="onCustomerSelected($event)"
+                    (customerCleared)="onCustomerCleared()">
+                  </orbix-customer-typeahead>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Date</label>
@@ -437,6 +440,16 @@ export class ReceiptsComponent implements OnInit {
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onCustomerSelected(evt: CustomerSelectedEvent): void {
+    this.newCustomerId = evt.id;
+    this.loadOpenInvoices();
+  }
+
+  onCustomerCleared(): void {
+    this.newCustomerId = null;
+    this.openInvoices.set([]);
+  }
 
   refresh(): void {
     this.sales.listReceipts(this.branchId(), this.pageNo(), this.pageSize).subscribe({

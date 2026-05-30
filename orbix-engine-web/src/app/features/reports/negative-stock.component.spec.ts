@@ -67,6 +67,8 @@ describe('NegativeStockComponent (STOCK.COUNT granted)', () => {
 
   afterEach(() => {
     http.match(r => r.url.includes('stock-negative')).forEach(r => r.flush(envelope([])));
+    // BranchPickerComponent fires GET /branches on init — flush any open request.
+    http.match(r => r.url.includes('/branches')).forEach(r => r.flush(envelope({ content: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })));
     http.verify();
   });
 
@@ -160,7 +162,10 @@ describe('NegativeStockComponent (STOCK.COUNT denied)', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match(r => r.url.includes('/branches')).forEach(r => r.flush(envelope({ content: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })));
+    http.verify();
+  });
 
   it('shows permission-denied state', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="report-permission-state"]')).toBeTruthy();

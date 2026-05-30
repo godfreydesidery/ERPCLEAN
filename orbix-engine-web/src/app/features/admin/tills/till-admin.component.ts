@@ -6,13 +6,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../../core/api/api-response';
 import { AuthService } from '../../../core/auth/auth.service';
 import { BranchService } from '../../../core/branch/branch.service';
+import { PriceListPickerComponent, PriceListSelectedEvent } from '../../../core/ui/price-list-picker.component';
 import { TillAdminService } from './till-admin.service';
 import { Till, TillSession } from './till-admin.models';
 
 @Component({
   selector: 'orbix-till-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, PriceListPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -59,8 +60,13 @@ import { Till, TillSession } from './till-admin.models';
                 <input class="form-control" name="nm" [(ngModel)]="newName" required placeholder="Main counter">
               </div>
               <div class="col-md-4">
-                <label class="form-label small fw-semibold text-secondary">Default price list ID</label>
-                <input class="form-control" type="number" name="pl" [(ngModel)]="newPriceListId" required>
+                <orbix-price-list-picker
+                  instanceId="till-price-list"
+                  label="Default price list"
+                  [required]="true"
+                  (priceListSelected)="onPriceListSelected($event)"
+                  (priceListCleared)="newPriceListId = null">
+                </orbix-price-list-picker>
               </div>
             </div>
             <div class="d-flex gap-2 pt-2 border-top">
@@ -298,6 +304,8 @@ export class TillAdminComponent implements OnInit {
   ngOnInit(): void { this.refresh(); }
 
   toggleNewTill(): void { this.showNewTill.update(v => !v); }
+
+  onPriceListSelected(evt: PriceListSelectedEvent): void { this.newPriceListId = evt.id; }
 
   refresh(): void {
     this.api.listTills(this.branchId()).subscribe({

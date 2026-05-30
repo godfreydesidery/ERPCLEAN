@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,13 +6,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { CoreLookupService } from '../../core/ui/core-lookup.service';
+import { UserPickerComponent, UserSelectedEvent } from '../../core/ui/user-picker.component';
+import { SectionPickerComponent, SectionSelectedEvent } from '../../core/ui/section-picker.component';
+import { BatchPickerComponent, BatchSelectedEvent } from '../../core/ui/batch-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
 import { CONSUMPTION_CATEGORIES, ConsumptionCategory } from './stock.models';
 
 @Component({
   selector: 'orbix-stock-internal-consumption',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, ItemTypeaheadComponent, SectionPickerComponent, BatchPickerComponent, UserPickerComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
@@ -55,9 +60,11 @@ import { CONSUMPTION_CATEGORIES, ConsumptionCategory } from './stock.models';
               <legend class="form-fieldset__legend"><i class="bi bi-mug-hot text-secondary"></i> Item &amp; quantity</legend>
               <div class="row g-2">
                 <div class="col-md-5">
-                  <label class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="itemIdModel"
-                         (ngModelChange)="itemId.set($event)" name="itemId" required>
+                  <orbix-item-typeahead
+                    instanceId="ic-item"
+                    (itemSelected)="onItemSelected($event)"
+                    (itemCleared)="itemId.set(null); batchId.set(null)">
+                  </orbix-item-typeahead>
                 </div>
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary">Qty consumed</label>
@@ -78,19 +85,33 @@ import { CONSUMPTION_CATEGORIES, ConsumptionCategory } from './stock.models';
               <legend class="form-fieldset__legend"><i class="bi bi-clipboard-data text-secondary"></i> Context</legend>
               <div class="row g-2">
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Section ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="sectionIdModel"
-                         (ngModelChange)="sectionId.set($event)" name="sectionId" required>
+                  <orbix-section-picker
+                    instanceId="ic-section"
+                    label="Section"
+                    [required]="true"
+                    [branchUid]="activeBranchUid()"
+                    (sectionSelected)="onSectionSelected($event)"
+                    (sectionCleared)="sectionId.set(null)">
+                  </orbix-section-picker>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
-                  <input class="form-control" type="number" [(ngModel)]="authoriserModel"
-                         (ngModelChange)="authorisedByUserId.set($event)" name="authoriser" required>
+                  <orbix-user-picker
+                    instanceId="ic-authoriser"
+                    label="Authoriser user"
+                    [required]="true"
+                    (userSelected)="onAuthoriserSelected($event)"
+                    (userCleared)="authorisedByUserId.set(null)">
+                  </orbix-user-picker>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
-                  <input class="form-control" type="number" [(ngModel)]="batchIdModel"
-                         (ngModelChange)="batchId.set($event)" name="batchId">
+                  <orbix-batch-picker
+                    instanceId="ic-batch"
+                    label="Batch (opt)"
+                    [required]="false"
+                    [itemId]="itemId()"
+                    (batchSelected)="onBatchSelected($event)"
+                    (batchCleared)="batchId.set(null)">
+                  </orbix-batch-picker>
                 </div>
                 <div class="col-12">
                   <label class="form-label small fw-semibold text-secondary">Reason</label>
@@ -135,10 +156,11 @@ import { CONSUMPTION_CATEGORIES, ConsumptionCategory } from './stock.models';
     }
   `]
 })
-export class InternalConsumptionComponent {
+export class InternalConsumptionComponent implements OnInit {
   private readonly stock = inject(StockService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly lookup = inject(CoreLookupService);
 
   protected readonly categories = CONSUMPTION_CATEGORIES;
 
@@ -150,12 +172,11 @@ export class InternalConsumptionComponent {
   protected readonly batchId = signal<string | null>(null);
   protected readonly reason = signal<string>('');
 
-  protected itemIdModel: number | null = null;
+  /** uid of the active branch — resolved once on init for section-picker. */
+  protected readonly activeBranchUid = signal<string | null>(null);
+
   protected qtyModel: number | null = null;
   protected categoryModel: ConsumptionCategory = 'CANTEEN';
-  protected sectionIdModel: number | null = null;
-  protected authoriserModel: number | null = null;
-  protected batchIdModel: number | null = null;
   protected reasonModel = '';
 
   protected readonly busy = signal<boolean>(false);
@@ -165,6 +186,28 @@ export class InternalConsumptionComponent {
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
+
+  ngOnInit(): void {
+    const activeBranchId = this.branchId();
+    if (activeBranchId !== null) {
+      this.lookup.listBranches().subscribe({
+        next: list => {
+          const match = list.find(b => b.id === activeBranchId);
+          if (match) this.activeBranchUid.set(match.uid);
+        },
+        error: () => { /* section-picker remains disabled, graceful degradation */ }
+      });
+    }
+  }
+
+  onItemSelected(evt: ItemSelectedEvent): void {
+    this.itemId.set(evt.id);
+    this.batchId.set(null);
+  }
+
+  onSectionSelected(evt: SectionSelectedEvent): void { this.sectionId.set(evt.id); }
+  onBatchSelected(evt: BatchSelectedEvent): void { this.batchId.set(evt.id); }
+  onAuthoriserSelected(evt: UserSelectedEvent): void { this.authorisedByUserId.set(evt.id); }
 
   onSubmit(): void {
     const branchId = this.branchId();

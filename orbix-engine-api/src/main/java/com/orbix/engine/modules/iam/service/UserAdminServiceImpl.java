@@ -14,6 +14,7 @@ import com.orbix.engine.modules.iam.domain.dto.ResetPasswordResponseDto;
 import com.orbix.engine.modules.iam.domain.dto.RoleGrantDto;
 import com.orbix.engine.modules.iam.domain.dto.UpdateUserRequestDto;
 import com.orbix.engine.modules.iam.domain.dto.UserDetailDto;
+import com.orbix.engine.modules.iam.domain.dto.UserLookupDto;
 import com.orbix.engine.modules.iam.domain.dto.UserPageDto;
 import com.orbix.engine.modules.iam.domain.dto.UserSummaryDto;
 import org.springframework.data.domain.Page;
@@ -61,6 +62,22 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final RequestContext context;
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_LOOKUP_SIZE = 50;
+    private static final int DEFAULT_LOOKUP_SIZE = 20;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserLookupDto> lookupUsers(String q, int size) {
+        Long companyId = context.companyId();
+        int safeSize = Math.clamp(size < 1 ? DEFAULT_LOOKUP_SIZE : size, 1, MAX_LOOKUP_SIZE);
+        String query = (q == null || q.isBlank()) ? null : q.trim();
+        // Repository query already filters ACTIVE + scopes to company; JPQL only.
+        return users.lookupByName(companyId, query,
+                PageRequest.of(0, safeSize, Sort.by(Sort.Direction.ASC, "displayName")))
+            .stream()
+            .map(u -> new UserLookupDto(u.getId(), u.getUid(), u.getDisplayName(), u.getUsername()))
+            .toList();
+    }
 
     @Override
     @Transactional(readOnly = true)

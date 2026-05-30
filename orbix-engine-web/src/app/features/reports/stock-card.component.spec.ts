@@ -85,7 +85,10 @@ describe('StockCardComponent (STOCK.COUNT granted)', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match(r => r.url.includes('/branches')).forEach(r => r.flush({ status: true, statusCode: 200, responseCode: 'OK', message: 'OK', errors: [], data: { content: [], page: 0, size: 100, totalElements: 0, totalPages: 0 } }));
+    http.verify();
+  });
 
   it('does not auto-fetch without itemId query param', () => {
     http.expectNone(r => r.url.includes('stock-card'));
@@ -174,7 +177,10 @@ describe('StockCardComponent (STOCK.COUNT denied)', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match(r => r.url.includes('/branches')).forEach(r => r.flush({ status: true, statusCode: 200, responseCode: 'OK', message: 'OK', errors: [], data: { content: [], page: 0, size: 100, totalElements: 0, totalPages: 0 } }));
+    http.verify();
+  });
 
   it('shows permission-denied state', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="report-permission-state"]')).toBeTruthy();

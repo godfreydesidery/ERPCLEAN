@@ -10,6 +10,7 @@ import { BranchService } from '../../core/branch/branch.service';
 import { Currency, CurrencyService } from '../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../core/ui/search-select.component';
 import { PagerComponent } from '../../core/ui/pager.component';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from './supplier-typeahead.component';
 import { ProcurementService } from './procurement.service';
 import {
   CreateSupplierPaymentAllocation,
@@ -28,7 +29,7 @@ interface AllocRow {
 @Component({
   selector: 'orbix-supplier-payments',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, PagerComponent, SupplierTypeaheadComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -73,9 +74,11 @@ interface AllocRow {
                   <input class="form-control font-monospace" name="num" [(ngModel)]="newNumber" required placeholder="PAY0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary">Supplier ID</label>
-                  <input class="form-control" type="number" name="sid"
-                         [(ngModel)]="newSupplierId" (ngModelChange)="loadOpenInvoices()" required>
+                  <orbix-supplier-typeahead
+                    instanceId="pay-new"
+                    (supplierSelected)="onSupplierSelected($event)"
+                    (supplierCleared)="onSupplierCleared()">
+                  </orbix-supplier-typeahead>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary">Date</label>
@@ -440,6 +443,16 @@ export class PaymentsComponent implements OnInit {
   }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onSupplierSelected(evt: SupplierSelectedEvent): void {
+    this.newSupplierId = evt.id;
+    this.loadOpenInvoices();
+  }
+
+  onSupplierCleared(): void {
+    this.newSupplierId = null;
+    this.openInvoices.set([]);
+  }
 
   refresh(): void {
     this.procurement.listSupplierPayments(this.branchId(), this.pageNo(), this.pageSize).subscribe({

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,13 +6,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
+import { CoreLookupService } from '../../core/ui/core-lookup.service';
+import { UserPickerComponent, UserSelectedEvent } from '../../core/ui/user-picker.component';
+import { SectionPickerComponent, SectionSelectedEvent } from '../../core/ui/section-picker.component';
+import { BatchPickerComponent, BatchSelectedEvent } from '../../core/ui/batch-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import { StockService } from './stock.service';
 import { PostAdjustmentRequest } from './stock.models';
 
 @Component({
   selector: 'orbix-stock-adjust',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, ItemTypeaheadComponent, SectionPickerComponent, BatchPickerComponent, UserPickerComponent],
   template: `
     <header class="mb-4">
       <p class="text-uppercase small fw-semibold text-secondary mb-1" style="letter-spacing:0.08em;">
@@ -55,9 +60,11 @@ import { PostAdjustmentRequest } from './stock.models';
               <legend class="form-fieldset__legend"><i class="bi bi-sliders text-secondary"></i> Item &amp; quantity</legend>
               <div class="row g-2">
                 <div class="col-md-6">
-                  <label for="adj-itemId" class="form-label small fw-semibold text-secondary">Item ID</label>
-                  <input id="adj-itemId" class="form-control" type="number" [(ngModel)]="itemIdModel"
-                         (ngModelChange)="itemId.set($event)" name="itemId" required>
+                  <orbix-item-typeahead
+                    instanceId="adj-item"
+                    (itemSelected)="onItemSelected($event)"
+                    (itemCleared)="itemId.set(null); batchId.set(null)">
+                  </orbix-item-typeahead>
                 </div>
                 <div class="col-md-3">
                   <label for="adj-qty" class="form-label small fw-semibold text-secondary">Signed qty</label>
@@ -82,19 +89,33 @@ import { PostAdjustmentRequest } from './stock.models';
                          (ngModelChange)="reason.set($event)" name="reason" required placeholder="e.g. weekly cycle count variance">
                 </div>
                 <div class="col-md-4">
-                  <label for="adj-sectionId" class="form-label small fw-semibold text-secondary">Section ID <span class="text-muted">(opt)</span></label>
-                  <input id="adj-sectionId" class="form-control" type="number" [(ngModel)]="sectionIdModel"
-                         (ngModelChange)="sectionId.set($event)" name="sectionId">
+                  <orbix-section-picker
+                    instanceId="adj-section"
+                    label="Section (opt)"
+                    [required]="false"
+                    [branchUid]="activeBranchUid()"
+                    (sectionSelected)="onSectionSelected($event)"
+                    (sectionCleared)="sectionId.set(null)">
+                  </orbix-section-picker>
                 </div>
                 <div class="col-md-4">
-                  <label for="adj-batchId" class="form-label small fw-semibold text-secondary">Batch ID <span class="text-muted">(opt)</span></label>
-                  <input id="adj-batchId" class="form-control" type="number" [(ngModel)]="batchIdModel"
-                         (ngModelChange)="batchId.set($event)" name="batchId">
+                  <orbix-batch-picker
+                    instanceId="adj-batch"
+                    label="Batch (opt)"
+                    [required]="false"
+                    [itemId]="itemId()"
+                    (batchSelected)="onBatchSelected($event)"
+                    (batchCleared)="batchId.set(null)">
+                  </orbix-batch-picker>
                 </div>
                 <div class="col-md-4">
-                  <label for="adj-authoriser" class="form-label small fw-semibold text-secondary">Authoriser user ID</label>
-                  <input id="adj-authoriser" class="form-control" type="number" [(ngModel)]="authoriserModel"
-                         (ngModelChange)="authorisedByUserId.set($event)" name="authoriser">
+                  <orbix-user-picker
+                    instanceId="adj-authoriser"
+                    label="Authoriser user"
+                    [required]="false"
+                    (userSelected)="onAuthoriserSelected($event)"
+                    (userCleared)="authorisedByUserId.set(null)">
+                  </orbix-user-picker>
                   <small class="form-text text-secondary">Required above threshold</small>
                 </div>
               </div>
@@ -162,10 +183,11 @@ import { PostAdjustmentRequest } from './stock.models';
     }
   `]
 })
-export class AdjustComponent {
+export class AdjustComponent implements OnInit {
   private readonly stock = inject(StockService);
   private readonly branchService = inject(BranchService);
   private readonly auth = inject(AuthService);
+  private readonly lookup = inject(CoreLookupService);
 
   protected readonly itemId = signal<string | null>(null);
   protected readonly qty = signal<number | null>(null);
@@ -175,22 +197,19 @@ export class AdjustComponent {
   protected readonly batchId = signal<string | null>(null);
   protected readonly authorisedByUserId = signal<string | null>(null);
 
-  // ngModel mirrors
-  protected itemIdModel: number | null = null;
+  /** uid of the active branch — resolved once on init for section-picker. */
+  protected readonly activeBranchUid = signal<string | null>(null);
+
+  // ngModel mirrors for plain inputs
   protected qtyModel: number | null = null;
   protected unitCostModel: number | null = null;
   protected reasonModel = '';
-  protected sectionIdModel: number | null = null;
-  protected batchIdModel: number | null = null;
-  protected authoriserModel: number | null = null;
 
   protected readonly busy = signal<boolean>(false);
   protected readonly error = signal<string | null>(null);
   protected readonly info = signal<string | null>(null);
 
-  /** Inline-collapsible override prompt — set on a 400 + STOCK.OVERSELL hit. */
   protected readonly oversellPrompt = signal<boolean>(false);
-  /** Last request the user submitted — replayed with allowOversell=true on confirm. */
   private lastRequest: PostAdjustmentRequest | null = null;
 
   protected readonly canOverrideOversell = computed(() =>
@@ -200,6 +219,30 @@ export class AdjustComponent {
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
   );
+
+  ngOnInit(): void {
+    // Resolve the active branch uid for the section-picker.
+    const activeBranchId = this.branchId();
+    if (activeBranchId !== null) {
+      this.lookup.listBranches().subscribe({
+        next: list => {
+          const match = list.find(b => b.id === activeBranchId);
+          if (match) this.activeBranchUid.set(match.uid);
+        },
+        error: () => { /* section-picker remains disabled, graceful degradation */ }
+      });
+    }
+  }
+
+  onItemSelected(evt: ItemSelectedEvent): void {
+    this.itemId.set(evt.id);
+    // Clear dependent batch when item changes
+    this.batchId.set(null);
+  }
+
+  onSectionSelected(evt: SectionSelectedEvent): void { this.sectionId.set(evt.id); }
+  onBatchSelected(evt: BatchSelectedEvent): void { this.batchId.set(evt.id); }
+  onAuthoriserSelected(evt: UserSelectedEvent): void { this.authorisedByUserId.set(evt.id); }
 
   onSubmit(): void {
     const branchId = this.branchId();
@@ -224,7 +267,6 @@ export class AdjustComponent {
     this.submit(request, false);
   }
 
-  /** Re-submit the last failed adjustment with allowOversell=true. */
   confirmOversell(): void {
     if (!this.lastRequest) {
       this.oversellPrompt.set(false);
@@ -262,11 +304,6 @@ export class AdjustComponent {
     });
   }
 
-  /**
-   * Inspect the backend error and either:
-   *  - surface the inline OVERSELL override form (caller has STOCK.OVERSELL), or
-   *  - surface a non-actionable alert (caller does not).
-   */
   private handleError(err: unknown, attempted: PostAdjustmentRequest): void {
     if (this.isOversellError(err)) {
       this.lastRequest = attempted;

@@ -7,8 +7,20 @@ import { ApiResponse } from '../../core/api/api-response';
 import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { HasPermissionDirective } from '../../core/auth/has-permission.directive';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
+import { SupplierTypeaheadComponent, SupplierSelectedEvent } from '../procurement/supplier-typeahead.component';
+import { CustomerTypeaheadComponent, CustomerSelectedEvent } from '../sales/customer-typeahead.component';
 import { DayService } from './day.service';
 import { BusinessDay, BusinessDayOverride } from './day.models';
+
+/**
+ * Entity types that have a dedicated picker in the override form.
+ * For all others the entity-id field stays hidden — not a raw text box.
+ */
+const PICKER_ENTITY_TYPES = new Set([
+  'Item', 'Customer', 'Supplier', 'Branch',
+]);
 
 /**
  * Read + void list of back-dated business-day overrides. List gated by
@@ -21,7 +33,11 @@ import { BusinessDay, BusinessDayOverride } from './day.models';
 @Component({
   selector: 'orbix-day-overrides',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, HasPermissionDirective],
+  imports: [
+    CommonModule, FormsModule, RouterLink, DatePipe, HasPermissionDirective,
+    BranchPickerComponent, ItemTypeaheadComponent,
+    SupplierTypeaheadComponent, CustomerTypeaheadComponent,
+  ],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -95,12 +111,54 @@ import { BusinessDay, BusinessDayOverride } from './day.models';
                 <div class="col-md-3">
                   <label class="form-label small fw-semibold text-secondary" for="ov-etype">Entity type</label>
                   <input id="ov-etype" class="form-control font-monospace" name="entityType"
-                         [(ngModel)]="form.entityType" required placeholder="e.g. SALES_INVOICE">
+                         [(ngModel)]="form.entityType" (ngModelChange)="onEntityTypeChange()"
+                         required placeholder="e.g. SALES_INVOICE">
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label small fw-semibold text-secondary" for="ov-eid">Entity id</label>
-                  <input id="ov-eid" class="form-control font-monospace" name="entityId"
-                         [(ngModel)]="form.entityId" required placeholder="42">
+                  @if (entityPickerType() === 'Item') {
+                    <orbix-item-typeahead
+                      instanceId="ov-entity-item"
+                      (itemSelected)="onEntityItem($event)"
+                      (itemCleared)="form.entityId = ''">
+                    </orbix-item-typeahead>
+                  } @else if (entityPickerType() === 'Customer') {
+                    <orbix-customer-typeahead
+                      instanceId="ov-entity-customer"
+                      (customerSelected)="onEntityCustomer($event)"
+                      (customerCleared)="form.entityId = ''">
+                    </orbix-customer-typeahead>
+                  } @else if (entityPickerType() === 'Supplier') {
+                    <orbix-supplier-typeahead
+                      instanceId="ov-entity-supplier"
+                      (supplierSelected)="onEntitySupplier($event)"
+                      (supplierCleared)="form.entityId = ''">
+                    </orbix-supplier-typeahead>
+                  } @else if (entityPickerType() === 'Branch') {
+                    <orbix-branch-picker
+                      instanceId="ov-entity-branch"
+                      label="Entity (branch)"
+                      [required]="true"
+                      (branchSelected)="onEntityBranch($event)"
+                      (branchCleared)="form.entityId = ''">
+                    </orbix-branch-picker>
+                  } @else if (form.entityType && !hasEntityPicker()) {
+                    <div>
+                      <label class="form-label small fw-semibold text-secondary">Entity id</label>
+                      <p class="small text-secondary mb-0">
+                        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                        No picker for this entity type — refine by entity type instead.
+                      </p>
+                    </div>
+                  } @else {
+                    <div>
+                      <label class="form-label small fw-semibold text-secondary">Entity id</label>
+                      <p class="small text-secondary mb-0">Enter an entity type first.</p>
+                    </div>
+                  }
+                  <!-- hidden required sentinel keeps form invalid until an entity is picked -->
+                  @if (hasEntityPicker()) {
+                    <input type="hidden" name="entityId" [ngModel]="form.entityId" required>
+                  }
                 </div>
               </div>
               <div>
@@ -250,7 +308,38 @@ export class DayOverridesComponent implements OnInit {
   protected readonly success = signal<string | null>(null);
   protected readonly showForm = signal(false);
 
+  /** Normalised entity type used to decide which picker to render. */
+  protected readonly entityPickerType = signal<string>('');
+
   protected form = { dayUid: '', entityType: '', entityId: '', reason: '' };
+
+  protected hasEntityPicker(): boolean {
+    return PICKER_ENTITY_TYPES.has(this.entityPickerType());
+  }
+
+  protected onEntityTypeChange(): void {
+    const t = this.form.entityType.trim();
+    // Capitalise first letter to match PICKER_ENTITY_TYPES keys (e.g. "item" → "Item").
+    const normalised = t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+    this.entityPickerType.set(normalised);
+    this.form.entityId = '';
+  }
+
+  protected onEntityItem(evt: ItemSelectedEvent): void {
+    this.form.entityId = evt.id;
+  }
+
+  protected onEntityCustomer(evt: CustomerSelectedEvent): void {
+    this.form.entityId = evt.id;
+  }
+
+  protected onEntitySupplier(evt: SupplierSelectedEvent): void {
+    this.form.entityId = evt.id;
+  }
+
+  protected onEntityBranch(evt: BranchSelectedEvent): void {
+    this.form.entityId = evt.id;
+  }
 
   protected readonly branchId = computed(() =>
     this.branchService.activeBranchId() ?? this.auth.currentUser()?.defaultBranchId ?? null
@@ -300,6 +389,7 @@ export class DayOverridesComponent implements OnInit {
 
   private resetForm(): void {
     this.form = { dayUid: '', entityType: '', entityId: '', reason: '' };
+    this.entityPickerType.set('');
   }
 
   private load(): void {

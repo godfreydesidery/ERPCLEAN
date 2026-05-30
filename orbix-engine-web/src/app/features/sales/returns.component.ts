@@ -9,6 +9,9 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BranchService } from '../../core/branch/branch.service';
 import { PagerComponent } from '../../core/ui/pager.component';
 import { SalesService } from './sales.service';
+import { CustomerTypeaheadComponent, CustomerSelectedEvent } from './customer-typeahead.component';
+import { SalesInvoicePickerModalComponent, SalesInvoicePickedEvent } from './sales-invoice-picker-modal.component';
+import { ItemTypeaheadComponent, ItemSelectedEvent } from '../procurement/item-typeahead.component';
 import {
   CreateCustomerReturnLine,
   CreditNoteStatus,
@@ -32,6 +35,7 @@ interface LineRow {
   imports: [
     CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe,
     PagerComponent, CreditNoteApplyModalComponent, CnStatusLabelPipe,
+    CustomerTypeaheadComponent, SalesInvoicePickerModalComponent, ItemTypeaheadComponent,
   ],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
@@ -82,16 +86,31 @@ interface LineRow {
                          [(ngModel)]="newNumber" required placeholder="RET0001">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary" for="newCid">Customer ID</label>
-                  <input id="newCid" class="form-control" type="number" name="cid"
-                         [(ngModel)]="newCustomerId" required>
+                  <orbix-customer-typeahead
+                    instanceId="ret-new"
+                    (customerSelected)="onCustomerSelected($event)"
+                    (customerCleared)="onCustomerCleared()">
+                  </orbix-customer-typeahead>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label small fw-semibold text-secondary" for="newOi">
+                  <label class="form-label small fw-semibold text-secondary">
                     Original invoice <span class="text-muted">(optional)</span>
                   </label>
-                  <input id="newOi" class="form-control" type="number" name="oi"
-                         [(ngModel)]="newOriginalInvoiceId">
+                  @if (newOriginalInvoiceId) {
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge text-bg-light border font-monospace flex-grow-1">{{ newOriginalInvoiceLabel }}</span>
+                      <button type="button" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Clear original invoice"
+                              (click)="clearOriginalInvoice()">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  } @else {
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100"
+                            (click)="invoicePickerOpen.set(true)">
+                      <i class="bi bi-search me-1" aria-hidden="true"></i>Pick invoice…
+                    </button>
+                  }
                 </div>
                 <div class="col-md-4">
                   <label class="form-label small fw-semibold text-secondary" for="newRd">Return date</label>
@@ -127,7 +146,7 @@ interface LineRow {
                 <table class="table table-sm align-middle mb-0 line-table">
                   <thead>
                     <tr>
-                      <th scope="col">Item ID</th>
+                      <th scope="col">Item</th>
                       <th scope="col" class="text-end">Qty</th>
                       <th scope="col" class="text-end">Unit price</th>
                       <th scope="col" class="actions-col"></th>
@@ -137,9 +156,11 @@ interface LineRow {
                     @for (row of newLines; track $index) {
                       <tr>
                         <td>
-                          <input class="form-control form-control-sm" type="number"
-                                 [name]="'li' + $index" [(ngModel)]="row.itemId"
-                                 [attr.aria-label]="'Item ID row ' + ($index + 1)">
+                          <orbix-item-typeahead
+                            [instanceId]="'ret-line-' + $index"
+                            (itemSelected)="onLineItemSelected($index, $event)"
+                            (itemCleared)="onLineItemCleared($index)">
+                          </orbix-item-typeahead>
                         </td>
                         <td>
                           <input class="form-control form-control-sm text-end" type="number"
@@ -388,6 +409,14 @@ interface LineRow {
       </div>
     </div>
 
+    <!-- Sales invoice picker modal (original invoice, optional) -->
+    <orbix-sales-invoice-picker-modal
+      [visible]="invoicePickerOpen()"
+      [customerId]="newCustomerId"
+      (invoiceSelected)="onOriginalInvoicePicked($event)"
+      (closed)="invoicePickerOpen.set(false)">
+    </orbix-sales-invoice-picker-modal>
+
     <!-- Apply-credit-note modal -->
     @if (applyModalCreditNote()) {
       <orbix-credit-note-apply-modal
@@ -513,9 +542,13 @@ export class ReturnsComponent implements OnInit {
     this.auth.hasPermission('SALES.MANAGE_RETURN')
   );
 
+  /** Invoice picker modal open/close state. */
+  protected readonly invoicePickerOpen = signal(false);
+
   protected newNumber = '';
   protected newCustomerId: string | null = null;
   protected newOriginalInvoiceId: string | null = null;
+  protected newOriginalInvoiceLabel = '';
   protected newReturnDate = new Date().toISOString().slice(0, 10);
   protected newReason: ReturnReason = 'DAMAGED';
   protected newRestock = true;
@@ -524,6 +557,36 @@ export class ReturnsComponent implements OnInit {
   ngOnInit(): void { this.refresh(); }
 
   toggleForm(): void { this.showForm.update(v => !v); }
+
+  onCustomerSelected(evt: CustomerSelectedEvent): void {
+    this.newCustomerId = evt.id;
+    // Clear original invoice when customer changes — it may belong to the old customer.
+    this.clearOriginalInvoice();
+  }
+
+  onCustomerCleared(): void {
+    this.newCustomerId = null;
+    this.clearOriginalInvoice();
+  }
+
+  onOriginalInvoicePicked(evt: SalesInvoicePickedEvent): void {
+    this.newOriginalInvoiceId = evt.id;
+    this.newOriginalInvoiceLabel = evt.number;
+    this.invoicePickerOpen.set(false);
+  }
+
+  clearOriginalInvoice(): void {
+    this.newOriginalInvoiceId = null;
+    this.newOriginalInvoiceLabel = '';
+  }
+
+  onLineItemSelected(index: number, evt: ItemSelectedEvent): void {
+    this.newLines[index].itemId = evt.id;
+  }
+
+  onLineItemCleared(index: number): void {
+    this.newLines[index].itemId = null;
+  }
 
   refresh(): void {
     this.sales.listReturns(this.branchId(), this.pageNo(), this.pageSize).subscribe({

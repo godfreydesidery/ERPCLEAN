@@ -7,13 +7,14 @@ import { Observable } from 'rxjs';
 import { ApiResponse } from '../../../core/api/api-response';
 import { Currency, CurrencyService } from '../../../core/currency/currency.service';
 import { SearchSelectComponent, SearchSelectOption } from '../../../core/ui/search-select.component';
+import { UserPickerComponent, UserSelectedEvent } from '../../../core/ui/user-picker.component';
 import { CatalogService } from '../catalog.service';
 import { Item, PriceList, PriceListItem, Uom } from '../catalog.models';
 
 @Component({
   selector: 'orbix-price-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, SearchSelectComponent, UserPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -271,9 +272,13 @@ import { Item, PriceList, PriceListItem, Uom } from '../catalog.models';
                   <input class="form-control" name="rsn" [(ngModel)]="priceForm.reason" placeholder="e.g. cost rise">
                 </div>
                 <div class="col-6 col-md-3">
-                  <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
-                  <input class="form-control" type="number" name="apr" [(ngModel)]="priceForm.approverId"
-                         placeholder="for large changes">
+                  <orbix-user-picker
+                    instanceId="price-set-approver"
+                    label="Authoriser (if needed)"
+                    [required]="false"
+                    (userSelected)="onPriceApproverSelected($event)"
+                    (userCleared)="priceForm.approverId = null">
+                  </orbix-user-picker>
                 </div>
                 <div class="col-12">
                   <button class="btn btn-primary d-inline-flex align-items-center gap-2"
@@ -312,8 +317,13 @@ import { Item, PriceList, PriceListItem, Uom } from '../catalog.models';
                     <input class="form-control" name="arsn" [(ngModel)]="adjustForm.reason" placeholder="e.g. annual uplift">
                   </div>
                   <div class="col-6 col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
-                    <input class="form-control" type="number" name="aapr" [(ngModel)]="adjustForm.approverId">
+                    <orbix-user-picker
+                      instanceId="price-adjust-approver"
+                      label="Authoriser (if needed)"
+                      [required]="false"
+                      (userSelected)="onAdjustApproverSelected($event)"
+                      (userCleared)="adjustForm.approverId = null">
+                    </orbix-user-picker>
                   </div>
                   <div class="col-12">
                     <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
@@ -342,8 +352,13 @@ import { Item, PriceList, PriceListItem, Uom } from '../catalog.models';
                     <input class="form-control" type="date" name="ceff" [(ngModel)]="copyForm.effectiveFrom" required>
                   </div>
                   <div class="col-6 col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">Authoriser ID <span class="text-muted">(if needed)</span></label>
-                    <input class="form-control" type="number" name="capr" [(ngModel)]="copyForm.approverId">
+                    <orbix-user-picker
+                      instanceId="price-copy-approver"
+                      label="Authoriser (if needed)"
+                      [required]="false"
+                      (userSelected)="onCopyApproverSelected($event)"
+                      (userCleared)="copyForm.approverId = null">
+                    </orbix-user-picker>
                   </div>
                   <div class="col-12">
                     <button class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
@@ -614,6 +629,10 @@ export class PriceListComponent implements OnInit {
     });
   }
 
+  onPriceApproverSelected(evt: UserSelectedEvent): void { this.priceForm.approverId = evt.id; }
+  onAdjustApproverSelected(evt: UserSelectedEvent): void { this.adjustForm.approverId = evt.id; }
+  onCopyApproverSelected(evt: UserSelectedEvent): void { this.copyForm.approverId = evt.id; }
+
   submitPrice(list: PriceList): void {
     if (!this.priceForm.itemId || !this.priceForm.uomId) {
       return;
@@ -625,7 +644,7 @@ export class PriceListComponent implements OnInit {
       price: Number(this.priceForm.price),
       effectiveFrom: this.priceForm.effectiveFrom,
       reason: this.priceForm.reason.trim() || null,
-      approverId: this.priceForm.approverId ? String(this.priceForm.approverId) : null
+      approverId: this.priceForm.approverId ?? null
     }), () => {
       this.priceForm = blankPriceForm();
       this.loadPrices(list.uid);
@@ -654,7 +673,7 @@ export class PriceListComponent implements OnInit {
       adjustPct: Number(this.adjustForm.adjustPct),
       effectiveFrom: this.adjustForm.effectiveFrom,
       reason: this.adjustForm.reason.trim() || null,
-      approverId: this.adjustForm.approverId ? String(this.adjustForm.approverId) : null
+      approverId: this.adjustForm.approverId ?? null
     }), count => {
       this.adjustForm = blankAdjustForm();
       this.loadPrices(list.uid);
@@ -671,7 +690,7 @@ export class PriceListComponent implements OnInit {
       adjustPct: this.copyForm.adjustPct != null ? Number(this.copyForm.adjustPct) : null,
       effectiveFrom: this.copyForm.effectiveFrom,
       reason: null,
-      approverId: this.copyForm.approverId ? String(this.copyForm.approverId) : null
+      approverId: this.copyForm.approverId ?? null
     }), count => {
       this.copyForm = blankCopyForm();
       this.loadPrices(list.uid);
@@ -733,7 +752,7 @@ function blankPriceForm() {
     price: null as number | null,
     effectiveFrom: today(),
     reason: '',
-    approverId: null as number | null
+    approverId: null as string | null
   };
 }
 
@@ -742,7 +761,7 @@ function blankAdjustForm() {
     adjustPct: null as number | null,
     effectiveFrom: today(),
     reason: '',
-    approverId: null as number | null
+    approverId: null as string | null
   };
 }
 
@@ -751,6 +770,6 @@ function blankCopyForm() {
     sourcePriceListUid: null as string | null,
     adjustPct: null as number | null,
     effectiveFrom: today(),
-    approverId: null as number | null
+    approverId: null as string | null
   };
 }

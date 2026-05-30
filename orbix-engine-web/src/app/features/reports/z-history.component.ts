@@ -7,6 +7,7 @@ import { environment } from '../../../environments/environment';
 import { ApiResponse, unwrap } from '../../core/api/api-response';
 import { ReportExportMenuComponent } from './report-export-menu.component';
 import { ReportExport } from './report-export.service';
+import { BranchPickerComponent, BranchSelectedEvent } from '../../core/ui/branch-picker.component';
 
 // ---------------------------------------------------------------------------
 // DTO shapes — mirrors ZHistoryEntryDto + TillReportDto from the backend
@@ -57,7 +58,7 @@ function daysAgo(n: number): string {
 @Component({
   selector: 'orbix-z-history',
   standalone: true,
-  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe, FormsModule, ReportExportMenuComponent],
+  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe, FormsModule, ReportExportMenuComponent, BranchPickerComponent],
   template: `
     <header class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
       <div>
@@ -80,12 +81,13 @@ function daysAgo(n: number): string {
     <!-- Filters -->
     <form class="row g-2 mb-4 align-items-end" (ngSubmit)="fetch()" aria-label="Report filters">
       <div class="col-12 col-sm-6 col-md-3">
-        <label for="zh-branch" class="form-label small fw-semibold mb-1">Branch ID</label>
-        <input id="zh-branch" type="text" class="form-control form-control-sm"
-               [(ngModel)]="branchIdInput" name="branchId"
-               placeholder="All branches"
-               aria-describedby="zh-branch-hint">
-        <div id="zh-branch-hint" class="form-text">Numeric branch ID</div>
+        <orbix-branch-picker
+          instanceId="zh"
+          label="Branch (optional — blank = all)"
+          [required]="false"
+          (branchSelected)="onBranchSelected($event)"
+          (branchCleared)="onBranchCleared()">
+        </orbix-branch-picker>
       </div>
 
       <div class="col-12 col-sm-6 col-md-3">
@@ -239,6 +241,14 @@ export class ZHistoryComponent implements OnInit {
       this.toDateInput = to;
       this.fetch();
     });
+  }
+
+  protected onBranchSelected(evt: BranchSelectedEvent): void {
+    this.branchIdInput = evt.id;
+  }
+
+  protected onBranchCleared(): void {
+    this.branchIdInput = '';
   }
 
   fetch(): void {
