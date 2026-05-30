@@ -13,6 +13,8 @@ import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
 import com.orbix.engine.modules.common.util.UidGenerator;
+import com.orbix.engine.modules.pos.service.TillService;
+import com.orbix.engine.modules.production.service.BomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +44,8 @@ class SectionServiceImplTest {
 
     @Mock private SectionRepository sections;
     @Mock private BranchRepository branches;
+    @Mock private TillService tillService;
+    @Mock private BomService bomService;
     @Mock private EventPublisher events;
     @Mock private RequestContext context;
 
@@ -184,5 +188,45 @@ class SectionServiceImplTest {
         assertThatThrownBy(() -> service.updateSectionByUid(missingUid,
             new UpdateSectionRequestDto("x", SectionType.OTHER, null)))
             .isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    void deactivateSection_blockedWhenOpenTillSessionExists() {
+        Section bakery = section(100L, SectionType.BAKERY, AdminStatus.ACTIVE);
+        when(sections.findByUid(bakery.getUid())).thenReturn(Optional.of(bakery));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
+        when(tillService.hasOpenTillSessionsForBranch(BRANCH_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deactivateSectionByUid(bakery.getUid()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("OPEN till sessions");
+        assertThat(bakery.getStatus()).isEqualTo(AdminStatus.ACTIVE);
+    }
+
+    @Test
+    void deactivateSection_blockedWhenActiveBomExists() {
+        Section bakery = section(100L, SectionType.BAKERY, AdminStatus.ACTIVE);
+        when(sections.findByUid(bakery.getUid())).thenReturn(Optional.of(bakery));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
+        when(tillService.hasOpenTillSessionsForBranch(BRANCH_ID)).thenReturn(false);
+        when(bomService.hasActiveBomForSection(100L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deactivateSectionByUid(bakery.getUid()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("ACTIVE or DRAFT BOMs");
+        assertThat(bakery.getStatus()).isEqualTo(AdminStatus.ACTIVE);
+    }
+
+    @Test
+    void deactivateSection_allowedWhenNoOpenTillsAndNoActiveBoms() {
+        Section bakery = section(100L, SectionType.BAKERY, AdminStatus.ACTIVE);
+        when(sections.findByUid(bakery.getUid())).thenReturn(Optional.of(bakery));
+        when(branches.findById(BRANCH_ID)).thenReturn(Optional.of(activeBranch()));
+        when(tillService.hasOpenTillSessionsForBranch(BRANCH_ID)).thenReturn(false);
+        when(bomService.hasActiveBomForSection(100L)).thenReturn(false);
+
+        service.deactivateSectionByUid(bakery.getUid());
+
+        assertThat(bakery.getStatus()).isEqualTo(AdminStatus.INACTIVE);
     }
 }

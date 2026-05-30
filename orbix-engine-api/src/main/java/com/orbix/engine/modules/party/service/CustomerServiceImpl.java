@@ -3,6 +3,7 @@ package com.orbix.engine.modules.party.service;
 import com.orbix.engine.modules.common.domain.dto.PageDto;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.common.service.SyncChangeSeqService;
 import com.orbix.engine.modules.party.domain.dto.CreateCustomerRequestDto;
 import com.orbix.engine.modules.party.domain.dto.CustomerResponseDto;
 import com.orbix.engine.modules.party.domain.dto.UpdateCustomerRequestDto;
@@ -32,6 +33,7 @@ public class CustomerServiceImpl implements CustomerService {
     private final CustomerRepository customers;
     private final PartyRepository parties;
     private final PartyService partyService;
+    private final SyncChangeSeqService syncSeq;
     private final RequestContext context;
 
     @Override
@@ -69,6 +71,7 @@ public class CustomerServiceImpl implements CustomerService {
         Customer customer = new Customer(party.getId());
         customer.update(request.creditLimitAmount(), request.creditTermsDays(), request.priceListId(),
             request.defaultSalesAgentId(), request.defaultBranchId(), request.taxExempt());
+        stampSync(party);
         return CustomerResponseDto.from(customers.save(customer), party);
     }
 
@@ -94,6 +97,7 @@ public class CustomerServiceImpl implements CustomerService {
         partyService.applyDetails(party, request.party(), context.userId());
         customer.update(request.creditLimitAmount(), request.creditTermsDays(), request.priceListId(),
             request.defaultSalesAgentId(), request.defaultBranchId(), request.taxExempt());
+        stampSync(party);
         return CustomerResponseDto.from(customer, party);
     }
 
@@ -105,6 +109,8 @@ public class CustomerServiceImpl implements CustomerService {
         customers.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
         partyService.archive(party.getId());
+        // Stamp after archive so the deleted tombstone surfaces via change_seq > cursor.
+        stampSync(party);
     }
 
     @Override
@@ -115,6 +121,7 @@ public class CustomerServiceImpl implements CustomerService {
         customers.findById(party.getId())
             .orElseThrow(() -> new NoSuchElementException(NOT_A_CUSTOMER + partyUid));
         partyService.activate(party.getId());
+        stampSync(party);
     }
 
     @Override
@@ -127,6 +134,12 @@ public class CustomerServiceImpl implements CustomerService {
         }
         Party party = parties.save(new Party(
             companyId, code, "Walk-in Customer", PartyCategory.INDIVIDUAL, context.userId()));
+        stampSync(party);
         customers.save(Customer.walkIn(party.getId(), branchId));
+    }
+
+    /** Bumps party.change_seq from the shared sync sequence. Must be called within an active TX. */
+    private void stampSync(Party party) {
+        party.setChangeSeq(syncSeq.next());
     }
 }

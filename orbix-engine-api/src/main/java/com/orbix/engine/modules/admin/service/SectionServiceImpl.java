@@ -12,6 +12,8 @@ import com.orbix.engine.modules.admin.repository.SectionRepository;
 import com.orbix.engine.modules.common.service.Auditable;
 import com.orbix.engine.modules.common.service.EventPublisher;
 import com.orbix.engine.modules.common.service.RequestContext;
+import com.orbix.engine.modules.pos.service.TillService;
+import com.orbix.engine.modules.production.service.BomService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,8 @@ public class SectionServiceImpl implements SectionService {
 
     private final SectionRepository sections;
     private final BranchRepository branches;
+    private final TillService tillService;
+    private final BomService bomService;
     private final EventPublisher events;
     private final RequestContext context;
 
@@ -86,7 +90,21 @@ public class SectionServiceImpl implements SectionService {
             throw new IllegalArgumentException(
                 "Cannot deactivate the branch's last active RETAIL_FLOOR section");
         }
-        // TODO (F5.1 / F7.3): block deactivation while the section has active tills or BOMs.
+        // Guard: block while the section's branch has any OPEN till session.
+        // Tills are branch-scoped (no section FK in v1), so any open session in
+        // the branch blocks section deactivation — conservative but correct.
+        Branch sectionBranch = requireBranchById(section.getBranchId());
+        if (tillService.hasOpenTillSessionsForBranch(sectionBranch.getId())) {
+            throw new IllegalStateException(
+                "Cannot deactivate section " + uid + ": its branch has one or more OPEN till sessions. "
+                    + "Close all till sessions before deactivating the section.");
+        }
+        // Guard: block while the section owns an ACTIVE or DRAFT BOM.
+        if (bomService.hasActiveBomForSection(section.getId())) {
+            throw new IllegalStateException(
+                "Cannot deactivate section " + uid + ": it has ACTIVE or DRAFT BOMs. "
+                    + "Retire all BOMs for this section before deactivating it.");
+        }
         section.deactivate(context.userId());
         events.publish("SectionDeactivated.v1", "Section", section.getUid(),
             Map.of(SECTION_UID_KEY, section.getUid()));

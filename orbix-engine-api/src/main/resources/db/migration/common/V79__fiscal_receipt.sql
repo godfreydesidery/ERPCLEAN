@@ -89,9 +89,11 @@ CREATE INDEX ix_pos_sale_fiscal_status ON pos_sale (fiscal_status);
 -- 3. Permissions
 -- -----------------------------------------------------------------------
 -- Permission to view fiscal receipt status (ops console, accountants).
+-- Permission ids 80-91 are owned by V8 (party permissions).
+-- Use ids 137-138 (next free after V77's id 136).
 INSERT INTO permission (id, code, description, module) VALUES
-    (80, 'FISCAL.VIEW',       'View fiscal receipt status and verification artefacts', 'fiscal'),
-    (81, 'FISCAL.ADMIN',      'Manage fiscal device configuration and trigger manual re-fiscalization', 'fiscal');
+    (137, 'FISCAL.VIEW',  'View fiscal receipt status and verification artefacts', 'fiscal'),
+    (138, 'FISCAL.ADMIN', 'Manage fiscal device configuration and trigger manual re-fiscalization', 'fiscal');
 
 INSERT INTO role_permission (role_id, permission_id)
-SELECT 1, p.id FROM permission p WHERE p.id IN (80, 81);
+SELECT 1, p.id FROM permission p WHERE p.id IN (137, 138);

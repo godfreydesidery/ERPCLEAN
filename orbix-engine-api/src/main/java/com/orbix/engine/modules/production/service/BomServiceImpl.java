@@ -303,6 +303,13 @@ public class BomServiceImpl implements BomService {
         return item;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveBomForSection(Long sectionId) {
+        return boms.countBySectionIdAndStatusIn(
+            sectionId, List.of(BomStatus.ACTIVE, BomStatus.DRAFT)) > 0;
+    }
+
     private Section requireSection(Long sectionId) {
         Section section = sections.findById(sectionId)
             .orElseThrow(() -> new NoSuchElementException("Section not found: " + sectionId));

@@ -36,4 +36,11 @@ public interface BomService {
     BomDto get(String uid);
 
     List<BomDto> list(Long sectionId, Long outputItemId, BomStatus status);
+
+    /**
+     * Returns {@code true} when the section has at least one BOM that is ACTIVE or DRAFT
+     * (i.e. not RETIRED). Used by the admin module to guard section deactivation (F7.3)
+     * without violating the module-boundary rule (admin → production via service interface only).
+     */
+    boolean hasActiveBomForSection(Long sectionId);
 }
