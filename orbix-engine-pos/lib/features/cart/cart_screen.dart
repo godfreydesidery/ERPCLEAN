@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../_demo/mocks.dart';
+import '../catalog/catalog_providers.dart';
 import 'panes/cart_pane.dart';
 import 'panes/pharmacy_pane.dart';
 import 'panes/restaurant_pane.dart';
@@ -13,11 +14,26 @@ import 'panes/wholesale_pane.dart';
 
 /// Shell for the cashier workspace. Topbar + per-mode left pane + cart pane.
 /// All modes share the same cart state — only the input UX changes.
-class CartScreen extends ConsumerWidget {
+class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends ConsumerState<CartScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Trigger a catalog pull when entering the sell screen.  This fires after
+    // the first frame so the ProviderScope tree is fully initialised.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      triggerCatalogSync(ref);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final session = ref.watch(sessionProvider);
     final mode = ref.watch(modeProvider);

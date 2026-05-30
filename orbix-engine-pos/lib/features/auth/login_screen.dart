@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/auth/auth_providers.dart';
 import '../../data/auth/auth_repository.dart';
+import '../catalog/catalog_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -50,6 +53,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await authRepo.login(username: username, password: password);
       // Persist successful login to session notifier.
       ref.read(sessionProvider.notifier).onLogin();
+      // Kick off a catalog pull in the background; the sell grid will update
+      // reactively once PriceRows + Items are populated.
+      unawaited(triggerCatalogSync(ref));
       if (!mounted) return;
       context.go('/till/open');
     } on AuthException catch (e) {
@@ -66,6 +72,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (session != null && session.username == username) {
           // Cashier previously logged in on this device — allow offline access.
           ref.read(sessionProvider.notifier).onLogin();
+          // Best-effort sync (will fail gracefully if still offline).
+          unawaited(triggerCatalogSync(ref));
           context.go('/till/open');
           return;
         }
